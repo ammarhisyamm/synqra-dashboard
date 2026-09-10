@@ -1,4 +1,4 @@
-import { ArrowLeft, CheckSquare, Trash, User, CalendarBlank, Flag, Users, MagicWand, Plus, Check } from '@phosphor-icons/react';
+import { ArrowLeft, CheckSquare, Trash, User, Flag, Users, MagicWand, Plus, Check } from '@phosphor-icons/react';
 import { AREAS, PRIORITIES } from '../../constants/workflow';
 import { AppSelect } from '../common/AppSelect';
 
@@ -142,10 +142,10 @@ export function MeetingAiReview({ user, meeting, items, brief, setItems, selecte
                         placeholder={user?.name || 'Assignee'}
                       />
                     </label>
-                    <label>
-                      <CalendarBlank size={14} />
+                    <label className="ai-date-field">
                       <input
                         type="date"
+                        aria-label="Due date"
                         value={item.due}
                         onChange={event => update(item.id, 'due', event.target.value)}
                       />

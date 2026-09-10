@@ -200,3 +200,17 @@ When touching legacy UI, migrate only the touched component in this order:
 4. Spacing/radius/grid alignment.
 
 Avoid a single global visual refactor: it risks changing the approved Synqra look. This guide standardizes future work while allowing controlled incremental cleanup.
+
+## 7. Source of truth for implementation
+
+The visual system is implemented in `src/design-system.css`. New feature CSS must consume its `--ui-*` tokens instead of adding raw colour, radius, shadow, or font-weight values. This file is intentionally loaded after legacy styles so migrated components share one visual contract.
+
+| Need | Required primitive / rule |
+| --- | --- |
+| Menu or select | `AppSelect` with an accessible listbox; no new native `<select>` UI in product flows |
+| Dialog, confirm, or popup | `Modal` / `ActionDialog` anatomy: backdrop, labelled title, close action, Escape handling, and shared footer |
+| Text field, textarea, date, number | 40px field contract with label above, full grid-track width, and shared focus ring |
+| Board / dashboard toolbar | Search grows, controls use a minimum width, and wrapping happens before overlap |
+| New component | Start from the nearest existing primitive, then update this guide if a reusable pattern changes |
+
+Do not add an isolated component-specific “design fix” when a shared primitive can solve it. If a new pattern is genuinely needed, first document its token, responsive behaviour, states, and accessibility contract here; then implement it in the shared layer.

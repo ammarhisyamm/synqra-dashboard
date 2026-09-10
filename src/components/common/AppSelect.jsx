@@ -32,12 +32,13 @@ export function AppSelect({ value, options = [], onChange, ariaLabel, placeholde
   }, [open]);
 
   return (
-    <span className={`app-select ${className}`.trim()} ref={containerRef}>
+    <div className={`app-select ${className}`.trim()} ref={containerRef}>
       <button
         type="button"
         className={`app-select-trigger ${open ? 'open' : ''}`}
         aria-label={ariaLabel}
         aria-expanded={open}
+        aria-haspopup="listbox"
         onClick={() => setOpen(prev => !prev)}
       >
         {prefix}
@@ -47,7 +48,7 @@ export function AppSelect({ value, options = [], onChange, ariaLabel, placeholde
         <ChevronDown size={14} className={`app-select-chevron ${open ? 'rotated' : ''}`} />
       </button>
       {open && (
-        <span className="app-select-menu">
+        <div className="app-select-menu" role="listbox" aria-label={ariaLabel}>
           {items.length === 0 ? (
             <span className="app-select-empty">No options</span>
           ) : (
@@ -56,6 +57,8 @@ export function AppSelect({ value, options = [], onChange, ariaLabel, placeholde
                 type="button"
                 key={item.value}
                 className={`app-select-item ${String(item.value) === String(value) ? 'selected' : ''}`}
+                role="option"
+                aria-selected={String(item.value) === String(value)}
                 onClick={() => {
                   onChange(item.value);
                   setOpen(false);
@@ -66,9 +69,8 @@ export function AppSelect({ value, options = [], onChange, ariaLabel, placeholde
               </button>
             ))
           )}
-        </span>
+        </div>
       )}
-    </span>
+    </div>
   );
 }
-

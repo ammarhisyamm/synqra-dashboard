@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
   CalendarBlank, CaretDown, CaretRight, Funnel, Kanban, ListBullets,
-  MagnifyingGlass, Plus, Rows, SquaresFour, Tag, Target, Timer, Trash, User, Users
+  MagnifyingGlass, Plus, Rows, SquaresFour, Tag, Target, Timer, Trash, User, Users, X
 } from '@phosphor-icons/react';
 import { PRIORITIES, STAGES } from '../../constants/workflow';
 import { metadataApi } from '../../api/metadata';
@@ -40,7 +40,7 @@ function MetadataManager({ projectId, metadata, onClose, onRefresh, requestConfi
     if (!confirm(`Remove ${item.name}? Existing tasks keep their current value.`)) return;
     doRemove(item);
   };
-  return <div className="modal-backdrop" onMouseDown={onClose}><section className="metadata-modal" onMouseDown={event => event.stopPropagation()}><button className="modal-close" onClick={onClose} aria-label="Close">×</button><span className="sprint-modal-icon"><Tag size={20}/></span><h2>Manage task metadata</h2><p>Create reusable epics, features, and labels for this project.</p><div className="metadata-tabs">{['epic','feature','label'].map(item => <button key={item} className={type === item ? 'active' : ''} onClick={() => setType(item)}>{item}s</button>)}</div><form onSubmit={save}><input value={name} onChange={event => setName(event.target.value)} placeholder={`New ${type} name`} autoFocus/>{type === 'feature' && <AppSelect value={parentId} options={parentOptions} onChange={setParentId} placeholder="No parent epic" ariaLabel="Parent epic"/>}<button className="primary-button" disabled={busy || !name.trim()}><Plus size={15}/> Add</button></form><div className="metadata-list">{items.length ? items.map(item => <div key={item.id}><span><i style={{ background: item.color }}/>{item.name}</span><button onClick={() => remove(item)} aria-label={`Delete ${item.name}`}><Trash size={15}/></button></div>) : <p>No {type}s yet.</p>}</div><div className="modal-actions"><button className="text-button" onClick={onClose}>Close</button></div></section></div>;
+  return <div className="modal-backdrop" onMouseDown={onClose}><section className="metadata-modal" role="dialog" aria-modal="true" aria-labelledby="metadata-dialog-title" onMouseDown={event => event.stopPropagation()}><button type="button" className="modal-close" onClick={onClose} aria-label="Close dialog"><X size={19}/></button><span className="sprint-modal-icon"><Tag size={20}/></span><h2 id="metadata-dialog-title">Manage task metadata</h2><p>Create reusable epics, features, and labels for this project.</p><div className="metadata-tabs">{['epic','feature','label'].map(item => <button type="button" key={item} className={type === item ? 'active' : ''} onClick={() => setType(item)}>{item}s</button>)}</div><form onSubmit={save}><input value={name} onChange={event => setName(event.target.value)} placeholder={`New ${type} name`} autoFocus/>{type === 'feature' && <AppSelect value={parentId} options={parentOptions} onChange={setParentId} placeholder="No parent epic" ariaLabel="Parent epic"/>}<button className="primary-button" disabled={busy || !name.trim()}><Plus size={15}/> Add</button></form><div className="metadata-list">{items.length ? items.map(item => <div key={item.id}><span><i style={{ background: item.color }}/>{item.name}</span><button type="button" onClick={() => remove(item)} aria-label={`Delete ${item.name}`}><Trash size={15}/></button></div>) : <p>No {type}s yet.</p>}</div><div className="modal-actions"><button type="button" className="text-button" onClick={onClose}>Close</button></div></section></div>;
 }
 
 function SprintCreateModal({ onClose, onCreate }) {
@@ -57,9 +57,9 @@ function SprintCreateModal({ onClose, onCreate }) {
       // The parent restores optimistic state and presents the error toast.
     }
   };
-  return <div className="modal-backdrop" onMouseDown={onClose}><section className="sprint-modal" onMouseDown={event => event.stopPropagation()}>
-    <button className="modal-close" onClick={onClose} aria-label="Close">×</button>
-    <span className="sprint-modal-icon"><Timer size={21}/></span><h2>Create sprint</h2><p>Set a goal and schedule, then pull tasks in from the backlog.</p>
+  return <div className="modal-backdrop" onMouseDown={onClose}><section className="sprint-modal" role="dialog" aria-modal="true" aria-labelledby="sprint-dialog-title" onMouseDown={event => event.stopPropagation()}>
+    <button type="button" className="modal-close" onClick={onClose} aria-label="Close dialog"><X size={19}/></button>
+    <span className="sprint-modal-icon"><Timer size={21}/></span><h2 id="sprint-dialog-title">Create sprint</h2><p>Set a goal and schedule, then pull tasks in from the backlog.</p>
     <form onSubmit={submit}><label>Sprint name<input autoFocus value={form.name} onChange={event => setForm({ ...form, name: event.target.value })} placeholder="e.g. Sprint 4" required/></label><label>Goal<input value={form.goal} onChange={event => setForm({ ...form, goal: event.target.value })} placeholder="What should this sprint achieve?"/></label><div className="form-grid"><label>Start date<input type="date" value={form.startDate} onChange={event => setForm({ ...form, startDate: event.target.value })}/></label><label>End date<input type="date" value={form.endDate} min={form.startDate} onChange={event => setForm({ ...form, endDate: event.target.value })}/></label></div><div className="modal-actions"><button type="button" className="text-button" onClick={onClose}>Cancel</button><button className="primary-button">Create sprint</button></div></form>
   </section></div>;
 }
