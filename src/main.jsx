@@ -217,7 +217,7 @@ function Dashboard({ reviews, meetings, workload, reportByStatus, sprints, goTo,
   const now = new Date();
   const day = new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).format(now);
   const today = new Date().toISOString().slice(0, 10);
-  const needsAttention = reviews.filter(r => r.priority === 'Blocker' || r.due < today).slice(0, 4);
+  const needsAttention = reviews.filter(r => r.stage !== 'Completed' && (r.priority === 'Blocker' || r.due < today)).slice(0, 4);
   const completed = reviews.filter(r => r.stage === 'Completed').length;
   const blockers = reviews.filter(r => r.priority === 'Blocker').length;
   const overdue = reviews.filter(r => r.due < today && r.stage !== 'Completed').length;
@@ -240,7 +240,7 @@ function Dashboard({ reviews, meetings, workload, reportByStatus, sprints, goTo,
         <SectionHead title="Recent activity" action={() => goTo('All Reviews')} />
         <div className="activity-panel">{reviews.sort((a,b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 6).map(r => <div className="activity-row" key={r.id}><span className={`dot ${r.priority.toLowerCase()}`}/><div><strong>{r.title}</strong><p>{r.area} · {r.stage}</p></div><time>{relativeDate(r.createdAt)}</time></div>)}</div>
       </div>
-      <div className="dashboard-rail"><MeetingRail meetings={meetings} goTo={goTo} onNew={onNewMeeting}/><Summary reviews={reviews} completed={completed} blockers={blockers} overdue={overdue} reportByStatus={reportByStatus}/><SprintSummary sprints={sprints} reviews={reviews}/></div>
+      <div className="dashboard-rail"><MeetingRail meetings={meetings} goTo={goTo} onNew={onNewMeeting}/><Summary reviews={reviews} completed={completed} blockers={blockers} overdue={overdue}/><SprintSummary sprints={sprints} reviews={reviews}/></div>
     </div>
   </section>;
 }
@@ -253,7 +253,7 @@ function AttentionCard({ review, today, onReview }) {
 function StatusPill({ value }) { return <span className={`status-pill ${value.toLowerCase().replace(' ', '-')}`}>{value}</span>; }
 function Empty({ text }) { return <div className="empty-state">{text}</div>; }
 function MeetingRail({ meetings, goTo, onNew }) { return <aside className="rail-card"><div className="rail-head"><h2>Meetings</h2><button className="new-btn" onClick={onNew}><Plus size={14}/> New</button></div>{meetings.slice(0, 4).map(m => <button className="meeting-row" key={m.id} onClick={() => goTo('Meetings')}><span className="meeting-icon"><CalendarDays size={16}/></span><span><strong>{m.title}</strong><small>{dateLabel(m.date)}</small></span>{m.ai && <Sparkles size={15} className="meeting-ai"/>}</button>)}<button className="view-all" onClick={() => goTo('Meetings')}>View all <ArrowRight size={14}/></button></aside>; }
-function Summary({ reviews, completed, blockers, overdue, reportByStatus }) { return <aside className="rail-card summary"><h2>Summary</h2><p>Project overview</p><div className="summary-list"><Metric label="Total reviews" value={reviews.length}/><Metric label="Resolved" value={completed}/><Metric label="Blockers" value={blockers}/><Metric label="Open items" value={reviews.length - completed}/><Metric label="Areas" value={new Set(reviews.map(r => r.area)).size}/></div><div className="status-report"><small>By status</small>{reportByStatus.slice(0, 5).map(item => <div key={item.stage}><span>{item.stage}</span><strong>{item.count}</strong></div>)}</div><div className="summary-alert"><Info size={15}/><span>{blockers ? `${blockers} blocker · ` : ''}{overdue} overdue need attention.</span></div></aside>; }
+function Summary({ reviews, completed, blockers, overdue }) { return <aside className="rail-card summary"><h2>Summary</h2><p>Project overview</p><div className="summary-list"><Metric label="Total reviews" value={reviews.length}/><Metric label="Resolved" value={completed}/><Metric label="Blockers" value={blockers}/><Metric label="Open items" value={reviews.length - completed}/><Metric label="Areas" value={new Set(reviews.map(r => r.area)).size}/></div><div className="summary-alert"><Info size={15}/><span>{blockers ? `${blockers} blocker · ` : ''}{overdue} overdue need attention.</span></div></aside>; }
 function SprintSummary({ sprints, reviews }) { const sprint = sprints.find(item => item.status === 'active') || sprints[0]; if (!sprint) return null; const items = reviews.filter(item => item.sprintId === sprint.id || item.sprint === sprint.name); const done = items.filter(item => item.stage === 'Completed' || statusFor(item) === 'Resolved').length; return <aside className="rail-card sprint-summary"><h2>{sprint.name}</h2><p>{sprint.status} sprint{items.length ? ` · ${done}/${items.length} done` : ''}</p><div className="progress"><span style={{width:`${items.length ? done / items.length * 100 : 0}%`}}/></div><small>{sprint.goal || 'No sprint goal yet.'}</small></aside>; }
 function Metric({ label, value }) { return <div><span>{label}</span><strong>{value}</strong></div>; }
 
