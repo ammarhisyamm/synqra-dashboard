@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   Archive, ArrowRight, Bell, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronsUpDown, CircleDot,
   ClipboardList, Download, Eye, FileText, Folder, Home, Info, KanbanSquare, LayoutGrid, ListChecks,
   Menu, MessageCircle, MoreHorizontal, MoreVertical, MousePointer2, Flag, Pencil, CalendarPlus, Plus, Search, Settings, Settings2, ShieldCheck, SlidersHorizontal, Sparkles, Pin, List, Lock, Link2, Copy,
-  Table2, Target, Trash2, TriangleAlert, User, Users, Video, Clock, Clock3, ExternalLink, X
+  Table2, Target, Trash2, TriangleAlert, Undo2, RotateCcw, User, Users, Video, Clock, Clock3, ExternalLink, X
 } from 'lucide-react';
 import './styles.css';
 import './detail.css';
@@ -102,6 +102,7 @@ function App() {
   const [projectOpen, setProjectOpen] = useState(false);
   const [modal, setModal] = useState(null);
   const [toast, setToast] = useState('');
+  const [dialog, setDialog] = useState(null);
   const [query, setQuery] = useState('');
   const [selectedReview, setSelectedReview] = useState(null);
 
@@ -128,17 +129,26 @@ function App() {
     setData(prev => ({ ...prev, reviews: [saved, ...prev.reviews] }));
     api('/api/reviews', { method: 'POST', body: JSON.stringify(saved) }).catch(error => setToast(error.message));
   };
-  const archiveReview = (id) => { updateReview(id, { archived: true }); setToast('Review archived'); };
-  const restoreReview = (id) => { updateReview(id, { archived: false }); setToast('Review restored'); };
+  const showSuccess = (title, subtitle, ctaLabel, onCta) => setDialog({ success: true, icon: <CheckCircle2 size={24}/>, title, subtitle, ctaLabel, onCta });
+  const archiveReview = (id) => {
+    const target = data.reviews.find(r => r.id === id);
+    setDialog({ icon: <Archive size={24}/>, title: 'Archive this review?', subtitle: target ? `"${target.title}" will be moved to Archive. You can restore it anytime.` : 'This review will be moved to Archive.', confirmLabel: 'Archive', onConfirm: () => updateReview(id, { archived: true }) });
+  };
+  const restoreReview = (id) => {
+    const target = data.reviews.find(r => r.id === id);
+    setDialog({ icon: <Undo2 size={24}/>, title: 'Restore this review?', subtitle: target ? `"${target.title}" will be moved back to the board.` : 'This review will be moved back to the board.', confirmLabel: 'Restore', onConfirm: () => updateReview(id, { archived: false }) });
+  };
   const addMeeting = (meeting) => {
     const saved = { id: crypto.randomUUID(), itemCount: 0, ...meeting };
     setData(prev => ({ ...prev, meetings: [saved, ...prev.meetings] }));
     api('/api/meetings', { method: 'POST', body: JSON.stringify(saved) }).catch(error => setToast(error.message));
   };
   const deleteMeeting = (id) => {
-    setData(prev => ({ ...prev, meetings: prev.meetings.filter(m => m.id !== id) }));
-    api(`/api/meetings/${id}`, { method: 'DELETE' }).catch(error => setToast(error.message));
-    setToast('Meeting deleted');
+    const target = data.meetings.find(m => m.id === id);
+    setDialog({ danger: true, icon: <Trash2 size={24}/>, title: 'Delete this meeting?', subtitle: target ? `"${target.title}" and its notes will be permanently deleted.` : 'This meeting will be permanently deleted.', confirmLabel: 'Delete', onConfirm: () => {
+      setData(prev => ({ ...prev, meetings: prev.meetings.filter(m => m.id !== id) }));
+      api(`/api/meetings/${id}`, { method: 'DELETE' }).catch(error => setToast(error.message));
+    } });
   };
   const exportData = () => {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -166,16 +176,17 @@ function App() {
       {projectOpen && <ProjectSwitcher project={data.project} onClose={() => setProjectOpen(false)} />}
       {page === 'Overview' && <Dashboard reviews={activeReviews} meetings={data.meetings} goTo={setPage} onSubmitReview={() => setModal('review')} onNewMeeting={() => setModal('meeting')} />}
       {page === 'All Reviews' && <Reviews reviews={activeReviews} query={query} setQuery={setQuery} updateReview={updateReview} archiveReview={archiveReview} setModal={setModal} onOpen={setSelectedReview} />}
-      {page === 'Meetings' && <Meetings meetings={data.meetings} addMeeting={addMeeting} addReview={addReview} onDeleteMeeting={deleteMeeting} setToast={setToast} setModal={setModal} />}
-      {page === 'Kanban Board' && <Kanban reviews={activeReviews} updateReview={updateReview} archiveReview={archiveReview} setModal={setModal} goTo={setPage} />}
+      {page === 'Meetings' && <Meetings meetings={data.meetings} addMeeting={addMeeting} addReview={addReview} onDeleteMeeting={deleteMeeting} setToast={setToast} setModal={setModal} onTasksCreated={count => showSuccess(`${count} review items created`, 'Action items from the meeting notes are now on the board.', 'View board', () => setPage('Kanban Board'))} />}
+      {page === 'Kanban Board' && <Kanban reviews={activeReviews} updateReview={updateReview} archiveReview={archiveReview} setModal={setModal} goTo={setPage} onOpen={setSelectedReview} />}
       {page === 'Archive' && <ArchivePage reviews={data.reviews.filter(r => r.archived)} restoreReview={restoreReview} />}
       {page === 'Settings' && <SettingsPage project={data.project} setToast={setToast} />}
       {page === 'Admin' && <AdminPage user={user}/>} 
     </main>
     {toast && <div className="toast"><CheckCircle2 size={17}/>{toast}</div>}
-    {modal === 'review' && <ReviewModal meetings={data.meetings} onClose={() => setModal(null)} onSave={(review) => { addReview(review); setModal(null); setToast('Review created'); }} />}
-    {modal === 'meeting' && <MeetingModal onClose={() => setModal(null)} onSave={(meeting) => { addMeeting(meeting); setModal(null); setToast('Meeting saved'); }} />}
-    {selectedReview && <ReviewDetail review={selectedReview} meetings={data.meetings} user={user} onClose={() => setSelectedReview(null)} onUpdated={saved => { setData(prev => ({...prev, reviews: prev.reviews.map(r => r.id === saved.id ? {...r, ...saved} : r)})); setSelectedReview(saved); }} onDeleted={id => { setData(prev => ({...prev, reviews: prev.reviews.filter(r => r.id !== id)})); setSelectedReview(null); setToast('Task deleted'); }} onToast={setToast} />}
+    {modal === 'review' && <ReviewModal meetings={data.meetings} onClose={() => setModal(null)} onSave={(review) => { addReview(review); setModal(null); showSuccess('Review created', `"${review.title}" is now on the board.`, 'View All Reviews', () => setPage('All Reviews')); }} />}
+    {modal === 'meeting' && <MeetingModal onClose={() => setModal(null)} onSave={(meeting) => { addMeeting(meeting); setModal(null); showSuccess('Meeting saved', `"${meeting.title}" has been added to Meetings.`, 'View Meetings', () => setPage('Meetings')); }} />}
+    {selectedReview && <ReviewDetail review={selectedReview} meetings={data.meetings} user={user} onClose={() => setSelectedReview(null)} onUpdated={saved => { setData(prev => ({...prev, reviews: prev.reviews.map(r => r.id === saved.id ? {...r, ...saved} : r)})); setSelectedReview(saved); }} onDeleted={id => { setData(prev => ({...prev, reviews: prev.reviews.filter(r => r.id !== id)})); setSelectedReview(null); showSuccess('Task deleted', 'The task has been permanently removed.', 'Done'); }} onToast={setToast} onRemoveRequest={doDelete => setDialog({ danger: true, icon: <Trash2 size={24}/>, title: 'Delete this task?', subtitle: 'This task and its comments will be permanently deleted. This cannot be undone.', confirmLabel: 'Delete', onConfirm: doDelete })} />}
+    {dialog && <ActionDialog dialog={dialog} onClose={() => setDialog(null)} />}
     <footer className="app-footer"><button onClick={resetData}>Restore demo data</button><span>{cloudReady ? 'Synced with Cloudflare D1' : 'Local draft — reconnecting to Cloudflare'}</span></footer>
   </div>;
 }
@@ -190,13 +201,13 @@ function Sidebar({ page, setPage, menuOpen, setMenuOpen, collapsed, onMenuClick,
     </div>
     <div className="sidebar-scroll">
       <section><p className="side-label">PROJECT</p><button className="project-select" title={project.name} onClick={onProjectClick}><Folder size={20}/><span>{project.name}</span><ChevronsUpDown size={17}/></button></section>
-      <section><p className="side-label">WORKSPACE</p><nav className="side-nav">{workspace.map(([name, Icon]) => <button key={name} title={name} className={page === name ? 'active' : ''} onClick={() => go(name)}><Icon size={20} {...(name === 'Overview' && page === name ? { fill: 'currentColor' } : {})}/><span>{name}</span></button>)}</nav></section>
+      <section><p className="side-label">WORKSPACE</p><nav className="side-nav">{workspace.map(([name, Icon]) => <button key={name} title={name} className={page === name ? 'active' : ''} onClick={() => go(name)}><Icon size={20} {...(page === name ? { fill: 'currentColor' } : {})}/><span>{name}</span></button>)}</nav></section>
     </div>
     <div className="sidebar-foot">
       <p className="side-label">MANAGEMENT</p>
       <nav className="side-nav">
-        <button title="Settings" className={page === 'Settings' ? 'active' : ''} onClick={() => go('Settings')}><Settings size={20}/><span>Settings</span></button>
-        {['super_admin','admin'].includes(user.role) && <button title="Admin Management" className={page === 'Admin' ? 'active' : ''} onClick={() => go('Admin')}><ShieldCheck size={20}/><span>Admin Management</span></button>}
+        <button title="Settings" className={page === 'Settings' ? 'active' : ''} onClick={() => go('Settings')}><Settings size={20} {...(page === 'Settings' ? { fill: 'currentColor' } : {})}/><span>Settings</span></button>
+        {['super_admin','admin'].includes(user.role) && <button title="Admin Management" className={page === 'Admin' ? 'active' : ''} onClick={() => go('Admin')}><ShieldCheck size={20} {...(page === 'Admin' ? { fill: 'currentColor' } : {})}/><span>Admin Management</span></button>}
       </nav>
       <button className="user-card" title={`${user.name} — Sign out`} onClick={onSignOut}><div className="avatar avatar-dark">{user.name.slice(0,2).toUpperCase()}</div><div><strong>{user.name}</strong><small>{user.email}</small></div><MoreVertical size={18}/></button>
     </div>
@@ -204,7 +215,7 @@ function Sidebar({ page, setPage, menuOpen, setMenuOpen, collapsed, onMenuClick,
 }
 
 function SynqraMark() {
-  return <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 2.5 28.5 9.7v12.6L16 29.5 3.5 22.3V9.7Z" fill="none" stroke="#10182b" strokeWidth="3" strokeLinejoin="round"/><path d="M16 10.2l5.8 3.3v6.7l-5.8 3.3-5.8-3.3v-6.7Z" fill="#10182b"/></svg>;
+  return <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 2.5 28.5 9.7v12.6L16 29.5 3.5 22.3V9.7Z" fill="none" stroke="#10182b" strokeWidth="3" strokeLinejoin="round"/><path d="M18.2 6.5 10.8 17.2h4.6L14 25.5l7.4-10.7h-4.6Z" fill="#10182b"/></svg>;
 }
 
 function AuthLoading() { return <div className="auth-shell"><div className="auth-card auth-loading"><span className="brand-symbol"><span/></span><strong>Checking your session…</strong></div></div>; }
@@ -291,12 +302,16 @@ function Reviews({ reviews, query, setQuery, updateReview, archiveReview, setMod
     <div className="table-wrap"><table><thead><tr><th><input type="checkbox" checked={allSelected} onChange={toggleAll} aria-label="Select all"/></th><th>Title</th><th>Team</th><th>Phase</th><th>Priority</th><th>Assignee</th><th>Status</th><th>Due Date</th><th/></tr></thead><tbody>{rows.map(r => <tr key={r.id} className="review-row" onClick={() => onOpen(r)}><td><input type="checkbox" checked={selected.includes(r.id)} aria-label={`Select ${r.title}`} onClick={e=>e.stopPropagation()} onChange={()=>setSelected(s=>s.includes(r.id)?s.filter(id=>id!==r.id):[...s,r.id])}/></td><td><strong>{r.title}</strong>{r.description && <small className="row-description">{r.description}</small>}</td><td>{r.area}</td><td><select className="inline-select" value={r.stage} onClick={e=>e.stopPropagation()} onChange={e=>updateReview(r.id,{stage:e.target.value})}>{STAGES.map(s=><option key={s}>{s}</option>)}</select></td><td><Priority value={r.priority}/></td><td><span className="assignee"><User size={13}/><select className="inline-select" value={r.assignee} onClick={e=>e.stopPropagation()} onChange={e=>updateReview(r.id,{assignee:e.target.value})}>{owners.map(o=><option key={o}>{o}</option>)}</select></span></td><td><StatusPill value={statusFor(r)}/></td><td>{r.due ? slashDate(r.due) : '—'}</td><td><button className="row-action" onClick={e=>{e.stopPropagation(); archiveReview(r.id);}} aria-label="Archive review"><Archive size={16}/></button></td></tr>)}</tbody></table><div className="table-pagination"><span>{selected.length ? `${selected.length} selected` : 'Rows per page'} <b>10 <ChevronDown size={13}/></b></span><span>{from}–{to} of {filtered.length}</span><span className="pagination-arrows"><button className="page-arrow" disabled={safePage===0} onClick={()=>setPageIdx(safePage-1)} aria-label="Previous page"><ChevronLeft size={15}/></button> {safePage + 1} / {pages} <button className="page-arrow" disabled={safePage>=pages-1} onClick={()=>setPageIdx(safePage+1)} aria-label="Next page"><ChevronRight size={15}/></button></span></div></div>
   </section>;
 }
-function ReviewDetail({ review, meetings, user, onClose, onUpdated, onDeleted, onToast }) {
+function ReviewDetail({ review, meetings, user, onClose, onUpdated, onDeleted, onToast, onRemoveRequest }) {
   const [detail,setDetail]=useState(null); const [comment,setComment]=useState(''); const [draft,setDraft]=useState(review);
   useEffect(()=>{api(`/api/reviews/${review.id}/details`).then(d=>{setDetail(d);setDraft(d.review)}).catch(e=>onToast(e.message))},[review.id]);
   const save=async patch=>{try{const saved=await api(`/api/reviews/${review.id}`,{method:'PATCH',body:JSON.stringify(patch)});setDraft(saved);setDetail(d=>({...d,review:saved}));onUpdated(saved);onToast('Task updated')}catch(e){onToast(e.message)}};
   const submitComment=async e=>{e.preventDefault();if(!comment.trim())return;try{const c=await api(`/api/reviews/${review.id}/comments`,{method:'POST',body:JSON.stringify({body:comment})});setDetail(d=>({...d,comments:[...(d.comments||[]),c]}));setComment('');onToast('Comment added')}catch(e){onToast(e.message)}};
-  const remove=async()=>{if(!confirm('Delete this task permanently?'))return;try{await api(`/api/reviews/${review.id}`,{method:'DELETE'});onDeleted(review.id)}catch(e){onToast(e.message)}};
+  const remove = () => {
+    const doDelete = async () => { try { await api(`/api/reviews/${review.id}`, { method: 'DELETE' }); onDeleted(review.id); } catch (e) { onToast(e.message); } };
+    if (onRemoveRequest) onRemoveRequest(doDelete);
+    else if (confirm('Delete this task permanently?')) doDelete();
+  };
   return <div className="detail-backdrop" onMouseDown={onClose}><aside className="detail-panel" onMouseDown={e=>e.stopPropagation()}><button className="detail-close" onClick={onClose}><X size={19}/></button><div className="detail-head"><h2>{draft.title}</h2><div className="detail-badges"><StatusPill value={statusFor(draft)}/><Priority value={draft.priority}/><span>{draft.due||'No due date'}</span></div></div><div className="detail-scroll"><DetailSection title="Description"><textarea className="detail-description" value={draft.description||''} onChange={e=>setDraft({...draft,description:e.target.value})} onBlur={e=>save({description:e.target.value})} placeholder="Add a description…"/></DetailSection><DetailSection title="Related meeting">{detail?.meeting?<div className="related-meeting"><Video size={17}/><div><strong>{detail.meeting.title}</strong><small>{dateLabel(detail.meeting.date)}</small></div><ExternalLink size={15}/></div>:<select value={draft.meetingId||''} onChange={e=>save({meetingId:e.target.value})}><option value="">No related meeting</option>{meetings.map(m=><option key={m.id} value={m.id}>{m.title}</option>)}</select>}</DetailSection><DetailSection title="Properties"><div className="detail-grid"><SelectField label="Phase" value={draft.stage} values={STAGES} onChange={v=>save({stage:v})}/><SelectField label="Team" value={draft.area} values={AREAS} onChange={v=>save({area:v})}/><SelectField label="Status" value={statusFor(draft)} values={['Open','In Progress','Review','Resolved','Rejected']} onChange={v=>save({status:v})}/><SelectField label="Priority" value={draft.priority} values={PRIORITIES} onChange={v=>save({priority:v})}/></div></DetailSection><DetailSection title="Ownership"><div className="detail-grid"><label>Assignee<input value={draft.assignee||''} onChange={e=>setDraft({...draft,assignee:e.target.value})} onBlur={e=>save({assignee:e.target.value})}/></label><label>Submitted by<input readOnly value={draft.submittedBy||user.name}/></label></div></DetailSection><DetailSection title="Planning"><label>Due date<input type="date" value={draft.due||''} onChange={e=>save({due:e.target.value})}/></label></DetailSection><DetailSection title="Discussion"><form className="comment-form" onSubmit={submitComment}><MessageCircle size={17}/><input value={comment} onChange={e=>setComment(e.target.value)} placeholder="Add a comment…"/><button className="primary-button" disabled={!comment.trim()}>Comment</button></form>{detail?.comments?.map(c=><div className="comment-list" key={c.id}><div><strong>{c.name}</strong><p>{c.body}</p><small>{relativeDate(c.createdAt)}</small></div></div>)}</DetailSection><DetailSection title="Activity"><div className="detail-activity">{detail?.activity?.map(a=><div key={a.id}><Clock3 size={14}/><p><strong>{a.name||'System'}</strong> {a.action==='created'?'created this task':a.action==='commented'?'commented':`updated ${a.metadata?.fields?.join(', ')||'this task'}`}<small>{relativeDate(a.createdAt)}</small></p></div>)}</div></DetailSection></div><div className="detail-footer"><button onClick={()=>save({archived:1})}><Archive size={15}/> Archive</button><button className="danger-button" onClick={remove}><Trash2 size={15}/> Delete</button></div></aside></div>;
 }
 function DetailSection({title,children}){return <section className="detail-section"><h3>{title}</h3>{children}</section>}
@@ -304,9 +319,27 @@ function MetricCard({ label, value }) { return <article><span>{label}</span><str
 function Priority({ value }) { return <span className={`priority ${value.toLowerCase()}`}><i/>{value}</span>; }
 function PageHeading({ eyebrow, title, description, action }) { return <div className="page-heading"><div>{eyebrow && <small>{eyebrow}</small>}<h1>{title}</h1>{description && <p>{description}</p>}</div>{action}</div>; }
 
-function Meetings({ meetings, addMeeting, addReview, onDeleteMeeting, setToast, setModal }) {
+function DatePicker({ value, onPick, onClear }) {
+  const initial = value ? new Date(`${value}T12:00:00`) : new Date();
+  const [view, setView] = useState({ y: initial.getFullYear(), m: initial.getMonth() });
+  const move = delta => setView(v => { const d = new Date(v.y, v.m + delta, 1); return { y: d.getFullYear(), m: d.getMonth() }; });
+  const monthLabel = new Intl.DateTimeFormat('id-ID', { month: 'long', year: 'numeric' }).format(new Date(view.y, view.m, 1));
+  const offset = (new Date(view.y, view.m, 1).getDay() + 6) % 7;
+  const daysInMonth = new Date(view.y, view.m + 1, 0).getDate();
+  const daysInPrev = new Date(view.y, view.m, 0).getDate();
+  const cells = [];
+  for (let i = offset - 1; i >= 0; i--) cells.push({ d: daysInPrev - i, other: true, key: `p${i}` });
+  for (let d = 1; d <= daysInMonth; d++) cells.push({ d, key: `c${d}` });
+  let n = 1;
+  while (cells.length % 7 !== 0 || cells.length < 42) cells.push({ d: n, other: true, key: `n${n++}` });
+  const isoOf = day => `${view.y}-${String(view.m + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  return <div className="date-picker"><div className="date-picker-head"><strong>{monthLabel}</strong><div>{value && <button className="date-clear-text" onClick={onClear}>Clear</button>}<button className="date-nav" onClick={() => move(-1)} aria-label="Previous month"><ChevronLeft size={16}/></button><button className="date-nav" onClick={() => move(1)} aria-label="Next month"><ChevronRight size={16}/></button></div></div><div className="date-grid date-week">{['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'].map(w => <span key={w}>{w}</span>)}</div><div className="date-grid">{cells.map(c => <button key={c.key} disabled={c.other} className={`date-cell${c.other ? ' other' : ''}${!c.other && isoOf(c.d) === value ? ' picked' : ''}`} onClick={() => onPick(isoOf(c.d))}>{c.d}</button>)}</div></div>;
+}
+
+function Meetings({ meetings, addMeeting, addReview, onDeleteMeeting, setToast, setModal, onTasksCreated }) {
   const [selected, setSelected] = useState(meetings[0]?.id);
   const [dateFilter, setDateFilter] = useState('');
+  const [pickerOpen, setPickerOpen] = useState(false);
   const meeting = meetings.find(m => m.id === selected) || meetings[0];
   const [drafts, setDrafts] = useState([]);
   useEffect(() => setDrafts(meeting ? extractNotes(meeting.notes) : []), [meeting?.id]);
@@ -319,12 +352,13 @@ function Meetings({ meetings, addMeeting, addReview, onDeleteMeeting, setToast, 
     });
     return [...map.entries()];
   }, [visible]);
-  const createDrafts = () => { drafts.forEach((title, i) => addReview({ title, area: AREAS[i % AREAS.length], priority: i === 0 ? 'Major' : 'Minor', stage: 'Planning', assignee: ['Aria','Leo','Mia'][i % 3], due: '2026-09-18' })); setToast(`${drafts.length} review items created`); };
+  const createDrafts = () => { drafts.forEach((title, i) => addReview({ title, area: AREAS[i % AREAS.length], priority: i === 0 ? 'Major' : 'Minor', stage: 'Planning', assignee: ['Aria','Leo','Mia'][i % 3], due: '2026-09-18' })); onTasksCreated(drafts.length); };
   const noteLines = meeting ? meeting.notes.split('\n').map(s => s.trim()).filter(Boolean) : [];
   return <section className="page meetings-page"><PageHeading title="Meetings" action={<button className="primary-button" onClick={() => setModal('meeting')}><CalendarPlus size={16}/> New meeting</button>}/>
     <div className="meetings-layout">
       <div className="meetings-side">
-        <div><label className="date-filter"><CalendarDays size={15}/> Filter by date<input type="date" value={dateFilter} onChange={e=>setDateFilter(e.target.value)}/>{dateFilter && <button className="date-clear" onClick={()=>setDateFilter('')} aria-label="Clear date filter"><X size={14}/></button>}</label></div>
+        <div><button className="date-filter" onClick={() => setPickerOpen(true)}><CalendarDays size={15}/> {dateFilter ? groupDateLabel(dateFilter) : 'Filter by date'}</button>{dateFilter && <button className="date-clear-text" onClick={() => setDateFilter('')}>Clear</button>}</div>
+        {pickerOpen && <div className="modal-backdrop" onMouseDown={() => setPickerOpen(false)}><div onMouseDown={e => e.stopPropagation()}><DatePicker value={dateFilter} onPick={iso => { setDateFilter(iso); setPickerOpen(false); }} onClear={() => { setDateFilter(''); setPickerOpen(false); }} /></div></div>}
         {groups.length ? groups.map(([date, items]) => <div key={date} className="meeting-group"><p className="meeting-group-label">{groupDateLabel(date)} · {items.length} meeting{items.length === 1 ? '' : 's'}</p>{items.map(m => <article key={m.id} className={`meeting-card${m.id === meeting?.id ? ' selected' : ''}`} onClick={() => setSelected(m.id)}><div><strong>{m.title}</strong><p><CalendarDays size={12}/> {dateLabel(m.date)}{m.ai && <span className="ai-badge"><Sparkles size={11}/> AI</span>}</p></div><div className="meeting-card-actions"><button onClick={e => { e.stopPropagation(); onDeleteMeeting(m.id); }} aria-label={`Delete ${m.title}`}><Trash2 size={15}/></button></div></article>)}</div>) : <Empty text="No meetings found."/>}
       </div>
       {meeting && <aside className="meeting-detail-card">
@@ -335,15 +369,24 @@ function Meetings({ meetings, addMeeting, addReview, onDeleteMeeting, setToast, 
 }
 function extractNotes(notes) { return notes.split(/[\n.]+/).map(s=>s.replace(/^\s*(?:[-•*]\s*)?/, '').trim()).filter(s=>s.length>4).slice(0,6); }
 
-function Kanban({ reviews, updateReview, archiveReview, setModal, goTo }) { return <section className="page kanban-page"><PageHeading title="Kanban Board" action={<div className="kanban-actions"><div className="view-switch"><LayoutGrid size={16}/><List size={16}/></div><button className="ghost-button" onClick={() => goTo('Meetings')}><Pin size={15}/> From Meeting</button><button className="primary-button" onClick={() => setModal('review')}><Plus size={16}/> Submit Review</button></div>}/><div className="board">{STAGE_META.map(({ name: stage, Icon, color }) => <div className="board-column" key={stage}><div className="board-column-head"><h3><Icon size={15} color={color}/> {stage}</h3><span>{reviews.filter(r=>r.stage===stage).length}</span></div>{reviews.filter(r=>r.stage===stage).map(r=><article className="kanban-card" key={r.id}><div className="kanban-title-row"><h4>{r.title}</h4><span>{ageLabel(r.createdAt)}</span></div><p className="kanban-assignee"><User size={12}/> {r.assignee}</p><div className="kanban-footer"><Priority value={r.priority}/><span className="kanban-due"><Clock size={12}/> {shortDate(r.due)}</span></div><div className="kanban-tools"><select value={r.stage} onChange={e=>updateReview(r.id,{stage:e.target.value})} aria-label="Move card">{STAGES.map(s=><option key={s}>{s}</option>)}</select><button onClick={()=>archiveReview(r.id)} aria-label="Archive card"><Archive size={14}/></button></div></article>)}<button className="add-card" onClick={()=>setModal('review')}><Plus size={15}/> Add item</button></div>)}</div></section>; }
+function Kanban({ reviews, updateReview, archiveReview, setModal, goTo, onOpen }) {
+  const [dragId, setDragId] = useState(null);
+  const [overCol, setOverCol] = useState(null);
+  const wasDrag = useRef(false);
+  const endDrag = () => { setDragId(null); setOverCol(null); setTimeout(() => { wasDrag.current = false; }, 0); };
+  const openCard = r => { if (wasDrag.current) { wasDrag.current = false; return; } onOpen(r); };
+  return <section className="page kanban-page"><PageHeading title="Kanban Board" action={<div className="kanban-actions"><div className="view-switch"><LayoutGrid size={16}/><List size={16}/></div><button className="ghost-button" onClick={() => goTo('Meetings')}><Pin size={15}/> From Meeting</button><button className="primary-button" onClick={() => setModal('review')}><Plus size={16}/> Submit Review</button></div>}/><div className="board">{STAGE_META.map(({ name: stage, Icon, color }) => <div className={`board-column${overCol === stage ? ' drag-over' : ''}`} key={stage} onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setOverCol(stage); }} onDragLeave={() => setOverCol(cur => cur === stage ? null : cur)} onDrop={e => { e.preventDefault(); if (dragId) updateReview(dragId, { stage }); endDrag(); }}><div className="board-column-head"><h3><Icon size={15} color={color}/> {stage}</h3><span>{reviews.filter(r=>r.stage===stage).length}</span></div>{reviews.filter(r=>r.stage===stage).map(r=><article className={`kanban-card${dragId === r.id ? ' dragging' : ''}`} key={r.id} draggable onDragStart={e => { wasDrag.current = true; setDragId(r.id); e.dataTransfer.effectAllowed = 'move'; }} onDragEnd={endDrag} onClick={() => openCard(r)}><div className="kanban-title-row"><h4>{r.title}</h4><span>{ageLabel(r.createdAt)}</span></div><p className="kanban-assignee"><User size={12}/> {r.assignee}</p><div className="kanban-footer"><Priority value={r.priority}/><span className="kanban-due"><Clock size={12}/> {shortDate(r.due)}</span></div><div className="kanban-tools"><select value={r.stage} onClick={e=>e.stopPropagation()} onChange={e=>updateReview(r.id,{stage:e.target.value})} aria-label="Move card">{STAGES.map(s=><option key={s}>{s}</option>)}</select><button onClick={e=>{e.stopPropagation(); archiveReview(r.id);}} aria-label="Archive card"><Archive size={14}/></button></div></article>)}<button className="add-card" onClick={()=>setModal('review')}><Plus size={15}/> Add item</button></div>)}</div></section>; }
 
 function ArchivePage({ reviews, restoreReview }) { return <section className="page"><PageHeading eyebrow="PROJECT TRACKER" title="Archive" description="Resolved or paused items stay here without disappearing."/>{reviews.length ? <div className="archive-list">{reviews.map(r=><article key={r.id}><div><Priority value={r.priority}/><h3>{r.title}</h3><p>{r.area} · Archived item</p></div><button className="text-button" onClick={()=>restoreReview(r.id)}>Restore <ArrowRight size={15}/></button></article>)}</div> : <Empty text="Your archive is empty."/>}</section>; }
 
 function SettingsPage({ project, setToast }) {
   const [name, setName] = useState(project.name);
   const [access, setAccess] = useState('link');
-  const shareUrl = 'https://synqra-dashboard.ammarhisyam151.workers.dev';
-  return <section className="page settings-page"><PageHeading title="Settings"/><div className="settings-card"><section><div className="settings-section-head"><span><Settings2 size={20}/></span><div><h2>General</h2><p>Manage your project details.</p></div></div><label>Project name<input value={name} onChange={e=>setName(e.target.value)}/></label><label>Description<textarea placeholder="Optional project description" rows="4"/></label></section><section><div className="settings-section-head"><span><Users size={20}/></span><div><h2>Sharing & access</h2><p>Control who can view this project.</p></div></div><button className={access === 'invite' ? 'access-option selected' : 'access-option'} onClick={()=>setAccess('invite')}><span className="access-icon"><Lock size={18}/></span><span><strong>Invite only</strong><small>Only people you invite by email can access this project.</small></span></button><button className={access === 'link' ? 'access-option selected' : 'access-option'} onClick={()=>setAccess('link')}><span className="access-icon"><Link2 size={18}/></span><span><strong>Anyone with the link</strong><small>Anyone who has the link can view (read-only). No invite needed.</small></span></button>{access === 'link' && <div className="share-link"><Eye size={15}/><input readOnly value={shareUrl}/><button onClick={()=>{navigator.clipboard?.writeText(shareUrl);setToast('Project link copied');}}><Copy size={14}/> Copy</button></div>}<button className="primary-button settings-save" onClick={()=>setToast('Settings saved')}>Save</button></section><section className="danger-section"><div className="settings-section-head"><span><TriangleAlert size={20}/></span><div><h2 className="danger-title">Danger zone</h2><p>Permanently delete this project and all associated feedback.</p></div></div><button className="danger-button" onClick={()=>setToast('Project deletion is disabled in this workspace')}><Trash2 size={15}/> Delete project</button></section></div></section>;
+  const makeToken = () => crypto.randomUUID().replace(/-/g, '').slice(0, 12);
+  const [shareToken, setShareToken] = useState(() => makeToken());
+  const pickAccess = value => { setAccess(value); if (value === 'link' && !shareToken) setShareToken(makeToken()); };
+  const shareUrl = `${window.location.origin}/share/${shareToken || '…'}`;
+  return <section className="page settings-page"><PageHeading title="Settings"/><div className="settings-card"><section><div className="settings-section-head"><span><Settings2 size={20}/></span><div><h2>General</h2><p>Manage your project details.</p></div></div><label>Project name<input value={name} onChange={e=>setName(e.target.value)}/></label><label>Description<textarea placeholder="Optional project description" rows="4"/></label></section><section><div className="settings-section-head"><span><Users size={20}/></span><div><h2>Sharing & access</h2><p>Control who can view this project.</p></div></div><button className={access === 'invite' ? 'access-option selected' : 'access-option'} onClick={()=>pickAccess('invite')}><span className="access-icon"><Lock size={18}/></span><span><strong>Invite only</strong><small>Only people you invite by email can access this project.</small></span></button><button className={access === 'link' ? 'access-option selected' : 'access-option'} onClick={()=>pickAccess('link')}><span className="access-icon"><Link2 size={18}/></span><span><strong>Anyone with the link</strong><small>Anyone who has the link can view (read-only). No invite needed.</small></span></button>{access === 'link' && <div className="share-link"><Eye size={15}/><input readOnly value={shareUrl}/><button className="regenerate-btn" onClick={()=>{setShareToken(makeToken());setToast('New share link generated');}} aria-label="Regenerate share link" title="Regenerate link"><RotateCcw size={14}/></button><button onClick={()=>{navigator.clipboard?.writeText(shareUrl);setToast('Project link copied');}}><Copy size={14}/> Copy</button></div>}<button className="primary-button settings-save" onClick={()=>setToast('Settings saved')}>Save</button></section><section className="danger-section"><div className="settings-section-head"><span><TriangleAlert size={20}/></span><div><h2 className="danger-title">Danger zone</h2><p>Permanently delete this project and all associated feedback.</p></div></div><button className="danger-button" onClick={()=>setToast('Project deletion is disabled in this workspace')}><Trash2 size={15}/> Delete project</button></section></div></section>;
 }
 
 function AdminPage({ user }) {
@@ -356,6 +399,11 @@ function AdminPage({ user }) {
 
 function ReviewModal({ onClose, onSave, meetings = [] }) { const [form, setForm] = useState({title:'',description:'',area:'Design',priority:'Major',status:'Open',stage:'Planning',assignee:'Aria',due:'2026-09-18',meetingId:''}); const edit = (key,val)=>setForm(x=>({...x,[key]:val})); return <Modal title="Create task" subtitle="Add a new task to this project. You can fill in more details after creation." onClose={onClose}><form onSubmit={e=>{e.preventDefault(); if(form.title.trim())onSave(form)}}><label>Title<input autoFocus value={form.title} onChange={e=>edit('title',e.target.value)} placeholder="e.g. Fix pagination bug on list view" required/></label><label>Description<textarea value={form.description} onChange={e=>edit('description',e.target.value)} placeholder="Add context, links, or acceptance criteria…" rows="3"/></label><div className="form-grid"><SelectField label="Status" value={form.status} values={['Open','In Progress','Review','Resolved','Rejected']} onChange={v=>edit('status',v)}/><SelectField label="Priority" value={form.priority} values={PRIORITIES} onChange={v=>edit('priority',v)}/><SelectField label="Phase" value={form.stage} values={STAGES} onChange={v=>edit('stage',v)}/><SelectField label="Team" value={form.area} values={AREAS} onChange={v=>edit('area',v)}/><label>Assignee<input value={form.assignee} onChange={e=>edit('assignee',e.target.value)} placeholder="Unassigned"/></label><label>Related meeting<select value={form.meetingId} onChange={e=>edit('meetingId',e.target.value)}><option value="">No related meeting</option>{meetings.map(m=><option key={m.id} value={m.id}>{m.title}</option>)}</select></label></div><label>Due date<input type="date" value={form.due} onChange={e=>edit('due',e.target.value)}/></label><div className="modal-actions"><button type="button" className="text-button" onClick={onClose}>Cancel</button><button className="primary-button">Create task <ArrowRight size={16}/></button></div></form></Modal>; }
 function MeetingModal({ onClose, onSave }) { const [form,setForm]=useState({title:'',date:'2026-09-10',notes:'',ai:true}); const edit=(k,v)=>setForm(x=>({...x,[k]:v})); return <Modal title="New meeting" subtitle="Notes are saved to this project and can generate review items." onClose={onClose}><form onSubmit={e=>{e.preventDefault();if(form.title.trim())onSave(form)}}><label>Meeting title<input autoFocus value={form.title} onChange={e=>edit('title',e.target.value)} placeholder="e.g. Design review" required/></label><label>Date<input type="date" value={form.date} onChange={e=>edit('date',e.target.value)}/></label><label>Notes<textarea value={form.notes} onChange={e=>edit('notes',e.target.value)} placeholder="One decision or action per line" rows="6"/></label><label className="switch-label"><input type="checkbox" checked={form.ai} onChange={e=>edit('ai',e.target.checked)}/><span>Prepare AI review suggestions</span></label><div className="modal-actions"><button type="button" className="text-button" onClick={onClose}>Cancel</button><button className="primary-button">Save meeting <ArrowRight size={16}/></button></div></form></Modal>; }
+function ActionDialog({ dialog, onClose }) {
+  const isSuccess = !!dialog.success;
+  return <div className="modal-backdrop" onMouseDown={onClose}><section className="action-dialog" onMouseDown={e => e.stopPropagation()}><span className={`action-icon${dialog.danger ? ' danger' : ''}${isSuccess ? ' success' : ''}`}>{dialog.icon}</span><h2>{dialog.title}</h2><p>{dialog.subtitle}</p>{isSuccess ? <button className="primary-button action-cta" onClick={() => { onClose(); dialog.onCta && dialog.onCta(); }}>{dialog.ctaLabel || 'Done'}</button> : <div className="modal-actions action-buttons"><button className="text-button" onClick={onClose}>{dialog.cancelLabel || 'Cancel'}</button><button className={dialog.danger ? 'danger-button' : 'primary-button'} onClick={() => { dialog.onConfirm && dialog.onConfirm(); onClose(); }}>{dialog.confirmLabel || 'Confirm'}</button></div>}</section></div>;
+}
+
 function SelectField({ label,value,values,onChange }) { return <label>{label}<select value={value} onChange={e=>onChange(e.target.value)}>{values.map(v=><option key={v}>{v}</option>)}</select></label>; }
 function Modal({title,subtitle,onClose,children}) { return <div className="modal-backdrop" onMouseDown={onClose}><section className="modal" onMouseDown={e=>e.stopPropagation()}><button className="modal-close" onClick={onClose}><X size={19}/></button><h2>{title}</h2><p>{subtitle}</p>{children}</section></div>; }
 
