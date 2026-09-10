@@ -134,6 +134,14 @@ function App() {
   const [collabOpen, setCollabOpen] = useState(false);
   const [modal, setModal] = useState(null);
   const [toast, setToast] = useState('');
+  const [online, setOnline] = useState(() => typeof navigator === 'undefined' || navigator.onLine);
+  const [syncing, setSyncing] = useState(false);
+  const [lastSync, setLastSync] = useState(null);
+  const [pendingOps, setPendingOps] = useState(0);
+  const [savingField, setSavingField] = useState(null);
+  const [savedField, setSavedField] = useState(null);
+  const [failedField, setFailedField] = useState(null);
+  const [bootFailed, setBootFailed] = useState(false);
   const [dialog, setDialog] = useState(null);
   const [query, setQuery] = useState('');
   const [selectedReview, setSelectedReview] = useState(null);
@@ -158,6 +166,10 @@ function App() {
     const id = setTimeout(() => setToast(''), 2600);
     return () => clearTimeout(id);
   }, [toast]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setBootFailed(true), 20000);
+    return () => window.clearTimeout(timer);
+  }, []);
   useEffect(() => {
     const onShortcut = event => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); setCommandOpen(open => !open); }
@@ -186,26 +198,34 @@ function App() {
     return result;
   }, {})).map(([stage, count]) => ({ stage, count })).sort((a, b) => b.count - a.count), [activeReviews]);
   const activeSprints = useMemo(() => (data.sprints || []).filter(sprint => !sprint.projectId || sprint.projectId === activeProjectId), [data.sprints, activeProjectId]);
-  const updateReview = async (id, patch) => {
+  const updateReview = async (id, patch, field) => {
     const previous = data.reviews.find(item => item.id === id);
     if (!previous) return;
     setData(prev => ({ ...prev, reviews: prev.reviews.map(r => r.id === id ? { ...r, ...patch } : r) }));
+    setPendingOps(count => count + 1);
+    if (field) setSavingField({ id, field });
     try {
       const saved = await reviewsApi.update(id, patch);
       setData(prev => ({ ...prev, reviews: prev.reviews.map(item => item.id === id ? { ...item, ...saved } : item) }));
+      if (field) setSavedField({ id, field, at: Date.now() });
       return saved;
     } catch (error) {
       setData(prev => ({ ...prev, reviews: prev.reviews.map(item => item.id === id ? previous : item) }));
+      if (field) setFailedField({ id, field, error: error.message, patch });
       setToast(error.message);
+    } finally {
+      setPendingOps(count => Math.max(0, count - 1));
+      if (field) setSavingField(null);
     }
   };
   const addReview = (review) => {
     const saved = { id: crypto.randomUUID(), createdAt: new Date().toISOString().slice(0, 10), archived: false, projectId: data.project?.id || 'default', ...review };
     if (!/^AR-\d+$/.test(saved.key || '')) saved.key = nextTaskKey(data.reviews);
     setData(prev => ({ ...prev, reviews: [saved, ...prev.reviews] }));
+    setPendingOps(count => count + 1);
     reviewsApi.create(saved).then(created => {
       setData(prev => ({ ...prev, reviews: prev.reviews.map(r => r.id === saved.id ? created : r) }));
-    }).catch(error => { setData(prev => ({ ...prev, reviews: prev.reviews.filter(item => item.id !== saved.id) })); setToast(error.message); });
+    }).catch(error => { setData(prev => ({ ...prev, reviews: prev.reviews.filter(item => item.id !== saved.id) })); setToast(error.message); }).finally(() => setPendingOps(count => Math.max(0, count - 1)));
   };
   const addSprint = async sprint => {
     const optimistic = { id: crypto.randomUUID(), projectId: activeProjectId, ...sprint };
@@ -289,6 +309,8 @@ function App() {
     if (!user) return undefined;
     let active = true;
     const sync = async () => {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+      setSyncing(true);
       try {
         const [remote, notificationResult] = await Promise.all([api('/api/bootstrap'), notificationsApi.list()]);
         if (!active) return;
@@ -298,11 +320,17 @@ function App() {
           return { ...remote, project: selectedProject || remote.project };
         });
         setNotifications(prev => deduplicateNotifications(prev, notificationResult.notifications));
+        setLastSync(Date.now());
       } catch { /* keep the current optimistic view and retry on the next tick */ }
+      finally { if (active) setSyncing(false); }
     };
     sync();
     const interval = window.setInterval(sync, 10000);
-    return () => { active = false; window.clearInterval(interval); };
+    const onOnline = () => { setOnline(true); sync(); };
+    const onOffline = () => setOnline(false);
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+    return () => { active = false; window.clearInterval(interval); window.removeEventListener('online', onOnline); window.removeEventListener('offline', onOffline); };
   }, [user]);
   const markNotificationRead = async notification => { try { await notificationsApi.read(notification.id); setNotifications(items => items.map(item => item.id === notification.id ? { ...item, read: true } : item)); setData(prev => ({ ...prev, unreadNotifications: Math.max(0, (prev.unreadNotifications || 0) - (notification.read ? 0 : 1)) })); } catch (error) { setToast(error.message); } };
   const markAllNotificationsRead = async () => { try { await notificationsApi.readAll(); setNotifications(items => items.map(item => ({ ...item, read: true }))); setData(prev => ({ ...prev, unreadNotifications: 0 })); } catch (error) { setToast(error.message); } };
@@ -325,7 +353,12 @@ function App() {
     } catch { /* addMeeting already surfaced the error */ }
   };
 
-  if (user === undefined) return <AuthLoading/>;
+  if (user === undefined) {
+    if (bootFailed) {
+      return <div className="auth-shell"><section className="auth-card" style={{ maxWidth: 480, textAlign: 'left' }}><div className="auth-brand" style={{ justifyContent: 'flex-start' }}><img className="synqra-logo auth-logo" src="/logo-synqra.png" alt="Synqra" /></div><h1 style={{ fontSize: 22, marginTop: 16 }}>Something went wrong</h1><p style={{ color: '#687a92', fontSize: 13, lineHeight: 1.5 }}>We couldn&apos;t load this workspace. Your saved data is safe. Try again or return to the previous page.</p><div style={{ display: 'flex', gap: 10 }}><button className="primary-button" onClick={() => window.location.reload()}><RotateCcw size={15}/> Try again</button><button className="secondary-button" onClick={() => { if (window.history.length > 1) window.history.back(); }}>Go back</button></div></section></div>;
+    }
+    return <AuthLoading/>;
+  }
   if (!user) return <AuthScreen onAuthenticated={signedInUser => { setUser(signedInUser); api('/api/bootstrap').then(remote => { setData(remote); setCloudReady(true); }).catch(() => setCloudReady(false)); }}/>;
 
   return <div className={`app-shell${collapsed ? ' collapsed' : ''}`}>
@@ -343,6 +376,7 @@ function App() {
       {notificationsOpen && <NotificationMenu notifications={notifications} onClose={()=>setNotificationsOpen(false)} onOpen={setSelectedReview} onRead={markNotificationRead} onReadAll={markAllNotificationsRead}/>} 
       {projectOpen && <ProjectSwitcher project={data.project} projects={data.projects || []} onSelect={selected => { setData(prev => ({ ...prev, project: selected })); setProjectOpen(false); setPage('Overview'); }} onNew={() => { setProjectOpen(false); setModal('project'); }} onClose={() => setProjectOpen(false)} />}
       {collabOpen && <CollaboratorModal user={user} onClose={() => setCollabOpen(false)} onToast={setToast} />}
+      <ErrorPanel compact key={page}>
       {page === 'Overview' && <Dashboard reviews={activeReviews} meetings={activeMeetings} workload={activeWorkload} reportByStatus={activeReportByStatus} sprints={activeSprints} goTo={setPage} onSubmitReview={() => setModal('review')} onNewMeeting={openNewMeeting} />}
       {page === 'All Reviews' && <Reviews reviews={activeReviews} query={query} setQuery={setQuery} updateReview={updateReview} archiveReview={archiveReview} setModal={setModal} onOpen={setSelectedReview} />}
       {page === 'Meetings' && <Meetings meetings={activeMeetings} reviews={activeReviews} addMeeting={addMeeting} addReview={addReview} onDeleteMeeting={deleteMeeting} setToast={setToast} setModal={setModal} onNewMeeting={openNewMeeting} onTasksCreated={count => showSuccess(`${count} review items created`, 'Action items from the meeting notes are now on the board.', 'View board', () => setPage('Board'))} onOpen={setSelectedReview} />}
@@ -352,20 +386,42 @@ function App() {
       {page === 'Reports' && <Reports reviews={data.reviews} projects={data.projects || []} sprints={data.sprints || []} projectName={data.project.name} onRefresh={refreshAll} onOpen={setSelectedReview} />}
       {page === 'Settings' && <SettingsPageEnhanced project={data.project} user={user} saveProject={saveProject} setToast={setToast} onDeleteProject={() => setModal('delete-project')} />}
       {page === 'Admin' && <AdminPageEnhanced user={user} setToast={setToast}/>}
+      </ErrorPanel>
     </main>
     {toast && <div className="toast"><CheckCircle2 size={17}/>{toast}</div>}
+    <ErrorPanel compact key={'modal-' + String(modal) + '-' + (selectedReview ? selectedReview.id : 'none')}>
     {modal === 'review' && <ReviewModal meetings={activeMeetings} onClose={() => setModal(null)} onSave={(review) => { addReview(review); setModal(null); showSuccess('Review created', `"${review.title}" is now on the board.`, 'View All Reviews', () => setPage('All Reviews')); }} />}
     {modal === 'meeting' && <MeetingModal onClose={() => setModal(null)} onSave={async meeting => { await addMeeting(meeting); setModal(null); showSuccess('Meeting saved', `"${meeting.title}" has been added to Meetings.`, 'View Meetings', () => setPage('Meetings')); }} />}
     {modal === 'project' && <NewProjectModal onClose={() => setModal(null)} onCreate={createProject} />}
     {modal === 'delete-project' && data.project?.id !== 'default' && <DeleteProjectModal project={data.project} onClose={() => setModal(null)} onDelete={deleteProject} />}
     {selectedReview && <ReviewDetailEnhanced review={selectedReview} meetings={activeMeetings} metadata={(data.metadata || []).filter(item => !item.projectId || item.projectId === activeProjectId)} sprints={activeSprints} user={user} onClose={() => setSelectedReview(null)} onUpdated={saved => { setData(prev => ({...prev, reviews: prev.reviews.map(r => r.id === saved.id ? {...r, ...saved} : r)})); setSelectedReview(saved); }} onDeleted={id => { setData(prev => ({...prev, reviews: prev.reviews.filter(r => r.id !== id)})); setSelectedReview(null); showSuccess('Task deleted', 'The task has been permanently removed.', 'Done'); }} onToast={setToast} onRemoveRequest={doDelete => setDialog({ danger: true, icon: <Trash2 size={24}/>, title: 'Delete this task?', subtitle: 'This task and its comments will be permanently deleted.', confirmLabel: 'Delete', onConfirm: doDelete })} />}
     {dialog && <ActionDialog dialog={dialog} onClose={() => setDialog(null)} />}
-    <footer className="app-footer"><span>{cloudReady ? 'Synced with Cloudflare D1' : 'Local draft — reconnecting to Cloudflare'}</span></footer>
+    </ErrorPanel>
+    <SyncStatus online={online} syncing={syncing} pendingOps={pendingOps} cloudReady={cloudReady} lastSync={lastSync} />
   </div>;
 }
 
 function NotificationMenu({ notifications, onClose, onOpen, onRead, onReadAll }) {
   return <div className="notification-menu"><div className="search-results-head"><span>Notifications</span><span><button className="notification-read-all" onClick={onReadAll}>Mark all read</button><button onClick={onClose}><X size={14}/></button></span></div>{notifications.length ? notifications.slice(0, 8).map(item => <button className={item.read ? 'read' : 'unread'} key={item.id} onClick={()=>{onRead(item);if(item.reviewId){onOpen({id:item.reviewId,title:item.title});}onClose()}}><span className="notification-icon"><Bell size={14}/></span><span><strong>{item.title}</strong><small>{item.body} · {relativeDate(item.createdAt)}</small></span>{!item.read && <i className="notification-unread-dot"/>}</button>) : <p>No notifications yet.</p>}</div>;
+}
+
+function SyncStatus({ online, syncing, pendingOps, cloudReady, lastSync }) {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (!lastSync) return undefined;
+    const id = window.setInterval(() => setTick(tick => tick + 1), 5000);
+    return () => window.clearInterval(id);
+  }, [lastSync]);
+  let text = 'Local draft — reconnecting to Cloudflare';
+  let state = 'local';
+  if (!online) { text = 'Offline — changes are saved on this device'; state = 'offline'; }
+  else if (syncing || pendingOps > 0) { text = 'Syncing…'; state = 'syncing'; }
+  else if (cloudReady && lastSync) {
+    const secs = Math.max(0, Math.round((Date.now() - lastSync) / 1000));
+    text = secs < 5 ? 'Live · Synced with Cloudflare D1' : `Synced with Cloudflare D1 · ${secs}s ago`;
+    state = 'live';
+  } else if (cloudReady) { text = 'Live · Synced with Cloudflare D1'; state = 'live'; }
+  return <footer className="app-footer"><span className={`sync-state-${state}`}><i className="sync-dot" />{text}</span></footer>;
 }
 
 function Sidebar({ page, setPage, menuOpen, setMenuOpen, collapsed, onMenuClick, user, onSignOut, project, onProjectClick }) {
@@ -802,56 +858,47 @@ function SelectField({ label,value,values,onChange }) { const icons = { Phase: C
 function Modal({title,subtitle,onClose,children}) { return <div className="modal-backdrop" onMouseDown={onClose}><section className="modal" onMouseDown={e=>e.stopPropagation()}><button className="modal-close" onClick={onClose}><X size={19}/></button><h2>{title}</h2><p>{subtitle}</p>{children}</section></div>; }
 
 
-class AppErrorBoundary extends Component {
-  state = { error: null, info: null };
+class ErrorPanel extends Component {
+  state = { error: null, errorId: null };
   static getDerivedStateFromError(error) { return { error }; }
-  componentDidCatch(error, info) {
-    console.error('Unhandled Synqra runtime error:', error, info);
-    this.setState({ info });
+  componentDidCatch(error) {
+    console.error('Unhandled Synqra runtime error:', error);
+    this.setState({ errorId: `${Date.now().toString(36)}-${Math.floor(Math.random() * 1296).toString(36)}` });
   }
-  resetCache = () => {
-    try {
-      localStorage.removeItem('synqra-dashboard-v1');
-      localStorage.removeItem('synqra-sidebar-collapsed');
-    } catch {}
-    window.location.href = window.location.pathname;
-  };
-  reload = () => {
-    window.location.reload();
+  retry = () => this.setState({ error: null, errorId: null });
+  goBack = () => {
+    if (window.history.length > 1) window.history.back();
+    else window.location.href = window.location.pathname;
   };
   render() {
     if (!this.state.error) return this.props.children;
+    if (this.props.compact) {
+      return (
+        <div className="section-error" role="alert">
+          <strong>Something went wrong</strong>
+          <p>We couldn&apos;t load this section. Your saved data is safe.</p>
+          <div className="section-error-actions"><button className="secondary-button" onClick={this.retry}>Try again</button><button className="text-button" onClick={this.goBack}>Go back</button></div>
+          {this.state.errorId && <small>Error ID: {this.state.errorId}</small>}
+        </div>
+      );
+    }
     return (
       <div className="auth-shell">
         <section className="auth-card" style={{ maxWidth: 520, textAlign: 'left' }}>
           <div className="auth-brand" style={{ justifyContent: 'flex-start' }}>
             <img className="synqra-logo auth-logo" src="/logo-synqra.png" alt="Synqra" />
           </div>
-          <h1 style={{ fontSize: 22, marginTop: 16 }}>Application Encountered an Error</h1>
+          <h1 style={{ fontSize: 22, marginTop: 16 }}>Something went wrong</h1>
           <p style={{ color: '#687a92', fontSize: 13, lineHeight: 1.5 }}>
-            Synqra caught an unexpected issue during execution. You can reload the application or reset local cache to restore standard operation.
+            We couldn&apos;t load this workspace. Your saved data is safe. Try again or return to the previous page.
           </p>
-          <div style={{
-            margin: '14px 0 18px',
-            padding: '12px 14px',
-            borderRadius: 8,
-            background: '#fff3f3',
-            border: '1px solid #fed2d2',
-            color: '#b91c1c',
-            fontSize: 12,
-            fontFamily: 'monospace',
-            maxHeight: 140,
-            overflow: 'auto',
-            whiteSpace: 'pre-wrap'
-          }}>
-            {this.state.error?.message || String(this.state.error)}
-          </div>
+          {this.state.errorId && <p style={{ color: '#9aa6b5', fontSize: 11 }}>Error ID: {this.state.errorId}</p>}
           <div style={{ display: 'flex', gap: 10 }}>
-            <button className="primary-button" onClick={this.reload}>
-              <RotateCcw size={15} /> Reload Application
+            <button className="primary-button" onClick={this.retry}>
+              <RotateCcw size={15} /> Try again
             </button>
-            <button className="secondary-button" onClick={this.resetCache}>
-              Reset Local Cache
+            <button className="secondary-button" onClick={this.goBack}>
+              Go back
             </button>
           </div>
         </section>
@@ -860,4 +907,4 @@ class AppErrorBoundary extends Component {
   }
 }
 
-createRoot(document.getElementById('root')).render(<AppErrorBoundary><App/></AppErrorBoundary>);
+createRoot(document.getElementById('root')).render(<ErrorPanel><App/></ErrorPanel>);
