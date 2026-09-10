@@ -19,5 +19,18 @@
   "devDependencies": {
     "vite": "^8.2.2",
     "wrangler": "^4.15.2"
-  }
+  },
+  "description": "Functional project-review dashboard modeled after the Synqra dashboard reference.",
+  "main": "worker.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ammarhisyamm/synqra-dashboard.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/ammarhisyamm/synqra-dashboard/issues"
+  },
+  "homepage": "https://github.com/ammarhisyamm/synqra-dashboard#readme"
 }
