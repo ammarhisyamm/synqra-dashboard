@@ -1,0 +1,202 @@
+# Synqra Design System
+
+This is the source of truth for every new screen, feature, and component in Synqra. Preserve the existing calm, editorial workspace style: white surfaces, dark navy primary actions, blue-grey supporting UI, fine borders, and restrained semantic colour. Do not introduce a visual framework, a new font family, gradients, or a new accent palette without updating this document first.
+
+## 1. Foundations
+
+### Brand and colour
+
+Use CSS custom properties for new work. Existing literal values should be migrated only when a component is otherwise being changed.
+
+```css
+:root {
+  --color-primary: #111b30;
+  --color-primary-hover: #1e2b45;
+  --color-text: #172238;
+  --color-text-muted: #71819a;
+  --color-text-subtle: #94a3b8;
+  --color-surface: #ffffff;
+  --color-surface-subtle: #f6f8fb;
+  --color-surface-muted: #eef2f6;
+  --color-border: #e2e8f0;
+  --color-border-strong: #dbe4ee;
+  --color-focus: #9aaccc;
+  --color-focus-ring: #e8effb;
+  --color-success: #1db77a;
+  --color-warning: #f08322;
+  --color-danger: #d8525b;
+  --color-info: #6366f1;
+}
+```
+
+- Primary (`--color-primary`) is for the main CTA, active navigation, and primary progress only.
+- Neutral surfaces and borders carry most of the interface. Do not use primary as a large background fill.
+- Semantic colours communicate state; never use them as a second brand palette.
+- Text must use the text tokens above. Placeholder and disabled copy use `--color-text-subtle`.
+
+### Typography
+
+Font stack: `"Inter Tight", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`.
+
+| Token | Size / line-height | Weight | Use |
+| --- | --- | --- | --- |
+| `display` | 28px / 1.2 | 500 | Page title only |
+| `heading-lg` | 24px / 1.25 | 500 | Dialog title or primary panel heading |
+| `heading` | 20px / 1.3 | 500 | Standard page heading |
+| `section` | 16px / 1.35 | 500 | Section/card title |
+| `body` | 14px / 1.5 | 400 | Default reading and form text |
+| `ui` | 13px / 1.4 | 400–500 | Buttons, controls, table cells |
+| `caption` | 12px / 1.4 | 400–500 | Supporting metadata |
+| `eyebrow` | 10–11px / 1.3 | 500 | Uppercase category labels, +0.08em tracking |
+
+Rules:
+
+- Use `500` as the strongest routine UI weight. Reserve `600` for a compact, high-emphasis value only; never use `700` for normal UI, buttons, or card titles.
+- Headings use `letter-spacing: -0.02em` to `-0.01em`; captions and uppercase labels use positive tracking.
+- Body copy uses a unitless line-height of `1.5` or greater. Use `text-wrap: balance` on short headings and `text-wrap: pretty` on descriptions.
+- Inputs use 16px text at mobile widths to prevent iOS focus zoom; desktop controls can use 13px.
+- Counts, timers, dates, and KPI values use `font-variant-numeric: tabular-nums`.
+
+### Spacing
+
+Use a 4px base unit. Do not add one-off margins or padding values unless an existing component demands it.
+
+| Token | Value | Typical use |
+| --- | --- | --- |
+| `space-1` | 4px | Icon/text micro-gap |
+| `space-2` | 8px | Control gap, compact card gap |
+| `space-3` | 12px | Field spacing |
+| `space-4` | 16px | Card padding / standard gap |
+| `space-5` | 20px | Section-internal spacing |
+| `space-6` | 24px | Section gap |
+| `space-8` | 32px | Desktop page inset |
+| `space-10` | 40px | Large page separation |
+| `space-12` | 48px | Major content separation |
+
+Desktop page padding is `28px 32px 62px`; mobile page padding is `20px 16px 58px` unless a dedicated full-bleed editor needs different treatment.
+
+### Shape, borders, and elevation
+
+| Token | Value | Use |
+| --- | --- | --- |
+| `radius-sm` | 7px | Input, compact button |
+| `radius-md` | 9–10px | Card, regular button, select |
+| `radius-lg` | 12px | Feature card, panel |
+| `radius-xl` | 14–16px | Modal / prominent panel |
+| `border` | 1px solid `--color-border` | Standard component outline |
+| `shadow-card` | `0 1px 2px #17223808` | Draggable/task card only |
+| `shadow-overlay` | `0 20px 60px #111b3040` | Modal, menu, date picker |
+
+Keep standard cards flat. Elevation is for floating controls and draggable cards, not every container.
+
+### Icons and avatars
+
+- Use Phosphor icons only, at `14px`, `16px`, or `20px`.
+- Icons next to a label use the same neutral text colour as the label; do not mix icon colour families inside a single control.
+- Icon-only buttons must be square, centered, have an `aria-label`, and retain a 35–36px target.
+- Use one avatar treatment: circular, dark primary background, white 2-character initials. Sizes: 24px in dense rows, 32px default, 40px account profile.
+
+## 2. Layout and responsive rules
+
+### Grid
+
+- Use CSS grid for page layouts and field groups; use flexbox for one-dimensional alignment.
+- Main dashboard: `minmax(0, 1fr) 300px`; collapse to one column at 900px.
+- Form grids: two equal columns with `minmax(0, 1fr)` and a 12px gap; collapse to one column at 650px.
+- Board columns stay horizontally scrollable below their comfortable width. Do not squeeze cards below 220px.
+- Toolbars must use `flex: 1; min-width: 0` for expandable controls. Search fills available space; select controls have a minimum width and do not overlap neighbors.
+
+### Breakpoints
+
+| Breakpoint | Rule |
+| --- | --- |
+| Desktop: > 1180px | Full workspace, multi-column toolbars |
+| Tablet: 721–1180px | Stack complex toolbars, preserve readable fields |
+| Mobile: ≤ 720px | 16px horizontal inset, one-column form grid, icon-only compact actions when text is hidden |
+| Narrow mobile: ≤ 650px | Sidebar becomes overlay; button labels may be hidden only when the icon remains centered and accessible |
+
+Never rely on `hug-content` for a toolbar group that includes a search field or multiple selects. Never allow text to overlap, clip without ellipsis, or force a native dropdown beyond the viewport.
+
+## 3. Component contracts
+
+### Buttons
+
+Only use these variants for new controls:
+
+| Variant | Appearance | Use |
+| --- | --- | --- |
+| Primary | Navy fill, white text | One main action per context |
+| Secondary | White surface, border, dark text | Adjacent non-destructive action |
+| Ghost / text | No container, muted text | Low-priority navigation or cancel |
+| Danger | White surface, danger border/text | Irreversible action |
+
+Default height is 35px. Use 13px UI text at weight 500. Include a 7–8px icon gap. Disabled controls use opacity and must not look enabled.
+
+### Inputs, search, and select
+
+- Standard inputs/selects: 40px high, `radius-md`, 1px border, 11–12px horizontal padding.
+- Compact search/filter controls: 36px high.
+- Label sits above the field with a 7px gap. Each field takes the full width of its grid track.
+- Use the shared `AppSelect` component for custom menus; do not introduce unstyled platform-select UI for new functionality.
+- On focus: border `--color-focus` plus a 3px `--color-focus-ring` ring.
+- Always provide an empty option or placeholder when a field is optional. Do not prefill people or past dates unless explicitly required by the user.
+
+### Cards, list rows, and tables
+
+- Default card: white, 1px border, `radius-lg` or `radius-md`, 16px padding.
+- Clickable cards must be `<button>` or an accessible link; do not use a clickable `article`/`div`.
+- List rows have 12–16px vertical padding and a divider. Keep title, metadata, and actions visually distinct.
+- Task title weight is 500, not bold. Supporting metadata is caption size and muted.
+- Task cards use a soft shadow only while draggable or elevated.
+
+### Pills and status
+
+- A pill is compact metadata, not a button.
+- Shape: 999px radius, 4px vertical / 8px horizontal padding, 11–12px text.
+- Use a leading 5–7px status dot rather than colouring all body copy.
+- Status mapping: Open muted slate, In Progress/info indigo, Review/warning amber, Resolved/Completed success green, Rejected/Blocked danger red.
+
+### Modal and confirmation dialog
+
+- One backdrop: `position: fixed`, `z-index: 70`, navy at approximately 47% opacity.
+- Standard modal: width 520px max, 28px padding, `radius-xl`, overlay shadow.
+- Confirmation dialog: width 400px max and may use centered copy.
+- Every modal requires `role="dialog"`, `aria-modal="true"`, a labelled title, visible close button, Escape handling, and backdrop click where it is safe.
+- Footer actions align to the end on desktop and remain reachable on mobile. Do not make field labels inline with inputs.
+
+### Loading, empty, errors, and toast
+
+- Empty state: one shared dashed-border panel with a relevant 16–20px icon, concise title, one sentence, and optional primary CTA.
+- Loading: one shared spinner/skeleton pattern; do not invent page-specific loading wording.
+- Error: explain what failed and give a recovery action if available. Never claim success after a rejected request.
+- Toast has `success`, `error`, `warning`, and `info` variants; icon must match variant. Stack multiple toasts rather than overwriting a critical error.
+
+## 4. Interaction, motion, and accessibility
+
+- Hover changes background/border subtly. Avoid bouncy or decorative motion.
+- Respect `prefers-reduced-motion`; loading animation must stop there.
+- Keyboard focus is visible on every interactive element. Use semantic buttons for actions and labels for form controls.
+- Minimum interactive target: 35px desktop, 40px mobile where space allows.
+- Do not communicate meaning by colour alone; combine icon, label, or dot/pill text.
+- Maintain readable contrast for all normal text and state labels.
+
+## 5. Implementation workflow
+
+Before implementing a component or feature:
+
+1. Reuse an existing primitive (`AppSelect`, button class, modal, pill, empty state) before creating a new one.
+2. Select tokens from this document rather than introducing raw colours, arbitrary sizes, or a new font weight.
+3. Test desktop, tablet, and 375px mobile widths with long titles, empty values, and error states.
+4. Verify keyboard access, focus, close behaviour, and loading/error feedback for every request.
+5. Update this document when a reusable decision changes. Do not fork a local visual convention.
+
+## 6. Migration priorities
+
+When touching legacy UI, migrate only the touched component in this order:
+
+1. Typography weight and text hierarchy.
+2. Button, input, select, and modal contracts.
+3. Colour tokens and semantic status mapping.
+4. Spacing/radius/grid alignment.
+
+Avoid a single global visual refactor: it risks changing the approved Synqra look. This guide standardizes future work while allowing controlled incremental cleanup.
