@@ -5,6 +5,7 @@ import { extractItemsLocally, generateActionItemsWithOrvix, hashNotes } from '..
 import { Wave } from '../Wave.jsx';
 
 const today = () => new Date().toISOString().slice(0, 10);
+const DRAFT_STORAGE_KEY = 'synqra-meeting-editor-draft';
 const templates = [
   { title: 'Blank Meeting', subtitle: 'Start from scratch', icon: FileText, notes: '' },
   { title: 'Meeting Notes', subtitle: 'Standard meeting notes', icon: FileText, notes: 'Yesterday:\n\nToday:\n\nBlockers:\n' },
@@ -14,7 +15,12 @@ const templates = [
 
 export function MeetingEditor({ user, onClose, onCreate, onToast }) {
   const [phase, setPhase] = useState('writing');
-  const [form, setForm] = useState({ title: '', date: today(), notes: '' });
+  const [form, setForm] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(DRAFT_STORAGE_KEY));
+      return saved?.title || saved?.notes ? { title: saved.title || '', date: saved.date || today(), notes: saved.notes || '' } : { title: '', date: today(), notes: '' };
+    } catch { return { title: '', date: today(), notes: '' }; }
+  });
   const [items, setItems] = useState([]);
   const [brief, setBrief] = useState(null);
   const [generatedHash, setGeneratedHash] = useState('');
@@ -76,6 +82,14 @@ export function MeetingEditor({ user, onClose, onCreate, onToast }) {
   };
 
   const preview = useMemo(() => items.filter(item => item.keep).length, [items]);
+  const saveDraft = () => {
+    try { localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(form)); setSaved(true); onToast('Meeting draft saved'); }
+    catch { onToast('Meeting draft could not be saved'); }
+  };
+  const create = async payload => {
+    await onCreate(payload);
+    try { localStorage.removeItem(DRAFT_STORAGE_KEY); } catch {}
+  };
 
   if (phase === 'ai') {
     return (
@@ -87,7 +101,7 @@ export function MeetingEditor({ user, onClose, onCreate, onToast }) {
         setItems={setItems}
         selectedCount={preview}
         onBack={() => setPhase('writing')}
-        onCreate={onCreate}
+        onCreate={create}
       />
     );
   }
@@ -102,10 +116,7 @@ export function MeetingEditor({ user, onClose, onCreate, onToast }) {
           <button
             className="secondary-button"
             disabled={!form.title.trim()}
-            onClick={() => {
-              setSaved(true);
-              onToast('Meeting draft saved');
-            }}
+            onClick={saveDraft}
           >
             Save
           </button>

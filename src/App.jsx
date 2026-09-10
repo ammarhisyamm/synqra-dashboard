@@ -149,14 +149,22 @@ export function App() {
       if (field) setSavingField(null);
     }
   };
-  const addReview = (review) => {
+  const addReview = async (review) => {
     const saved = { id: crypto.randomUUID(), createdAt: new Date().toISOString().slice(0, 10), archived: false, projectId: data.project?.id || 'default', ...review };
     if (!/^AR-\d+$/.test(saved.key || '')) saved.key = nextTaskKey(data.reviews);
     setData(prev => ({ ...prev, reviews: [saved, ...prev.reviews] }));
     setPendingOps(count => count + 1);
-    reviewsApi.create(saved).then(created => {
+    try {
+      const created = await reviewsApi.create(saved);
       setData(prev => ({ ...prev, reviews: prev.reviews.map(r => r.id === saved.id ? created : r) }));
-    }).catch(error => { setData(prev => ({ ...prev, reviews: prev.reviews.filter(item => item.id !== saved.id) })); setToast(error.message); }).finally(() => setPendingOps(count => Math.max(0, count - 1)));
+      return created;
+    } catch (error) {
+      setData(prev => ({ ...prev, reviews: prev.reviews.filter(item => item.id !== saved.id) }));
+      setToast(error.message);
+      throw error;
+    } finally {
+      setPendingOps(count => Math.max(0, count - 1));
+    }
   };
   const addSprint = async sprint => {
     const optimistic = { id: crypto.randomUUID(), projectId: activeProjectId, ...sprint };
@@ -209,9 +217,14 @@ export function App() {
   };
   const deleteMeeting = (id) => {
     const target = data.meetings.find(m => m.id === id);
-    setDialog({ danger: true, icon: <Trash2 size={24}/>, title: 'Delete this meeting?', subtitle: target ? `"${target.title}" and its notes will be permanently deleted.` : 'This meeting will be permanently deleted.', confirmLabel: 'Delete meeting', onConfirm: () => {
+    setDialog({ danger: true, icon: <Trash2 size={24}/>, title: 'Delete this meeting?', subtitle: target ? `"${target.title}" and its notes will be permanently deleted.` : 'This meeting will be permanently deleted.', confirmLabel: 'Delete meeting', onConfirm: async () => {
       setData(prev => ({ ...prev, meetings: prev.meetings.filter(m => m.id !== id) }));
-      meetingsApi.remove(id).catch(error => setToast(error.message));
+      try {
+        await meetingsApi.remove(id);
+      } catch (error) {
+        if (target) setData(prev => ({ ...prev, meetings: [target, ...prev.meetings] }));
+        setToast(error.message);
+      }
     } });
   };
   const exportData = () => {
@@ -278,9 +291,12 @@ export function App() {
   const createMeetingFromEditor = async ({ meeting, items }) => {
     try {
       const created = await addMeeting({ ...meeting, projectId: activeProjectId, itemCount: items.length });
-      items.forEach(item => addReview({ title: item.title, description: item.description, area: item.area, priority: item.priority, stage: 'Planning', status: 'Open', assignee: item.assignee, due: item.due, meetingId: created.id }));
+      const results = await Promise.allSettled(items.map(item => addReview({ title: item.title, description: item.description, area: item.area, priority: item.priority, stage: 'Planning', status: 'Open', assignee: item.assignee, due: item.due, meetingId: created.id })));
+      const createdCount = results.filter(result => result.status === 'fulfilled').length;
+      const failedCount = results.length - createdCount;
       setPage('Meetings');
-      showSuccess(`${items.length} review item${items.length === 1 ? '' : 's'} created`, 'The meeting and its selected action items are now synced to the project.', 'View board', () => setPage('Board'));
+      if (failedCount) setToast(`${failedCount} task could not be created. Please try again.`);
+      showSuccess(`${createdCount} task${createdCount === 1 ? '' : 's'} created`, failedCount ? 'The meeting was saved, but some selected tasks need to be retried.' : 'The meeting and its selected action items are now synced to the project.', 'View board', () => setPage('Board'));
     } catch { /* addMeeting already surfaced the error */ }
   };
 
