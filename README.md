@@ -9,7 +9,7 @@ Functional project-review dashboard modeled after the Synqra dashboard reference
 - Meetings: note capture and client-side action-item suggestions.
 - Kanban: move items between workflow stages and archive work.
 - Archive: restore items.
-- Browser-local persistence, JSON export, and demo-data reset.
+- Cloudflare D1 persistence for reviews and meetings, browser fallback, JSON export, and demo-data reset.
 
 ## Local development
 
@@ -24,4 +24,4 @@ npm run dev
 npm run deploy
 ```
 
-The deployment uses Cloudflare Workers Static Assets and supports SPA routes.
+The deployment uses Cloudflare Workers Static Assets, a D1-backed `/api` layer, and SPA routing.
