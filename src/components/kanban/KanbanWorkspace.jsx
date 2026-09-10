@@ -22,7 +22,7 @@ function TaskMeta({ task }) {
   return <span className="kanban-task-meta">{task.epic && <em>{task.epic}</em>}{task.feature && <em>{task.feature}</em>}{labels.slice(0, 1).map(label => <em key={label}>{label}</em>)}</span>;
 }
 
-function MetadataManager({ projectId, metadata, onClose, onRefresh }) {
+function MetadataManager({ projectId, metadata, onClose, onRefresh, requestConfirm }) {
   const [type, setType] = useState('epic');
   const [name, setName] = useState('');
   const [parentId, setParentId] = useState('');
@@ -31,7 +31,15 @@ function MetadataManager({ projectId, metadata, onClose, onRefresh }) {
   const epics = metadata.filter(item => item.type === 'epic');
   const parentOptions = [{ value: '', label: 'No parent epic' }, ...epics.map(item => ({ value: item.id, label: item.name }))];
   const save = async event => { event.preventDefault(); if (!name.trim() || busy) return; setBusy(true); try { await metadataApi.create({ projectId, type, name, parentId: type === 'feature' ? parentId : '' }); setName(''); setParentId(''); await onRefresh(); } finally { setBusy(false); } };
-  const remove = async item => { if (!confirm(`Remove ${item.name}? Existing tasks keep their current value.`)) return; await metadataApi.remove(item.id); await onRefresh(); };
+  const doRemove = async item => { await metadataApi.remove(item.id); await onRefresh(); };
+  const remove = item => {
+    if (requestConfirm) {
+      requestConfirm({ icon: <Trash size={24} />, title: `Remove ${item.name}?`, subtitle: 'Existing tasks keep their current value.', confirmLabel: 'Remove', onConfirm: () => doRemove(item) });
+      return;
+    }
+    if (!confirm(`Remove ${item.name}? Existing tasks keep their current value.`)) return;
+    doRemove(item);
+  };
   return <div className="modal-backdrop" onMouseDown={onClose}><section className="metadata-modal" onMouseDown={event => event.stopPropagation()}><button className="modal-close" onClick={onClose} aria-label="Close">×</button><span className="sprint-modal-icon"><Tag size={20}/></span><h2>Manage task metadata</h2><p>Create reusable epics, features, and labels for this project.</p><div className="metadata-tabs">{['epic','feature','label'].map(item => <button key={item} className={type === item ? 'active' : ''} onClick={() => setType(item)}>{item}s</button>)}</div><form onSubmit={save}><input value={name} onChange={event => setName(event.target.value)} placeholder={`New ${type} name`} autoFocus/>{type === 'feature' && <AppSelect value={parentId} options={parentOptions} onChange={setParentId} placeholder="No parent epic" ariaLabel="Parent epic"/>}<button className="primary-button" disabled={busy || !name.trim()}><Plus size={15}/> Add</button></form><div className="metadata-list">{items.length ? items.map(item => <div key={item.id}><span><i style={{ background: item.color }}/>{item.name}</span><button onClick={() => remove(item)} aria-label={`Delete ${item.name}`}><Trash size={15}/></button></div>) : <p>No {type}s yet.</p>}</div><div className="modal-actions"><button className="text-button" onClick={onClose}>Close</button></div></section></div>;
 }
 
@@ -97,7 +105,7 @@ function Timeline({ tasks, onOpen }) {
   return <section className="timeline-board"><div className="timeline-scroll"><div className="timeline-head"><strong>Task</strong><div>{dates.map(date => <span key={date}>{toDate(date).getDate()}</span>)}</div></div>{Object.entries(grouped).map(([epic, items]) => <div className="timeline-group" key={epic}><strong className="timeline-group-label"><i/>{epic}</strong>{items.map(task => { const taskStart = task.startDate || task.due || dates[0]; const taskEnd = task.due || task.startDate || taskStart; const offset = Math.max(0, Math.min(13, daysBetween(dates[0], taskStart))); const span = Math.max(1, Math.min(14 - offset, daysBetween(taskStart, taskEnd) + 1)); return <div className="timeline-row" key={task.id}><button onClick={() => onOpen(task)}><span>{task.key || 'TASK'}</span><strong>{task.title}</strong><small>{task.assignee || 'Unassigned'}</small></button><div className="timeline-track">{dates.map(date => <i key={date}/>) }<button className="timeline-bar" style={{ gridColumn: `${offset + 1} / span ${span}` }} onClick={() => onOpen(task)} title={`${task.title} · ${labelDate(taskStart)} – ${labelDate(taskEnd)}`}>{span > 2 && task.title}</button></div></div>; })}</div>)}</div></section>;
 }
 
-export function KanbanWorkspace({ project, team = [], reviews, sprints = [], metadata = [], projectId, updateReview, createSprint, updateSprint, refreshMetadata, setModal, onOpen }) {
+export function KanbanWorkspace({ project, team = [], reviews, sprints = [], metadata = [], projectId, updateReview, createSprint, updateSprint, refreshMetadata, setModal, onOpen, requestConfirm }) {
   const teamNames = team.map(t => t.name);
   const [view, setView] = useState('board');
   const [search, setSearch] = useState('');
@@ -250,6 +258,6 @@ export function KanbanWorkspace({ project, team = [], reviews, sprints = [], met
     {view === 'list' && <div className="kanban-list-view">{STAGES.map(stage => <section key={stage}><header><strong>{stage}</strong><span>{filtered.filter(task => task.stage === stage).length}</span></header>{filtered.filter(task => task.stage === stage).map(task => <TaskRow key={task.id} task={task} onOpen={onOpen}/>)}</section>)}</div>}
     {view === 'planning' && <SprintPlanning tasks={filtered} sprints={sprints} onOpen={onOpen} onUpdateTask={updateReview} onUpdateSprint={updateSprint} onCreateSprint={createSprint}/>}
     {view === 'timeline' && <Timeline tasks={filtered} onOpen={onOpen}/>}
-    {metadataOpen && <MetadataManager projectId={projectId} metadata={metadata} onClose={() => setMetadataOpen(false)} onRefresh={refreshMetadata}/>}
+    {metadataOpen && <MetadataManager projectId={projectId} metadata={metadata} onClose={() => setMetadataOpen(false)} onRefresh={refreshMetadata} requestConfirm={requestConfirm}/>}
   </section>;
 }

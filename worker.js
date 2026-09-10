@@ -1,163 +1,21 @@
 import { stages, areas, priorities, statuses, MAX_ATTACHMENT_BYTES } from './worker/constants.js';
-
-const json = (body, status = 200) => Response.json(body, { status, headers: { 'cache-control': 'no-store' } });
-const safeText = (value, max = 200) => typeof value === 'string' ? value.trim().slice(0, max) : '';
-const id = () => crypto.randomUUID();
-const encoder = new TextEncoder();
-const sessionCookie = 'synqra_session';
-
-const bytesToBase64 = bytes => btoa(String.fromCharCode(...bytes));
-const base64ToBytes = value => Uint8Array.from(atob(value), char => char.charCodeAt(0));
-const cookieValue = (request, name) => (request.headers.get('Cookie') || '').split(';').map(v => v.trim()).find(v => v.startsWith(`${name}=`))?.slice(name.length + 1);
-const publicUser = user => ({ id: user.id, email: user.email, username: user.username || user.name, name: user.name, role: user.role });
-const parseJson = (value, fallback) => { try { return value ? JSON.parse(value) : fallback; } catch { return fallback; } };
-async function sendInviteEmail(env, request, { to, inviterName }) {
-  // Returns { sent: true } or { sent: false, reason } — never throws.
-  // Requires RESEND_API_KEY secret; optional EMAIL_FROM secret (defaults to Resend onboarding sender).
-  if (!env.RESEND_API_KEY) return { sent: false, reason: 'email-not-configured' };
-  try {
-    const origin = new URL(request.url).origin;
-    const from = env.EMAIL_FROM || 'Synqra <onboarding@resend.dev>';
-    const response = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        from,
-        to: [to],
-        subject: `${inviterName} invited you to collaborate on Synqra`,
-        text: `${inviterName} invited you to collaborate on Synqra as a Viewer.\n\nOpen the workspace: ${origin}\n\nViewers can see reviews, meetings, and boards. Contact ${inviterName} for an account.`,
-        html: `<div style="font-family:sans-serif;max-width:480px"><h2>You've been invited to Synqra</h2><p><strong>${inviterName}</strong> invited you to collaborate as a <strong>Viewer</strong>.</p><p><a href="${origin}">Open the workspace</a></p><p style="color:#888;font-size:12px">Viewers can see reviews, meetings, and boards. Contact ${inviterName} for an account.</p></div>`
-      })
-    });
-    if (!response.ok) return { sent: false, reason: `email-provider-${response.status}` };
-    return { sent: true };
-  } catch {
-    return { sent: false, reason: 'email-failed' };
-  }
-}
-let workspaceSchema;
-async function ensureWorkspaceSchema(env) {
-  workspaceSchema ||= env.DB.batch([
-    env.DB.prepare("CREATE TABLE IF NOT EXISTS project_metadata (id TEXT PRIMARY KEY, project_id TEXT NOT NULL DEFAULT 'default', type TEXT NOT NULL CHECK (type IN ('epic','feature','label')), name TEXT NOT NULL, parent_id TEXT, color TEXT NOT NULL DEFAULT '#111b30', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(project_id, type, name))"),
-    env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_project_metadata_project_type ON project_metadata(project_id, type)'),
-    env.DB.prepare("CREATE TABLE IF NOT EXISTS project_member_roles (member_id TEXT PRIMARY KEY, role TEXT NOT NULL DEFAULT 'viewer' CHECK (role IN ('viewer','editor')), updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (member_id) REFERENCES project_members(id) ON DELETE CASCADE)")
-  ]);
-  return workspaceSchema;
-}
-
-async function passwordHash(password, salt = crypto.getRandomValues(new Uint8Array(16))) {
-  const key = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveBits']);
-  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' }, key, 256);
-  return `${bytesToBase64(salt)}.${bytesToBase64(new Uint8Array(bits))}`;
-}
-async function passwordMatches(password, stored) {
-  const [salt, hash] = stored.split('.');
-  if (!salt || !hash) return false;
-  return (await passwordHash(password, base64ToBytes(salt))) === stored;
-}
-async function sessionUser(request, env) {
-  const token = cookieValue(request, sessionCookie);
-  if (!token) return null;
-  return env.DB.prepare('SELECT u.id, u.email, u.username, u.name, u.role FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ? AND s.expires_at > CURRENT_TIMESTAMP').bind(token).first();
-}
-async function createSession(user, env) {
-  const token = bytesToBase64(crypto.getRandomValues(new Uint8Array(32))).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
-  const expiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-  await env.DB.batch([
-    env.DB.prepare('DELETE FROM sessions WHERE expires_at <= CURRENT_TIMESTAMP'),
-    env.DB.prepare('INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)').bind(token, user.id, expiry)
-  ]);
-  return token;
-}
-function signedIn(user, token, status = 200) {
-  return Response.json({ user: publicUser(user) }, { status, headers: { 'cache-control': 'no-store', 'set-cookie': `${sessionCookie}=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=604800` } });
-}
-
-async function readBody(request) {
-  try { return await request.json(); } catch { return null; }
-}
-
-function normalizeReview(input, partial = false) {
-  const review = {};
-  if (!partial || 'title' in input) {
-    review.title = safeText(input.title);
-    if (!review.title) throw new Error('A review title is required.');
-  }
-  if (!partial || 'area' in input) { if (!areas.has(input.area)) throw new Error('Invalid review area.'); review.area = input.area; }
-  if (!partial || 'priority' in input) { if (!priorities.has(input.priority)) throw new Error('Invalid priority.'); review.priority = input.priority; }
-  if (!partial || 'stage' in input) { const stage = safeText(input.stage, 80); if (!stage) throw new Error('Invalid stage.'); review.stage = stage; }
-  if (!partial || 'assignee' in input) review.assignee = safeText(input.assignee, 80);
-  if (!partial || 'due' in input) review.due = /^\d{4}-\d{2}-\d{2}$/.test(input.due || '') ? input.due : null;
-  if (!partial || 'start_date' in input || 'startDate' in input) {
-    const start = input.start_date ?? input.startDate;
-    review.start_date = /^\d{4}-\d{2}-\d{2}$/.test(start || '') ? start : null;
-  }
-  if (!partial || 'description' in input) review.description = safeText(input.description, 4000);
-  if (!partial || 'status' in input) { if (!statuses.has(input.status || 'Open')) throw new Error('Invalid review status.'); review.status = input.status || 'Open'; }
-  if (!partial || 'submittedBy' in input) review.submitted_by = safeText(input.submittedBy, 120);
-  if (!partial || 'meetingId' in input) review.meeting_id = safeText(input.meetingId, 80) || null;
-  if (!partial || 'reporter' in input) review.reporter = safeText(input.reporter, 120);
-  if (!partial || 'estimateHours' in input) {
-    const estimate = input.estimateHours === '' || input.estimateHours == null ? null : Number(input.estimateHours);
-    if (estimate !== null && (!Number.isFinite(estimate) || estimate < 0 || estimate > 1000)) throw new Error('Estimate must be between 0 and 1000 hours.');
-    review.estimate_hours = estimate;
-  }
-  if (!partial || 'epic' in input) review.epic = safeText(input.epic, 120);
-  if (!partial || 'feature' in input) review.feature = safeText(input.feature, 120);
-  if (!partial || 'sprint' in input) review.sprint = safeText(input.sprint, 120);
-  if (!partial || 'labels' in input) review.labels = JSON.stringify((Array.isArray(input.labels) ? input.labels : []).map(label => safeText(label, 40)).filter(Boolean).slice(0, 20));
-  if (!partial || 'projectId' in input) review.project_id = safeText(input.projectId, 80) || 'default';
-  if (!partial || 'parentId' in input) review.parent_id = safeText(input.parentId, 80) || null;
-  if (!partial || 'itemType' in input) review.item_type = ['task', 'epic', 'feature'].includes(input.itemType) ? input.itemType : 'task';
-  if (!partial || 'sprintId' in input) review.sprint_id = safeText(input.sprintId, 80) || null;
-  if ('archived' in input) review.archived = input.archived ? 1 : 0;
-  return review;
-}
-
-async function bootstrap(env, userId) {
-  await ensureWorkspaceSchema(env);
-  const [reviews, meetings, project, spaces, projects, workflowStatuses, sprints, metadata, unread, workload, report] = await env.DB.batch([
-    env.DB.prepare("SELECT id, key, title, area, priority, stage, assignee, due, start_date AS startDate, description, status, submitted_by AS submittedBy, reporter, meeting_id AS meetingId, estimate_hours AS estimateHours, epic, feature, sprint, labels, project_id AS projectId, parent_id AS parentId, item_type AS itemType, sprint_id AS sprintId, created_at AS createdAt, updated_at AS updatedAt, archived FROM reviews ORDER BY created_at DESC"),
-    env.DB.prepare("SELECT id, title, date, ai, notes, project_id AS projectId, (SELECT COUNT(*) FROM reviews WHERE meeting_id = m.id AND archived = 0) AS itemCount, attendees FROM meetings m ORDER BY date DESC"),
-    env.DB.prepare("SELECT name, description, access_mode AS accessMode FROM project_settings WHERE id = 'default'"),
-    env.DB.prepare('SELECT id, name, key, description FROM spaces ORDER BY name'),
-    env.DB.prepare('SELECT id, space_id AS spaceId, name, description, access_mode AS accessMode FROM projects ORDER BY name'),
-    env.DB.prepare('SELECT id, project_id AS projectId, name, color, position, is_terminal AS isTerminal FROM workflow_statuses ORDER BY project_id, position'),
-    env.DB.prepare('SELECT id, project_id AS projectId, name, goal, start_date AS startDate, end_date AS endDate, status FROM sprints ORDER BY start_date DESC'),
-    env.DB.prepare('SELECT id, project_id AS projectId, type, name, parent_id AS parentId, color FROM project_metadata ORDER BY type, name'),
-    env.DB.prepare('SELECT COUNT(*) AS count FROM notifications WHERE user_id = ? AND read_at IS NULL').bind(userId),
-    env.DB.prepare("SELECT COALESCE(NULLIF(assignee,''),'Unassigned') AS assignee, COUNT(*) AS count FROM reviews WHERE archived = 0 GROUP BY COALESCE(NULLIF(assignee,''),'Unassigned') ORDER BY count DESC"),
-    env.DB.prepare("SELECT stage, COUNT(*) AS count FROM reviews WHERE archived = 0 GROUP BY stage ORDER BY count DESC")
-  ]);
-  const settings = project.results[0] || { name: 'Acme Redesign', description: '', accessMode: 'link' };
-  return { project: { id: 'default', ...settings, initials: settings.name.slice(0, 1).toUpperCase() }, reviews: reviews.results.map(r => ({ ...r, labels: parseJson(r.labels, []) })), meetings: meetings.results.map(m => ({ ...m, ai: Boolean(m.ai), attendees: parseJson(m.attendees, []) })), spaces: spaces.results, projects: projects.results, workflowStatuses: workflowStatuses.results.map(s => ({ ...s, isTerminal: Boolean(s.isTerminal) })), sprints: sprints.results, metadata: metadata.results, unreadNotifications: Number(unread.results[0]?.count || 0), workload: workload.results, reportByStatus: report.results };
-}
-async function reviewSnapshot(env, reviewId) {
-  return env.DB.prepare("SELECT id, key, title, area, priority, stage, assignee, due, start_date AS startDate, description, status, submitted_by AS submittedBy, reporter, meeting_id AS meetingId, estimate_hours AS estimateHours, epic, feature, sprint, labels, project_id AS projectId, parent_id AS parentId, item_type AS itemType, sprint_id AS sprintId, created_at AS createdAt, updated_at AS updatedAt, archived FROM reviews WHERE id = ?").bind(reviewId).first();
-}
-
-async function notifyUsers(env, excludeUserId, { type, title, body, reviewId = null }) {
-  const recipients = await env.DB.prepare('SELECT id FROM users WHERE id != ?').bind(excludeUserId).all();
-  if (!recipients.results.length) return;
-  await env.DB.batch(recipients.results.map(recipient => env.DB.prepare('INSERT INTO notifications (id, user_id, review_id, type, title, body) VALUES (?, ?, ?, ?, ?, ?)').bind(id(), recipient.id, reviewId, type, title, body)));
-}
-async function recordActivity(env, reviewId, userId, action, metadata = {}) {
-  const review = await env.DB.prepare('SELECT title, assignee FROM reviews WHERE id = ?').bind(reviewId).first();
-  const recipients = await env.DB.prepare('SELECT id FROM users WHERE id != ?').bind(userId).all();
-  await env.DB.batch([
-    env.DB.prepare('INSERT INTO review_activity (id, review_id, user_id, action, metadata) VALUES (?, ?, ?, ?, ?)').bind(id(), reviewId, userId, action, JSON.stringify(metadata)),
-    ...recipients.results.map(recipient => env.DB.prepare('INSERT INTO notifications (id, user_id, review_id, type, title, body) VALUES (?, ?, ?, ?, ?, ?)').bind(id(), recipient.id, reviewId, action, review?.title || 'Task update', `${action} on ${review?.title || 'task'}`))
-  ]);
-}
+import { json, safeText, id, sessionCookie, cookieValue, publicUser, parseJson, readBody, authRateLimited, tooManyRequests, MIN_PASSWORD_LENGTH } from './worker/utils.js';
+import { ensureWorkspaceSchema } from './worker/schema.js';
+import { sendInviteEmail } from './worker/email.js';
+import { passwordHash, passwordMatches, sessionUser, createSession, signedIn } from './worker/auth.js';
+import { normalizeReview, reviewSnapshot, notifyUsers, recordActivity } from './worker/reviews.js';
+import { bootstrap } from './worker/bootstrap.js';
+import { handleAiGenerate } from './worker/ai.js';
 
 async function routeApi(request, env) {
   const path = new URL(request.url).pathname;
   if (request.method === 'POST' && path === '/api/auth/register') {
+    if (authRateLimited(request)) return tooManyRequests();
     const body = await readBody(request); if (!body) return json({ error: 'Invalid JSON.' }, 400);
     const email = safeText(body.email, 254).toLowerCase(); const name = safeText(body.name, 80) || email.split('@')[0]; const username = safeText(body.username, 40).toLowerCase() || email.split('@')[0].replace(/[^a-z0-9_-]/g, ''); const password = typeof body.password === 'string' ? body.password : '';
     if (!/^\S+@\S+\.\S+$/.test(email)) return json({ error: 'Enter a valid email address.' }, 400);
     if (!/^[a-z0-9_-]{3,40}$/.test(username)) return json({ error: 'Use a username with 3–40 letters, numbers, hyphens, or underscores.' }, 400);
-    if (password.length < 6) return json({ error: 'Use at least 6 characters for your password.' }, 400);
+    if (password.length < MIN_PASSWORD_LENGTH) return json({ error: `Use at least ${MIN_PASSWORD_LENGTH} characters for your password.` }, 400);
     const existing = await env.DB.prepare('SELECT id FROM users WHERE email = ? OR username = ?').bind(email, username).first();
     if (existing) return json({ error: 'An account with that email already exists.' }, 409);
     const count = await env.DB.prepare('SELECT COUNT(*) AS count FROM users').first('count');
@@ -167,6 +25,7 @@ async function routeApi(request, env) {
     return signedIn(user, await createSession(user, env), 201);
   }
   if (request.method === 'POST' && path === '/api/auth/login') {
+    if (authRateLimited(request)) return tooManyRequests();
     const body = await readBody(request); if (!body) return json({ error: 'Invalid JSON.' }, 400);
     const identifier = safeText(body.identifier || body.email, 254).toLowerCase(); const password = typeof body.password === 'string' ? body.password : '';
     const user = await env.DB.prepare('SELECT id, email, username, name, role, password_hash FROM users WHERE email = ? OR username = ?').bind(identifier, identifier).first();
@@ -184,6 +43,7 @@ async function routeApi(request, env) {
   const user = await sessionUser(request, env);
   if (!user) return json({ error: 'Sign in required.' }, 401);
   await ensureWorkspaceSchema(env);
+  if (request.method === 'POST' && path === '/api/ai/generate') return handleAiGenerate(request, env);
   if (request.method === 'GET' && path === '/api/admin/users') {
     if (!['super_admin', 'admin'].includes(user.role)) return json({ error: 'Admin access required.' }, 403);
     const result = await env.DB.prepare('SELECT id, email, username, name, role, created_at AS createdAt FROM users ORDER BY CASE role WHEN \'super_admin\' THEN 0 WHEN \'admin\' THEN 1 ELSE 2 END, name').all();
@@ -269,7 +129,7 @@ async function routeApi(request, env) {
     const body = await readBody(request); if (!body) return json({ error: 'Invalid JSON.' }, 400);
     const email = safeText(body.email, 254).toLowerCase(); const name = safeText(body.name, 80); const password = typeof body.password === 'string' ? body.password : '';
     const username = safeText(body.username, 40).toLowerCase() || email.split('@')[0].replace(/[^a-z0-9_-]/g, '');
-    if (!/^\S+@\S+\.\S+$/.test(email) || !name || !/^[a-z0-9_-]{3,40}$/.test(username) || password.length < 6) return json({ error: 'Name, valid email, username, and a password of at least 6 characters are required.' }, 400);
+    if (!/^\S+@\S+\.\S+$/.test(email) || !name || !/^[a-z0-9_-]{3,40}$/.test(username) || password.length < MIN_PASSWORD_LENGTH) return json({ error: `Name, valid email, username, and a password of at least ${MIN_PASSWORD_LENGTH} characters are required.` }, 400);
     if (await env.DB.prepare('SELECT id FROM users WHERE email = ? OR username = ?').bind(email, username).first()) return json({ error: 'An account with that email or username already exists.' }, 409);
     const admin = { id: id(), email, username, name, role: 'admin' };
     await env.DB.prepare('INSERT INTO users (id, email, username, name, password_hash, role) VALUES (?, ?, ?, ?, ?, ?)').bind(admin.id, email, username, name, await passwordHash(password), admin.role).run();
@@ -605,3 +465,4 @@ export default {
     return env.ASSETS.fetch(request);
   }
 };
+

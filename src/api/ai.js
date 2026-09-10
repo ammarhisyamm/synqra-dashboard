@@ -1,21 +1,9 @@
-const ORVIX_API_URL = 'https://api.orvix.id/v1/chat/completions';
-const DEFAULT_ORVIX_KEY = 'orv-sk_live_ZXlKaGJHY2lPaUpGWkVSVFFTSXNJblI1Y0NJNklrcFhWQ0o5LmV5SndjbTlxWldOMFgybGtJam9pTURGTFdrVkJTRFpIU3pGSE1raEdOVFZXUWxGUk1Wb3pTRVVpTENKclpYbGZhV1FpT2lJd01VMHlOVUZYTkVWRVFVVTJTemxDUXpWYVJGZzBVVFEwU3lJc0ltcDBhU0k2SW1WaFlUYzBPRE0wTFRZd05UY3RORGN5TkMxaE5USm1MVE5sWTJRMlptVTRaVFE0TVNJc0luTjFZaUk2SWpBeFMxcEZRVWRJTWpnNFdVSldWamRVUWt0RVEwSkhVRmRPSWl3aWFYTnpJam9pYjNKMmFYZ3RaMkYwWlhkaGVTSXNJbUYxWkNJNkltOXlkbWw0TFdGd2FTSXNJbWxoZENJNk1UYzRPVEF6TXpBMU9IMC52TmdqYjR3VlFWaTEtay1td2dzLUJ6dXVDN1J4VFk4M3hPYmFPdnNISWs1RDNLcFVGMWJSaE1qMG5ZRENraFdCeFFZN0p5ZWZEM3JlWm9LUzZrbElDUQ';
-const ORVIX_STORAGE_KEY = 'synqra-orvix-api-key';
-
-export function getOrvixApiKey() {
-  try {
-    return localStorage.getItem(ORVIX_STORAGE_KEY) || DEFAULT_ORVIX_KEY;
-  } catch {
-    return DEFAULT_ORVIX_KEY;
-  }
-}
-
-export function setOrvixApiKey(key) {
-  try {
-    if (key) localStorage.setItem(ORVIX_STORAGE_KEY, key.trim());
-    else localStorage.removeItem(ORVIX_STORAGE_KEY);
-  } catch {}
-}
+/**
+ * Client-side AI helper — no API keys here.
+ * Generation runs server-side via POST /api/ai/generate (worker.js),
+ * which holds the ORVIX_API_KEY as a Cloudflare secret.
+ * This module keeps only the offline heuristic fallback + cache hashing.
+ */
 
 /**
  * Fallback heuristic extractor when offline or if AI endpoint fails
@@ -44,98 +32,39 @@ export function extractItemsLocally(notes) {
 }
 
 /**
- * Generate action items from meeting notes using Orvix AI API
+ * Generate action items from meeting notes via the server-side endpoint.
+ * Falls back to the local heuristic extractor on any failure.
  */
-export async function generateActionItemsWithOrvix({ notes, user }) {
-  const apiKey = getOrvixApiKey();
-  if (!apiKey || !notes?.trim()) {
-    return extractItemsLocally(notes || '');
+export async function generateActionItemsWithOrvix({ notes }) {
+  const sourceExcerpt = (notes || '').trim().slice(0, 220);
+  if (!notes?.trim()) {
+    return { items: extractItemsLocally(notes || ''), brief: { generatedAt: new Date().toISOString(), sourceExcerpt, model: 'local', source: 'local' } };
   }
-
-  const sourceExcerpt = notes.trim().slice(0, 220);
-  const systemPrompt = `You are Synqra AI, an intelligent project manager assistant.
-Analyze the following meeting notes and return a strictly valid JSON object with no markdown code fences and no surrounding text.
-Schema:
-{
-  "summary": "2-3 sentence meeting summary",
-  "keyPoints": ["key discussion point"],
-  "decisions": ["decision made"],
-  "risks": ["risk or blocker"],
-  "openQuestions": ["unresolved question"],
-  "actionItems": [
-    {
-      "title": "concise task title (max 80 chars)",
-      "description": "clear explanation or acceptance criteria",
-      "area": "Engineering | Design | Marketing",
-      "priority": "Blocker | Major | Minor",
-      "assignee": "person name mentioned or empty string",
-      "due": "date in YYYY-MM-DD format if mentioned, or empty string"
-    }
-  ]
-}
-Rules: never invent an owner (use "" when unknown); never invent a due date (use "" when unknown); keep titles short. If nothing actionable is found, return an empty actionItems array.`;
 
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 20000);
+    const timeout = setTimeout(() => controller.abort(), 25000);
 
-    const response = await fetch(ORVIX_API_URL, {
+    const response = await fetch('/api/ai/generate', {
       method: 'POST',
       signal: controller.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: 'orvix/muse-spark-1.3',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: `Meeting Notes:\n\n${notes}` }
-        ],
-        temperature: 0.3
-      })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notes })
     });
 
     clearTimeout(timeout);
 
     if (!response.ok) {
-      throw new Error(`Orvix API responded with ${response.status}`);
+      throw new Error(`AI service responded with ${response.status}`);
     }
 
     const data = await response.json();
-    const content = data?.choices?.[0]?.message?.content?.trim() || '';
-
-    // Clean potential markdown fences ```json ... ```
-    const cleaned = content.replace(/^```json\s*/i, '').replace(/^```\s*/, '').replace(/```$/g, '').trim();
-    const parsed = JSON.parse(cleaned);
-    // Accept both the rich object contract and the legacy plain array.
-    const rawItems = Array.isArray(parsed) ? parsed : parsed.actionItems;
-    const brief = Array.isArray(parsed) ? null : {
-      summary: String(parsed.summary || ''),
-      keyPoints: Array.isArray(parsed.keyPoints) ? parsed.keyPoints.map(String).filter(Boolean).slice(0, 8) : [],
-      decisions: Array.isArray(parsed.decisions) ? parsed.decisions.map(String).filter(Boolean).slice(0, 8) : [],
-      risks: Array.isArray(parsed.risks) ? parsed.risks.map(String).filter(Boolean).slice(0, 8) : [],
-      openQuestions: Array.isArray(parsed.openQuestions) ? parsed.openQuestions.map(String).filter(Boolean).slice(0, 8) : []
-    };
-
-    if (Array.isArray(rawItems) && rawItems.length > 0) {
-      const generatedAt = new Date().toISOString();
-      return {
-        items: rawItems.map((item, index) => ({
-          id: `orvix-ai-${index}-${Date.now()}`,
-          keep: true,
-          title: String(item.title || `Action item ${index + 1}`).slice(0, 90),
-          description: String(item.description || ''),
-          assignee: String(item.assignee || ''),
-          due: typeof item.due === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(item.due) ? item.due : '',
-          priority: ['Blocker', 'Major', 'Minor'].includes(item.priority) ? item.priority : 'Major',
-          area: ['Engineering', 'Design', 'Marketing'].includes(item.area) ? item.area : 'Engineering'
-        })),
-        brief: { ...(brief || {}), generatedAt, sourceExcerpt, model: 'orvix/muse-spark-1.3', source: 'ai' }
-      };
+    if (Array.isArray(data?.items) && data.items.length > 0) {
+      return data;
     }
+    throw new Error('Empty AI result');
   } catch (err) {
-    console.warn('Orvix AI generation error, falling back to local extractor:', err);
+    console.warn('AI generation error, falling back to local extractor:', err);
   }
 
   // Fallback to local heuristic extractor

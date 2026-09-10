@@ -46,7 +46,7 @@ export function MeetingEditor({ user, onClose, onCreate, onToast }) {
     setGenerating(true);
     setAiError('');
     try {
-      const result = await generateActionItemsWithOrvix({ notes: form.notes, user });
+      const result = await generateActionItemsWithOrvix({ notes: form.notes });
       const extracted = result?.items || [];
       if (!extracted.length) {
         onToast('No action items could be extracted. Try adding bullet points.');
