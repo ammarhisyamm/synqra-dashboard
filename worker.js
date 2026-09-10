@@ -261,6 +261,35 @@ async function routeApi(request, env) {
     await env.DB.prepare('UPDATE notifications SET read_at = CURRENT_TIMESTAMP WHERE user_id = ? AND read_at IS NULL').bind(user.id).run();
     return json({ ok: true });
   }
+  if (request.method === 'GET' && path === '/api/reports/burndown') {
+    // Burndown for one sprint: remaining open tasks per day vs ideal line.
+    // resolvedAt = earliest status_history move to Resolved, else updated_at when already resolved.
+    const sprintId = new URL(request.url).searchParams.get('sprint_id') || '';
+    if (!sprintId) return json({ error: 'sprint_id is required.' }, 400);
+    const sprint = await env.DB.prepare('SELECT id, name, start_date AS startDate, end_date AS endDate, status FROM sprints WHERE id = ?').bind(sprintId).first();
+    if (!sprint) return json({ error: 'Sprint not found.' }, 404);
+    const tasks = await env.DB.prepare("SELECT id, created_at AS createdAt, updated_at AS updatedAt, stage, status, archived FROM reviews WHERE archived = 0 AND (sprint_id = ? OR sprint = ?)").bind(sprint.id, sprint.name).all();
+    const ids = tasks.results.map(t => t.id);
+    let resolvedAt = {};
+    if (ids.length) {
+      const placeholders = ids.map(() => '?').join(',');
+      const history = await env.DB.prepare(`SELECT review_id AS reviewId, MIN(created_at) AS resolvedAt FROM review_status_history WHERE to_status = 'Resolved' AND review_id IN (${placeholders}) GROUP BY review_id`).bind(...ids).all();
+      resolvedAt = Object.fromEntries(history.results.map(h => [h.reviewId, h.resolvedAt.slice(0, 10)]));
+    }
+    const isResolved = t => t.status === 'Resolved' || t.stage === 'Completed';
+    const doneDate = t => resolvedAt[t.id] || (isResolved(t) ? t.updatedAt.slice(0, 10) : null);
+    const start = sprint.startDate || tasks.results.map(t => t.createdAt.slice(0, 10)).sort()[0] || new Date().toISOString().slice(0, 10);
+    const end = sprint.endDate || new Date().toISOString().slice(0, 10);
+    const days = [];
+    for (let d = new Date(`${start}T12:00:00`); d <= new Date(`${end}T12:00:00`); d.setDate(d.getDate() + 1)) days.push(d.toISOString().slice(0, 10));
+    const total = tasks.results.length;
+    const series = days.map((date, index) => {
+      const remaining = tasks.results.filter(t => t.createdAt.slice(0, 10) <= date && !(doneDate(t) && doneDate(t) <= date)).length;
+      const ideal = days.length > 1 ? total * (1 - index / (days.length - 1)) : total;
+      return { date, remaining, ideal: Math.round(ideal * 10) / 10 };
+    });
+    return json({ sprint, total, days: series });
+  }
 
   if (request.method === 'GET' && path === '/api/workflow/statuses') {
     const result = await env.DB.prepare('SELECT id, project_id AS projectId, name, color, position, is_terminal AS isTerminal FROM workflow_statuses ORDER BY position').all();
