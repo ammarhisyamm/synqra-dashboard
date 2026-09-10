@@ -456,7 +456,7 @@ function CollaboratorModal({ user, onClose, onToast, onMembersChanged }) {
   const [role, setRole] = useState('viewer');
   const [pending, setPending] = useState(false);
   const load = () => api('/api/project-members').then(data => setMembers(data.members)).catch(error => onToast(error.message));
-  useEffect(load, []);
+  useEffect(() => { load(); }, []);
   const invite = async event => {
     event.preventDefault();
     const value = email.trim();
@@ -881,7 +881,7 @@ function SettingsPageEnhanced({ project, user, saveProject, setToast, onDeletePr
 function AdminPageEnhanced({ user, setToast, requestConfirm }) {
   const confirmAction = opts => { if (requestConfirm) requestConfirm(opts); };
   const [admins, setAdmins] = useState([]); const [error, setError] = useState(''); const [loaded, setLoaded] = useState(false); const [inviteOpen, setInviteOpen] = useState(false); const [invite, setInvite] = useState({ name: '', email: '', password: '' });
-  const load = () => api('/api/admin/users').then(result => setAdmins(result.users)).catch(error => setError(error.message)).finally(() => setLoaded(true)); useEffect(load, []);
+  const load = () => api('/api/admin/users').then(result => setAdmins(result.users)).catch(error => setError(error.message)).finally(() => setLoaded(true)); useEffect(() => { load(); }, []);
   const submit = async event => { event.preventDefault(); try { await api('/api/admin/users', { method: 'POST', body: JSON.stringify(invite) }); setInviteOpen(false); setInvite({ name: '', email: '', password: '' }); await load(); setToast('Admin account created'); } catch (error) { setToast(error.message); } };
   const doRole = async (person, nextRole) => { try { await api(`/api/admin/users/${person.id}`, { method: 'PATCH', body: JSON.stringify({ role: nextRole }) }); await load(); setToast('Admin role updated'); } catch (error) { setToast(error.message); } };
   const role = (person, nextRole) => confirmAction({ icon: <ShieldCheck size={24}/>, title: `${nextRole === 'admin' ? 'Promote' : 'Demote'} ${person.email}?`, subtitle: nextRole === 'admin' ? 'They will gain full workspace management access.' : 'They will lose admin access and become a regular member.', confirmLabel: nextRole === 'admin' ? 'Promote' : 'Demote', onConfirm: () => doRole(person, nextRole) });
