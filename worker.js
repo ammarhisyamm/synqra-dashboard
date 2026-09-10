@@ -15,7 +15,7 @@ const publicUser = user => ({ id: user.id, email: user.email, name: user.name, r
 
 async function passwordHash(password, salt = crypto.getRandomValues(new Uint8Array(16))) {
   const key = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveBits']);
-  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: 150000, hash: 'SHA-256' }, key, 256);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' }, key, 256);
   return `${bytesToBase64(salt)}.${bytesToBase64(new Uint8Array(bits))}`;
 }
 async function passwordMatches(password, stored) {
