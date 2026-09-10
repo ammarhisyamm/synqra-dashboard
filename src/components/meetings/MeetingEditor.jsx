@@ -158,9 +158,9 @@ export function MeetingEditor({ user, onClose, onCreate, onToast }) {
         )}
 
         <div className="editor-prompt">
-          <strong>Start writing</strong>
+          <strong>Meeting notes</strong>
           <p>
-            Type <kbd>/</kbd> for commands, <kbd>@</kbd> to mention, or pick a template
+            Write decisions, discussions, and next steps below or pick a template to get started
           </p>
           <textarea
             value={form.notes}
@@ -194,28 +194,12 @@ export function MeetingEditor({ user, onClose, onCreate, onToast }) {
           </button>
         </div>
 
-        <div className="editor-hints">
-          <span>
-            <FileText size={13} /> <kbd>/</kbd> Commands
-          </span>
-          <span>
-            <Users size={13} /> <kbd>@</kbd> Mention
-          </span>
-          <span>
-            <FileText size={13} /> <kbd>[[</kbd> Link
-          </span>
-          <span>
-            <MagicWand size={13} /> Generate AI
-          </span>
-        </div>
-
         <div className="ai-tips">
           <span>
             <Lightbulb size={14} /> AI tips
           </span>
-          <p>✨ Type “Decision:” to create a decision block</p>
-          <p>✨ Use @mentions to assign tasks automatically</p>
-          <p>✨ Type “due Friday” or dates for smart scheduling</p>
+          <p>✨ Write clear bullet points or assignees for automatic task extraction</p>
+          <p>✨ Mention due dates (e.g. &ldquo;by Friday&rdquo;) to help AI set deadlines</p>
         </div>
       </div>
     </section>

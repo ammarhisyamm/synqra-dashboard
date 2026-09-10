@@ -127,3 +127,210 @@ button,
     left: 0 !important;
   }
 }
+
+/* Kanban Toolbar Pixel-Perfect Alignment */
+.kanban-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: -6px 0 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e9edf3;
+}
+
+.kanban-view-tabs {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.kanban-view-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 4px;
+  border: none;
+  background: transparent;
+  color: #71819a;
+  font-size: 13px;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.kanban-view-tabs button.active {
+  color: #111b30;
+  border-bottom-color: #111b30;
+  font-weight: 600;
+}
+
+.kanban-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.kanban-search {
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid #dfe7f1;
+  border-radius: 9px;
+  background: #fff;
+  color: #6d7e96;
+  box-sizing: border-box;
+}
+
+.kanban-search input {
+  height: 100%;
+  border: none;
+  outline: none;
+  font-size: 13px;
+  color: #34445d;
+  background: transparent;
+  width: 140px;
+}
+
+.kanban-toolbar-actions .toolbar-select .app-select-trigger {
+  height: 36px;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px;
+  border: 1px solid #dfe7f1;
+  border-radius: 9px;
+  background: #fff;
+  color: #475569;
+  font-size: 13px;
+  box-sizing: border-box;
+  box-shadow: none;
+}
+
+.kanban-toolbar-actions .toolbar-select .app-select-trigger:hover,
+.kanban-toolbar-actions .toolbar-select .app-select-trigger.open {
+  border-color: #cbd5e1;
+}
+
+.kanban-toolbar-actions .toolbar-select .app-select-icon {
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.kanban-toolbar-actions .toolbar-select .app-select-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #334155;
+  white-space: nowrap;
+}
+
+.kanban-toolbar-actions .toolbar-select.compact .app-select-label {
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kanban-toolbar-actions .secondary-button,
+.kanban-toolbar-actions .primary-button {
+  height: 36px;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 14px;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 500;
+  box-sizing: border-box;
+  white-space: nowrap;
+}
+
+.kanban-toolbar-actions .secondary-button {
+  border: 1px solid #dfe7f1;
+  background: #fff;
+  color: #334155;
+}
+
+.kanban-toolbar-actions .primary-button {
+  border: 1px solid #0f172a;
+  background: #0f172a;
+  color: #fff;
+}
+
+/* Base AppSelect styling refinement */
+.app-select {
+  position: relative;
+  display: inline-block;
+}
+
+.app-select-trigger {
+  cursor: pointer;
+  user-select: none;
+}
+
+.app-select-trigger .app-select-icon {
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.app-select-trigger .app-select-chevron {
+  color: #94a3b8;
+  transition: transform 0.15s ease;
+  flex-shrink: 0;
+}
+
+.app-select-trigger .app-select-chevron.rotated {
+  transform: rotate(180deg);
+}
+
+.app-select-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 140px;
+  max-height: 240px;
+  overflow-y: auto;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  padding: 4px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.app-select-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #334155;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+
+.app-select-item:hover {
+  background-color: #f1f5f9;
+  color: #0f172a;
+}
+
+.app-select-item.selected {
+  background-color: #f8fafc;
+  color: #0f172a;
+  font-weight: 500;
+}
+

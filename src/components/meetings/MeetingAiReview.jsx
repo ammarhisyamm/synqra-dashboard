@@ -1,5 +1,6 @@
 import { ArrowLeft, CheckSquare, Trash, User, CalendarBlank, Flag, Users, MagicWand, Plus, Check } from '@phosphor-icons/react';
 import { AREAS, PRIORITIES } from '../../constants/workflow';
+import { AppSelect } from '../common/AppSelect';
 
 export function MeetingAiReview({ user, meeting, items, setItems, selectedCount, onBack, onCreate }) {
   const update = (id, key, value) => {
@@ -138,28 +139,24 @@ export function MeetingAiReview({ user, meeting, items, setItems, selectedCount,
                         onChange={event => update(item.id, 'due', event.target.value)}
                       />
                     </label>
-                    <label>
+                    <div className="ai-select-field">
                       <Flag size={14} />
-                      <select
+                      <AppSelect
                         value={item.priority}
-                        onChange={event => update(item.id, 'priority', event.target.value)}
-                      >
-                        {PRIORITIES.map(value => (
-                          <option key={value}>{value}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
+                        options={PRIORITIES}
+                        onChange={val => update(item.id, 'priority', val)}
+                        ariaLabel="Priority"
+                      />
+                    </div>
+                    <div className="ai-select-field">
                       <Users size={14} />
-                      <select
+                      <AppSelect
                         value={item.area}
-                        onChange={event => update(item.id, 'area', event.target.value)}
-                      >
-                        {AREAS.map(value => (
-                          <option key={value}>{value}</option>
-                        ))}
-                      </select>
-                    </label>
+                        options={AREAS}
+                        onChange={val => update(item.id, 'area', val)}
+                        ariaLabel="Area"
+                      />
+                    </div>
                   </div>
                 </div>
               </article>
