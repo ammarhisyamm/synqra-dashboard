@@ -9,7 +9,7 @@ const sessionCookie = 'synqra_session';
 const bytesToBase64 = bytes => btoa(String.fromCharCode(...bytes));
 const base64ToBytes = value => Uint8Array.from(atob(value), char => char.charCodeAt(0));
 const cookieValue = (request, name) => (request.headers.get('Cookie') || '').split(';').map(v => v.trim()).find(v => v.startsWith(`${name}=`))?.slice(name.length + 1);
-const publicUser = user => ({ id: user.id, email: user.email, name: user.name, role: user.role });
+const publicUser = user => ({ id: user.id, email: user.email, username: user.username || user.name, name: user.name, role: user.role });
 const parseJson = (value, fallback) => { try { return value ? JSON.parse(value) : fallback; } catch { return fallback; } };
 
 async function passwordHash(password, salt = crypto.getRandomValues(new Uint8Array(16))) {
@@ -25,7 +25,7 @@ async function passwordMatches(password, stored) {
 async function sessionUser(request, env) {
   const token = cookieValue(request, sessionCookie);
   if (!token) return null;
-  return env.DB.prepare('SELECT u.id, u.email, u.name, u.role FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ? AND s.expires_at > CURRENT_TIMESTAMP').bind(token).first();
+  return env.DB.prepare('SELECT u.id, u.email, u.username, u.name, u.role FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ? AND s.expires_at > CURRENT_TIMESTAMP').bind(token).first();
 }
 async function createSession(user, env) {
   const token = bytesToBase64(crypto.getRandomValues(new Uint8Array(32))).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
@@ -103,9 +103,10 @@ async function reviewSnapshot(env, reviewId) {
 
 async function recordActivity(env, reviewId, userId, action, metadata = {}) {
   const review = await env.DB.prepare('SELECT title, assignee FROM reviews WHERE id = ?').bind(reviewId).first();
+  const recipients = await env.DB.prepare('SELECT id FROM users WHERE id != ?').bind(userId).all();
   await env.DB.batch([
     env.DB.prepare('INSERT INTO review_activity (id, review_id, user_id, action, metadata) VALUES (?, ?, ?, ?, ?)').bind(id(), reviewId, userId, action, JSON.stringify(metadata)),
-    env.DB.prepare('INSERT INTO notifications (id, user_id, review_id, type, title, body) VALUES (?, ?, ?, ?, ?, ?)').bind(id(), userId, reviewId, action, review?.title || 'Task update', `${action} on ${review?.title || 'task'}`)
+    ...recipients.results.map(recipient => env.DB.prepare('INSERT INTO notifications (id, user_id, review_id, type, title, body) VALUES (?, ?, ?, ?, ?, ?)').bind(id(), recipient.id, reviewId, action, review?.title || 'Task update', `${action} on ${review?.title || 'task'}`))
   ]);
 }
 
@@ -113,21 +114,23 @@ async function routeApi(request, env) {
   const path = new URL(request.url).pathname;
   if (request.method === 'POST' && path === '/api/auth/register') {
     const body = await readBody(request); if (!body) return json({ error: 'Invalid JSON.' }, 400);
-    const email = safeText(body.email, 254).toLowerCase(); const name = safeText(body.name, 80) || email.split('@')[0]; const password = typeof body.password === 'string' ? body.password : '';
+    const email = safeText(body.email, 254).toLowerCase(); const name = safeText(body.name, 80) || email.split('@')[0]; const username = safeText(body.username, 40).toLowerCase() || email.split('@')[0].replace(/[^a-z0-9_-]/g, ''); const password = typeof body.password === 'string' ? body.password : '';
     if (!/^\S+@\S+\.\S+$/.test(email)) return json({ error: 'Enter a valid email address.' }, 400);
-    if (password.length < 10) return json({ error: 'Use at least 10 characters for your password.' }, 400);
-    const existing = await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email).first();
+    if (!/^[a-z0-9_-]{3,40}$/.test(username)) return json({ error: 'Use a username with 3–40 letters, numbers, hyphens, or underscores.' }, 400);
+    if (password.length < 6) return json({ error: 'Use at least 6 characters for your password.' }, 400);
+    const existing = await env.DB.prepare('SELECT id FROM users WHERE email = ? OR username = ?').bind(email, username).first();
     if (existing) return json({ error: 'An account with that email already exists.' }, 409);
     const count = await env.DB.prepare('SELECT COUNT(*) AS count FROM users').first('count');
     const user = { id: id(), email, name, role: Number(count) === 0 ? 'super_admin' : 'member' };
-    await env.DB.prepare('INSERT INTO users (id, email, name, password_hash, role) VALUES (?, ?, ?, ?, ?)').bind(user.id, user.email, user.name, await passwordHash(password), user.role).run();
+    user.username = username;
+    await env.DB.prepare('INSERT INTO users (id, email, username, name, password_hash, role) VALUES (?, ?, ?, ?, ?, ?)').bind(user.id, user.email, user.username, user.name, await passwordHash(password), user.role).run();
     return signedIn(user, await createSession(user, env), 201);
   }
   if (request.method === 'POST' && path === '/api/auth/login') {
     const body = await readBody(request); if (!body) return json({ error: 'Invalid JSON.' }, 400);
-    const email = safeText(body.email, 254).toLowerCase(); const password = typeof body.password === 'string' ? body.password : '';
-    const user = await env.DB.prepare('SELECT id, email, name, role, password_hash FROM users WHERE email = ?').bind(email).first();
-    if (!user || !(await passwordMatches(password, user.password_hash))) return json({ error: 'Email or password is incorrect.' }, 401);
+    const identifier = safeText(body.identifier || body.email, 254).toLowerCase(); const password = typeof body.password === 'string' ? body.password : '';
+    const user = await env.DB.prepare('SELECT id, email, username, name, role, password_hash FROM users WHERE email = ? OR username = ?').bind(identifier, identifier).first();
+    if (!user || !(await passwordMatches(password, user.password_hash))) return json({ error: 'Username, email, or password is incorrect.' }, 401);
     return signedIn(user, await createSession(user, env));
   }
   if (request.method === 'POST' && path === '/api/auth/logout') {
@@ -142,7 +145,7 @@ async function routeApi(request, env) {
   if (!user) return json({ error: 'Sign in required.' }, 401);
   if (request.method === 'GET' && path === '/api/admin/users') {
     if (!['super_admin', 'admin'].includes(user.role)) return json({ error: 'Admin access required.' }, 403);
-    const result = await env.DB.prepare('SELECT id, email, name, role, created_at AS createdAt FROM users ORDER BY CASE role WHEN \'super_admin\' THEN 0 WHEN \'admin\' THEN 1 ELSE 2 END, name').all();
+    const result = await env.DB.prepare('SELECT id, email, username, name, role, created_at AS createdAt FROM users ORDER BY CASE role WHEN \'super_admin\' THEN 0 WHEN \'admin\' THEN 1 ELSE 2 END, name').all();
     return json({ users: result.results });
   }
   if (request.method === 'GET' && path === '/api/project-members') {
@@ -169,10 +172,11 @@ async function routeApi(request, env) {
     if (user.role !== 'super_admin') return json({ error: 'Super admin access required.' }, 403);
     const body = await readBody(request); if (!body) return json({ error: 'Invalid JSON.' }, 400);
     const email = safeText(body.email, 254).toLowerCase(); const name = safeText(body.name, 80); const password = typeof body.password === 'string' ? body.password : '';
-    if (!/^\S+@\S+\.\S+$/.test(email) || !name || password.length < 10) return json({ error: 'Name, valid email, and a password of at least 10 characters are required.' }, 400);
-    if (await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email).first()) return json({ error: 'An account with that email already exists.' }, 409);
-    const admin = { id: id(), email, name, role: 'admin' };
-    await env.DB.prepare('INSERT INTO users (id, email, name, password_hash, role) VALUES (?, ?, ?, ?, ?)').bind(admin.id, email, name, await passwordHash(password), admin.role).run();
+    const username = safeText(body.username, 40).toLowerCase() || email.split('@')[0].replace(/[^a-z0-9_-]/g, '');
+    if (!/^\S+@\S+\.\S+$/.test(email) || !name || !/^[a-z0-9_-]{3,40}$/.test(username) || password.length < 6) return json({ error: 'Name, valid email, username, and a password of at least 6 characters are required.' }, 400);
+    if (await env.DB.prepare('SELECT id FROM users WHERE email = ? OR username = ?').bind(email, username).first()) return json({ error: 'An account with that email or username already exists.' }, 409);
+    const admin = { id: id(), email, username, name, role: 'admin' };
+    await env.DB.prepare('INSERT INTO users (id, email, username, name, password_hash, role) VALUES (?, ?, ?, ?, ?, ?)').bind(admin.id, email, username, name, await passwordHash(password), admin.role).run();
     return json(admin, 201);
   }
   const adminMatch = path.match(/^\/api\/admin\/users\/([a-zA-Z0-9-]+)$/);
@@ -207,6 +211,28 @@ async function routeApi(request, env) {
     try { await env.DB.prepare('INSERT INTO projects (id, space_id, name, description, access_mode) VALUES (?, ?, ?, ?, ?)').bind(project.id, project.spaceId, project.name, project.description, project.accessMode).run(); return json(project, 201); } catch { return json({ error: 'Space or project already exists.' }, 409); }
   }
   const projectMatch = path.match(/^\/api\/projects\/([a-zA-Z0-9-]+)$/);
+  if (request.method === 'DELETE' && projectMatch) {
+    if (!['super_admin', 'admin'].includes(user.role)) return json({ error: 'Admin access required.' }, 403);
+    if (projectMatch[1] === 'default') return json({ error: 'The default project is protected.' }, 400);
+    const project = await env.DB.prepare('SELECT id FROM projects WHERE id = ?').bind(projectMatch[1]).first();
+    if (!project) return json({ error: 'Project not found.' }, 404);
+    const attachments = await env.DB.prepare('SELECT object_key AS objectKey FROM review_attachments WHERE review_id IN (SELECT id FROM reviews WHERE project_id = ?)').bind(projectMatch[1]).all();
+    if (env.ATTACHMENTS && attachments.results.length) await Promise.all(attachments.results.map(item => env.ATTACHMENTS.delete(item.objectKey)));
+    await env.DB.batch([
+      env.DB.prepare('DELETE FROM notifications WHERE review_id IN (SELECT id FROM reviews WHERE project_id = ?)').bind(projectMatch[1]),
+      env.DB.prepare('DELETE FROM review_comments WHERE review_id IN (SELECT id FROM reviews WHERE project_id = ?)').bind(projectMatch[1]),
+      env.DB.prepare('DELETE FROM review_activity WHERE review_id IN (SELECT id FROM reviews WHERE project_id = ?)').bind(projectMatch[1]),
+      env.DB.prepare('DELETE FROM review_status_history WHERE review_id IN (SELECT id FROM reviews WHERE project_id = ?)').bind(projectMatch[1]),
+      env.DB.prepare('DELETE FROM review_subtasks WHERE review_id IN (SELECT id FROM reviews WHERE project_id = ?)').bind(projectMatch[1]),
+      env.DB.prepare('DELETE FROM review_attachments WHERE review_id IN (SELECT id FROM reviews WHERE project_id = ?)').bind(projectMatch[1]),
+      env.DB.prepare('DELETE FROM reviews WHERE project_id = ?').bind(projectMatch[1]),
+      env.DB.prepare('DELETE FROM meetings WHERE project_id = ?').bind(projectMatch[1]),
+      env.DB.prepare('DELETE FROM workflow_statuses WHERE project_id = ?').bind(projectMatch[1]),
+      env.DB.prepare('DELETE FROM sprints WHERE project_id = ?').bind(projectMatch[1]),
+      env.DB.prepare('DELETE FROM projects WHERE id = ?').bind(projectMatch[1])
+    ]);
+    return json({ ok: true });
+  }
   if (request.method === 'PATCH' && projectMatch) {
     if (!['super_admin', 'admin'].includes(user.role)) return json({ error: 'Admin access required.' }, 403);
     const body = await readBody(request); const fields = {}; if ('name' in (body || {})) fields.name = safeText(body.name, 120); if ('description' in (body || {})) fields.description = safeText(body.description, 2000); if (!Object.keys(fields).length) return json({ error: 'No changes supplied.' }, 400);
@@ -276,6 +302,7 @@ async function routeApi(request, env) {
       const review = normalizeReview(body);
       const maxKey = await env.DB.prepare("SELECT MAX(CAST(SUBSTR(key, INSTR(key, '-') + 1) AS INTEGER)) AS maxKey FROM reviews WHERE key LIKE 'AR-%'").first('maxKey');
       const newReview = { id: body.id && /^[a-zA-Z0-9-]{8,80}$/.test(body.id) ? body.id : id(), key: `AR-${(maxKey || 0) + 1}`, ...review, submitted_by: review.submitted_by || user.name, archived: 0 };
+      if (!await env.DB.prepare('SELECT id FROM projects WHERE id = ?').bind(newReview.project_id || 'default').first()) return json({ error: 'Project not found.' }, 400);
       if (newReview.meeting_id && !await env.DB.prepare('SELECT id FROM meetings WHERE id = ?').bind(newReview.meeting_id).first()) return json({ error: 'Related meeting not found.' }, 400);
       if (newReview.parent_id && !await env.DB.prepare('SELECT id FROM reviews WHERE id = ?').bind(newReview.parent_id).first()) return json({ error: 'Parent item not found.' }, 400);
       await env.DB.prepare('INSERT INTO reviews (id, key, title, area, priority, stage, assignee, due, start_date, description, status, submitted_by, meeting_id, reporter, estimate_hours, epic, feature, sprint, labels, project_id, parent_id, item_type, sprint_id, archived) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(newReview.id, newReview.key, newReview.title, newReview.area, newReview.priority, newReview.stage, newReview.assignee, newReview.due, newReview.start_date ?? null, newReview.description, newReview.status, newReview.submitted_by, newReview.meeting_id, newReview.reporter || user.name, newReview.estimate_hours ?? null, newReview.epic || '', newReview.feature || '', newReview.sprint || '', newReview.labels || '[]', newReview.project_id || 'default', newReview.parent_id || null, newReview.item_type || 'task', newReview.sprint_id || null, newReview.archived).run();
@@ -321,6 +348,7 @@ async function routeApi(request, env) {
       const patch = normalizeReview(body, true); const keys = Object.keys(patch);
       if (!keys.length) return json({ error: 'No changes supplied.' }, 400);
       if ('meeting_id' in patch && patch.meeting_id && !await env.DB.prepare('SELECT id FROM meetings WHERE id = ?').bind(patch.meeting_id).first()) return json({ error: 'Related meeting not found.' }, 400);
+      if ('project_id' in patch && !await env.DB.prepare('SELECT id FROM projects WHERE id = ?').bind(patch.project_id).first()) return json({ error: 'Project not found.' }, 400);
       const values = keys.map(key => patch[key]);
       const result = await env.DB.prepare(`UPDATE reviews SET ${keys.map(key => `${key} = ?`).join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(...values, reviewMatch[1]).run();
       if (!result.meta.changes) return json({ error: 'Review not found.' }, 404);
