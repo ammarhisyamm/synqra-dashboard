@@ -15,6 +15,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .sidebar-menu-btn{display:grid;width:36px;height:36px;place-items:center;color:#607188;flex:none}
 .sidebar-brand{display:flex;align-items:center;gap:10px;margin:0 auto}
 .sidebar-brand svg{width:30px;height:30px;flex:none}
+.sidebar-brand .synqra-logo{width:146px;height:auto;filter:invert(1);display:block}
 .sidebar-brand strong{display:block;font-size:20px;font-weight:700;letter-spacing:-.5px;line-height:1;color:#10182b}
 .sidebar-brand small{display:block;font-size:7px;font-weight:700;letter-spacing:.3px;color:#7e8898;margin-top:3px}
 .sidebar-brand small b{color:#3d4a61}
@@ -356,6 +357,8 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .auth-card{width:min(420px,100%);background:#fff;border:1px solid #e5eaf1;border-radius:14px;padding:31px;box-shadow:0 16px 45px #27385212}
 .auth-loading{display:flex;align-items:center;gap:15px}
 .auth-brand{display:flex;gap:12px;align-items:center;margin-bottom:27px}
+.auth-logo{width:220px;height:auto;filter:invert(1);display:block}
+.auth-loading .auth-logo{width:170px;margin-right:4px}
 .auth-brand strong{display:block;font-size:19px}
 .auth-brand small{display:block;font-size:8px;letter-spacing:.4px;color:#8794a6}
 .auth-card h1{font-size:22px;letter-spacing:-.6px;margin:0}
@@ -376,4 +379,3 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .auth-card{padding:24px}
 .auth-card h1{font-size:20px}
 }
-
