@@ -16,5 +16,11 @@
       "database_id": "2afea996-8dce-4829-9460-7fc447c54c65",
       "migrations_dir": "migrations"
     }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "ATTACHMENTS",
+      "bucket_name": "synqra-dashboard-attachments"
+    }
   ]
 }
