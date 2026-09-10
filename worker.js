@@ -84,7 +84,7 @@ function normalizeReview(input, partial = false) {
 async function bootstrap(env, userId) {
   const [reviews, meetings, project, spaces, projects, workflowStatuses, sprints, unread, workload, report] = await env.DB.batch([
     env.DB.prepare("SELECT id, key, title, area, priority, stage, assignee, due, start_date AS startDate, description, status, submitted_by AS submittedBy, reporter, meeting_id AS meetingId, estimate_hours AS estimateHours, epic, feature, sprint, labels, project_id AS projectId, parent_id AS parentId, item_type AS itemType, sprint_id AS sprintId, created_at AS createdAt, updated_at AS updatedAt, archived FROM reviews ORDER BY created_at DESC"),
-    env.DB.prepare("SELECT id, title, date, ai, notes, (SELECT COUNT(*) FROM reviews WHERE meeting_id = m.id AND archived = 0) AS itemCount, attendees FROM meetings m ORDER BY date DESC"),
+    env.DB.prepare("SELECT id, title, date, ai, notes, project_id AS projectId, (SELECT COUNT(*) FROM reviews WHERE meeting_id = m.id AND archived = 0) AS itemCount, attendees FROM meetings m ORDER BY date DESC"),
     env.DB.prepare("SELECT name, description, access_mode AS accessMode FROM project_settings WHERE id = 'default'"),
     env.DB.prepare('SELECT id, name, key, description FROM spaces ORDER BY name'),
     env.DB.prepare('SELECT id, space_id AS spaceId, name, description, access_mode AS accessMode FROM projects ORDER BY name'),
@@ -393,8 +393,9 @@ async function routeApi(request, env) {
     const body = await readBody(request); if (!body) return json({ error: 'Invalid JSON.' }, 400);
     const title = safeText(body.title); const date = /^\d{4}-\d{2}-\d{2}$/.test(body.date || '') ? body.date : null;
     if (!title || !date) return json({ error: 'Meeting title and date are required.' }, 400);
-    const meeting = { id: body.id && /^[a-zA-Z0-9-]{8,80}$/.test(body.id) ? body.id : id(), title, date, notes: safeText(body.notes, 5000), ai: body.ai ? 1 : 0, itemCount: 0, attendees: Array.isArray(body.attendees) ? body.attendees.map(x => safeText(x, 120)).filter(Boolean).slice(0, 30) : [] };
-    await env.DB.prepare('INSERT INTO meetings (id, title, date, ai, notes, item_count, attendees) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(meeting.id, meeting.title, meeting.date, meeting.ai, meeting.notes, meeting.itemCount, JSON.stringify(meeting.attendees)).run();
+    const meeting = { id: body.id && /^[a-zA-Z0-9-]{8,80}$/.test(body.id) ? body.id : id(), title, date, projectId: safeText(body.projectId, 80) || 'default', notes: safeText(body.notes, 5000), ai: body.ai ? 1 : 0, itemCount: 0, attendees: Array.isArray(body.attendees) ? body.attendees.map(x => safeText(x, 120)).filter(Boolean).slice(0, 30) : [] };
+    if (!await env.DB.prepare('SELECT id FROM projects WHERE id = ?').bind(meeting.projectId).first()) return json({ error: 'Project not found.' }, 400);
+    await env.DB.prepare('INSERT INTO meetings (id, project_id, title, date, ai, notes, item_count, attendees) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').bind(meeting.id, meeting.projectId, meeting.title, meeting.date, meeting.ai, meeting.notes, meeting.itemCount, JSON.stringify(meeting.attendees)).run();
     return json({ ...meeting, ai: Boolean(meeting.ai) }, 201);
   }
 
@@ -410,7 +411,7 @@ async function routeApi(request, env) {
     const keys = Object.keys(patch); if (!keys.length) return json({ error: 'No changes supplied.' }, 400);
     const result = await env.DB.prepare(`UPDATE meetings SET ${keys.map(key => `${key} = ?`).join(', ')} WHERE id = ?`).bind(...keys.map(key => patch[key]), meetingMatch[1]).run();
     if (!result.meta.changes) return json({ error: 'Meeting not found.' }, 404);
-    const saved = await env.DB.prepare('SELECT id, title, date, ai, notes, (SELECT COUNT(*) FROM reviews WHERE meeting_id = m.id AND archived = 0) AS itemCount, attendees FROM meetings m WHERE id = ?').bind(meetingMatch[1]).first();
+    const saved = await env.DB.prepare('SELECT id, title, date, ai, notes, project_id AS projectId, (SELECT COUNT(*) FROM reviews WHERE meeting_id = m.id AND archived = 0) AS itemCount, attendees FROM meetings m WHERE id = ?').bind(meetingMatch[1]).first();
     return json({ ...saved, ai: Boolean(saved.ai), attendees: parseJson(saved.attendees, []) });
   }
   if (request.method === 'DELETE' && meetingMatch) {

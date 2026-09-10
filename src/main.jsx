@@ -10,11 +10,13 @@ import './detail.css';
 import './detail-overrides.css';
 import { Wave } from './components/Wave.jsx';
 import './workflow.css';
-import { STORAGE_KEY, AREAS, STAGES, PRIORITIES, STATUS_OPTIONS, STAGE_ICONS, STAGE_META, PROJECTS } from './constants/workflow';
+import { STORAGE_KEY, AREAS, STAGES, PRIORITIES, STATUS_OPTIONS, STAGE_ICONS, STAGE_META } from './constants/workflow';
 import { dateLabel, slashDate, shortDate, ageLabel, groupDateLabel, relativeDate } from './lib/dates';
 import { api } from './api/client';
 import { reviewsApi } from './api/reviews';
 import { notificationsApi } from './api/notifications';
+import { projectsApi } from './api/projects';
+import { NewProjectModal } from './components/projects/NewProjectModal';
 
 const seed = {
   project: { name: 'Acme Redesign', initials: 'A' },
@@ -86,13 +88,28 @@ function App() {
     return () => clearTimeout(id);
   }, [toast]);
 
-  const activeReviews = useMemo(() => data.reviews.filter(r => !r.archived), [data.reviews]);
+  const activeProjectId = data.project?.id || 'default';
+  const activeReviews = useMemo(() => data.reviews.filter(r => !r.archived && (activeProjectId === 'default' ? (!r.projectId || r.projectId === 'default') : r.projectId === activeProjectId)), [data.reviews, activeProjectId]);
+  const activeMeetings = useMemo(() => data.meetings.filter(meeting => activeProjectId === 'default' ? (!meeting.projectId || meeting.projectId === 'default') : meeting.projectId === activeProjectId), [data.meetings, activeProjectId]);
+  const activeWorkload = useMemo(() => {
+    const counts = activeReviews.filter(review => review.stage !== 'Completed').reduce((result, review) => {
+      const assignee = review.assignee || 'Unassigned';
+      result[assignee] = (result[assignee] || 0) + 1;
+      return result;
+    }, {});
+    return Object.entries(counts).sort(([, a], [, b]) => b - a).map(([assignee, count]) => ({ assignee, count }));
+  }, [activeReviews]);
+  const activeReportByStatus = useMemo(() => Object.entries(activeReviews.reduce((result, review) => {
+    result[review.stage] = (result[review.stage] || 0) + 1;
+    return result;
+  }, {})).map(([stage, count]) => ({ stage, count })).sort((a, b) => b.count - a.count), [activeReviews]);
+  const activeSprints = useMemo(() => (data.sprints || []).filter(sprint => !sprint.projectId || sprint.projectId === activeProjectId), [data.sprints, activeProjectId]);
   const updateReview = (id, patch) => {
     setData(prev => ({ ...prev, reviews: prev.reviews.map(r => r.id === id ? { ...r, ...patch } : r) }));
     reviewsApi.update(id, patch).catch(error => setToast(error.message));
   };
   const addReview = (review) => {
-    const saved = { id: crypto.randomUUID(), createdAt: new Date().toISOString().slice(0, 10), archived: false, ...review };
+    const saved = { id: crypto.randomUUID(), createdAt: new Date().toISOString().slice(0, 10), archived: false, projectId: data.project?.id || 'default', ...review };
     if (!/^AR-\d+$/.test(saved.key || '')) saved.key = nextTaskKey(data.reviews);
     setData(prev => ({ ...prev, reviews: [saved, ...prev.reviews] }));
     reviewsApi.create(saved).then(created => {
@@ -109,7 +126,7 @@ function App() {
     setDialog({ icon: <Undo2 size={24}/>, title: 'Restore this review?', subtitle: target ? `"${target.title}" will be moved back to the board.` : 'This review will be moved back to the board.', confirmLabel: 'Restore', onConfirm: () => updateReview(id, { archived: false }) });
   };
   const addMeeting = (meeting) => {
-    const saved = { id: crypto.randomUUID(), itemCount: 0, ...meeting };
+    const saved = { id: crypto.randomUUID(), itemCount: 0, projectId: activeProjectId, ...meeting };
     setData(prev => ({ ...prev, meetings: [saved, ...prev.meetings] }));
     api('/api/meetings', { method: 'POST', body: JSON.stringify(saved) }).catch(error => setToast(error.message));
   };
@@ -128,10 +145,22 @@ function App() {
   };
   const resetData = () => { setData(seed); setToast('Demo data restored'); };
   const signOut = async () => { try { await api('/api/auth/logout', { method: 'POST' }); } finally { setUser(null); setCloudReady(false); setData(seed); } };
-  const saveProject = async settings => { try { const saved = await api('/api/project-settings', { method: 'PATCH', body: JSON.stringify(settings) }); setData(prev => ({ ...prev, project: saved })); setToast('Settings saved'); } catch (error) { setToast(error.message); } };
+  const saveProject = async settings => {
+    try {
+      const isDefaultProject = activeProjectId === 'default';
+      const saved = await api(isDefaultProject ? '/api/project-settings' : `/api/projects/${activeProjectId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(isDefaultProject ? settings : { name: settings.name, description: settings.description })
+      });
+      const project = isDefaultProject ? saved : { ...data.project, ...settings, initials: settings.name.slice(0, 1).toUpperCase() };
+      setData(prev => ({ ...prev, project, projects: (prev.projects || []).map(item => item.id === project.id ? { ...item, ...project } : item) }));
+      setToast('Settings saved');
+    } catch (error) { setToast(error.message); }
+  };
   const refreshNotifications = async () => { try { const result = await notificationsApi.list(); setNotifications(result.notifications); } catch (error) { setToast(error.message); } };
   const markNotificationRead = async notification => { try { await notificationsApi.read(notification.id); setNotifications(items => items.map(item => item.id === notification.id ? { ...item, read: true } : item)); setData(prev => ({ ...prev, unreadNotifications: Math.max(0, (prev.unreadNotifications || 0) - (notification.read ? 0 : 1)) })); } catch (error) { setToast(error.message); } };
   const markAllNotificationsRead = async () => { try { await notificationsApi.readAll(); setNotifications(items => items.map(item => ({ ...item, read: true }))); setData(prev => ({ ...prev, unreadNotifications: 0 })); } catch (error) { setToast(error.message); } };
+  const createProject = async name => { try { const created = await projectsApi.create({ name }); const project = { ...created, initials: name.slice(0, 1).toUpperCase() }; setData(prev => ({ ...prev, project, projects: [...(prev.projects || []).filter(item => item.id !== project.id), project] })); setProjectOpen(false); setModal(null); setPage('Overview'); setToast('Project created'); } catch (error) { setToast(error.message); throw error; } };
 
   if (user === undefined) return <AuthLoading/>;
   if (!user) return <AuthScreen onAuthenticated={signedInUser => { setUser(signedInUser); api('/api/bootstrap').then(remote => { setData(remote); setCloudReady(true); }).catch(() => setCloudReady(false)); }}/>;
@@ -149,20 +178,21 @@ function App() {
       </header>
       {query && <GlobalSearchResults query={query} reviews={activeReviews} onOpen={setSelectedReview} onClear={()=>setQuery('')}/>}
       {notificationsOpen && <NotificationMenu notifications={notifications} onClose={()=>setNotificationsOpen(false)} onOpen={setSelectedReview} onRead={markNotificationRead} onReadAll={markAllNotificationsRead}/>} 
-      {projectOpen && <ProjectSwitcher project={data.project} onClose={() => setProjectOpen(false)} />}
+      {projectOpen && <ProjectSwitcher project={data.project} projects={data.projects || []} onSelect={selected => { setData(prev => ({ ...prev, project: selected })); setProjectOpen(false); setPage('Overview'); }} onNew={() => setModal('project')} onClose={() => setProjectOpen(false)} />}
       {collabOpen && <CollaboratorModal user={user} onClose={() => setCollabOpen(false)} onToast={setToast} />}
-      {page === 'Overview' && <Dashboard reviews={activeReviews} meetings={data.meetings} workload={data.workload || []} reportByStatus={data.reportByStatus || []} sprints={data.sprints || []} goTo={setPage} onSubmitReview={() => setModal('review')} onNewMeeting={() => setModal('meeting')} />}
+      {page === 'Overview' && <Dashboard reviews={activeReviews} meetings={activeMeetings} workload={activeWorkload} reportByStatus={activeReportByStatus} sprints={activeSprints} goTo={setPage} onSubmitReview={() => setModal('review')} onNewMeeting={() => setModal('meeting')} />}
       {page === 'All Reviews' && <Reviews reviews={activeReviews} query={query} setQuery={setQuery} updateReview={updateReview} archiveReview={archiveReview} setModal={setModal} onOpen={setSelectedReview} />}
-      {page === 'Meetings' && <Meetings meetings={data.meetings} reviews={activeReviews} addMeeting={addMeeting} addReview={addReview} onDeleteMeeting={deleteMeeting} setToast={setToast} setModal={setModal} onTasksCreated={count => showSuccess(`${count} review items created`, 'Action items from the meeting notes are now on the board.', 'View board', () => setPage('Kanban Board'))} onOpen={setSelectedReview} />}
+      {page === 'Meetings' && <Meetings meetings={activeMeetings} reviews={activeReviews} addMeeting={addMeeting} addReview={addReview} onDeleteMeeting={deleteMeeting} setToast={setToast} setModal={setModal} onTasksCreated={count => showSuccess(`${count} review items created`, 'Action items from the meeting notes are now on the board.', 'View board', () => setPage('Kanban Board'))} onOpen={setSelectedReview} />}
       {page === 'Kanban Board' && <Kanban reviews={activeReviews} updateReview={updateReview} archiveReview={archiveReview} setModal={setModal} goTo={setPage} onOpen={setSelectedReview} />}
       {page === 'Archive' && <ArchivePage reviews={data.reviews.filter(r => r.archived)} restoreReview={restoreReview} />}
       {page === 'Settings' && <SettingsPageEnhanced project={data.project} user={user} saveProject={saveProject} setToast={setToast} />}
       {page === 'Admin' && <AdminPageEnhanced user={user} setToast={setToast}/>}
     </main>
     {toast && <div className="toast"><CheckCircle2 size={17}/>{toast}</div>}
-    {modal === 'review' && <ReviewModal meetings={data.meetings} onClose={() => setModal(null)} onSave={(review) => { addReview(review); setModal(null); showSuccess('Review created', `"${review.title}" is now on the board.`, 'View All Reviews', () => setPage('All Reviews')); }} />}
+    {modal === 'review' && <ReviewModal meetings={activeMeetings} onClose={() => setModal(null)} onSave={(review) => { addReview(review); setModal(null); showSuccess('Review created', `"${review.title}" is now on the board.`, 'View All Reviews', () => setPage('All Reviews')); }} />}
     {modal === 'meeting' && <MeetingModal onClose={() => setModal(null)} onSave={(meeting) => { addMeeting(meeting); setModal(null); showSuccess('Meeting saved', `"${meeting.title}" has been added to Meetings.`, 'View Meetings', () => setPage('Meetings')); }} />}
-    {selectedReview && <ReviewDetailEnhanced review={selectedReview} meetings={data.meetings} user={user} onClose={() => setSelectedReview(null)} onUpdated={saved => { setData(prev => ({...prev, reviews: prev.reviews.map(r => r.id === saved.id ? {...r, ...saved} : r)})); setSelectedReview(saved); }} onDeleted={id => { setData(prev => ({...prev, reviews: prev.reviews.filter(r => r.id !== id)})); setSelectedReview(null); showSuccess('Task deleted', 'The task has been permanently removed.', 'Done'); }} onToast={setToast} onRemoveRequest={doDelete => setDialog({ danger: true, icon: <Trash2 size={24}/>, title: 'Delete this task?', subtitle: 'This task and its comments will be permanently deleted. This cannot be undone.', confirmLabel: 'Delete', onConfirm: doDelete })} />}
+    {modal === 'project' && <NewProjectModal onClose={() => setModal(null)} onCreate={createProject} />}
+    {selectedReview && <ReviewDetailEnhanced review={selectedReview} meetings={activeMeetings} user={user} onClose={() => setSelectedReview(null)} onUpdated={saved => { setData(prev => ({...prev, reviews: prev.reviews.map(r => r.id === saved.id ? {...r, ...saved} : r)})); setSelectedReview(saved); }} onDeleted={id => { setData(prev => ({...prev, reviews: prev.reviews.filter(r => r.id !== id)})); setSelectedReview(null); showSuccess('Task deleted', 'The task has been permanently removed.', 'Done'); }} onToast={setToast} onRemoveRequest={doDelete => setDialog({ danger: true, icon: <Trash2 size={24}/>, title: 'Delete this task?', subtitle: 'This task and its comments will be permanently deleted.', confirmLabel: 'Delete', onConfirm: doDelete })} />}
     {dialog && <ActionDialog dialog={dialog} onClose={() => setDialog(null)} />}
     <footer className="app-footer"><button onClick={resetData}>Restore demo data</button><span>{cloudReady ? 'Synced with Cloudflare D1' : 'Local draft — reconnecting to Cloudflare'}</span></footer>
   </div>;
@@ -203,7 +233,7 @@ function SynqraMark() {
   return <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 2.5 28.5 9.7v12.6L16 29.5 3.5 22.3V9.7Z" fill="none" stroke="#10182b" strokeWidth="3" strokeLinejoin="round"/><path d="M18.2 6.5 10.8 17.2h4.6L14 25.5l7.4-10.7h-4.6Z" fill="#10182b"/></svg>;
 }
 
-function AuthLoading() { return <div className="auth-shell"><div className="auth-card auth-loading"><img className="synqra-logo auth-logo" src="/logo-synqra.png" alt="Synqra — Powered by MULIA"/><Wave style={{ fontSize: 20 }} /><strong>Checking your session…</strong></div></div>; }
+function AuthLoading() { return <div className="auth-shell"><div className="auth-card auth-loading"><Wave style={{ fontSize: 24 }} /><strong>Checking your session…</strong></div></div>; }
 function AuthScreen({ onAuthenticated }) {
   const [mode, setMode] = useState('login'); const [form, setForm] = useState({ name:'', email:'', password:'' }); const [error, setError] = useState(''); const [pending, setPending] = useState(false);
   const update = (key, value) => setForm(prev => ({ ...prev, [key]: value }));
@@ -236,8 +266,10 @@ function CollaboratorModal({ user, onClose, onToast }) {
   return <div className="modal-backdrop" onMouseDown={onClose}><section className="collab-modal" onMouseDown={e => e.stopPropagation()}><span className="collab-icon"><Plus size={22}/></span><h2>Collaborator</h2><p className="collab-subtitle">Undang anggota dan atur akses tiap orang: Editor atau Viewer.</p><form className="collab-invite-row" onSubmit={invite}><label className="collab-email"><EnvelopeSimple size={16}/><input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Masukkan alamat email" required/></label><select value="viewer" disabled aria-label="Role"><option value="viewer">Viewer</option></select><button className="primary-button" disabled={pending || !email.trim()}><UserPlus size={16}/> Undang</button></form><p className="collab-note"><strong>Editor</strong> dapat menambah &amp; mengubah review item · <strong>Viewer</strong> hanya bisa melihat.</p><div className="collab-owner"><span className="collab-crown"><Crown size={16}/></span><div><strong>{user.name}</strong><small>{user.email}</small></div><span className="owner-pill">Owner</span></div>{members === null ? <div className="empty-state"><Wave /> Loading members…</div> : members.length ? <div className="collab-list">{members.map(member => <div className="collab-row" key={member.id}><div className="avatar">{member.email.slice(0, 2).toUpperCase()}</div><div><strong>{member.email}</strong><small>Invited {relativeDate(member.createdAt)}</small></div><span className="viewer-pill">Viewer</span><button className="row-action" onClick={() => remove(member)} aria-label={`Remove ${member.email}`}><Trash2 size={15}/></button></div>)}</div> : <p className="collab-empty">Belum ada anggota yang diundang.</p>}</section></div>;
 }
 
-function ProjectSwitcher({ project, onClose }) {
-  return <div className="project-switcher"><div className="switcher-title">PROJECT</div><button className="current-project"><Folder size={22}/><span>{project.name}</span><ChevronDown size={17}/></button><label className="project-search"><Search size={19}/><input placeholder="Search projects"/></label><div className="project-list">{PROJECTS.map((name, index) => <button key={name} className={index === 0 ? 'selected' : ''}><Folder size={19}/><span>{name}</span>{index === 0 && <Check size={20}/>}</button>)}</div><button className="new-project"><Plus size={21}/> New project</button><button className="switcher-close" onClick={onClose}><X size={17}/></button></div>;
+function ProjectSwitcher({ project, projects = [], onSelect, onNew, onClose }) {
+  const [query, setQuery] = useState('');
+  const visible = projects.filter(item => item.name.toLowerCase().includes(query.toLowerCase()));
+  return <div className="project-switcher"><div className="switcher-title">PROJECT</div><button className="current-project" onClick={onClose}><Folder size={22}/><span>{project.name}</span><ChevronDown size={17}/></button><label className="project-search"><Search size={19}/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search projects"/></label><div className="project-list">{visible.length ? visible.map(item => <button key={item.id} className={item.id === project.id ? 'selected' : ''} onClick={() => onSelect(item)}><Folder size={19}/><span>{item.name}</span>{item.id === project.id && <Check size={20}/>}</button>) : <p className="project-empty">No projects found.</p>}</div><button className="new-project" onClick={onNew}><Plus size={21}/> New project</button><button className="switcher-close" onClick={onClose} aria-label="Close"><X size={17}/></button></div>;
 }
 
 function Dashboard({ reviews, meetings, workload, reportByStatus, sprints, goTo, onSubmitReview, onNewMeeting }) {
@@ -254,18 +286,18 @@ function Dashboard({ reviews, meetings, workload, reportByStatus, sprints, goTo,
       <div className="dashboard-main">
         <SectionHead title="Needs attention" action={() => goTo('All Reviews')} />
         <div className="attention-list">{needsAttention.length ? needsAttention.map(r => <AttentionCard key={r.id} review={r} today={today} onReview={() => goTo('All Reviews')}/>) : <Empty text="Nothing needs attention right now."/>}</div>
-        <SectionHead title="Active stages" aside="5 stages" />
-        <div className="stage-grid">{STAGES.map((stage, index) => {
+        <SectionHead title="Active stages" aside={`${reviews.length ? new Set(reviews.map(review => review.stage)).size : 0} stages`} />
+        {reviews.length ? <div className="stage-grid">{STAGES.map((stage, index) => {
           const items = reviews.filter(r => r.stage === stage);
           const done = items.filter(r => r.stage === 'Completed' || r.stage === 'Final').length;
           const blocked = items.some(r => r.priority === 'Blocker');
           const Icon = STAGE_ICONS[index];
           return <article className="stage-card" key={stage}><div className="card-meta"><Icon size={18}/><StatusPill value={blocked ? 'Blocked' : stage === 'Completed' || stage === 'Final' ? 'Complete' : 'In progress'} /></div><h3>{stage}</h3><div className="progress-row"><div className="progress"><span style={{ width: `${items.length ? (done / items.length) * 100 : 0}%` }}/></div><small>{done}/{items.length}</small></div></article>;
-        })}</div>
+        })}</div> : <div className="dashboard-empty"><ClipboardList size={25}/><strong>No review items yet</strong><p>Submit your first review to see stages appear here.</p><button className="primary-button" onClick={onSubmitReview}><Plus size={16}/> Submit Review</button></div>}
         <SectionHead title="Team Workload" aside="active tasks per member" />
         <div className="workload-chart">{workload.length ? [...workload].sort((a, b) => Number(b.count) - Number(a.count)).slice(0, 8).map(item => { const max = Math.max(1, ...workload.map(w => Number(w.count))); return <div className="wl-row" key={item.assignee}><span className="wl-name">{item.assignee}</span><div className="wl-bar"><i style={{ width: `${Number(item.count) / max * 100}%` }}/></div><span className="wl-count">{item.count}</span></div>; }) : <Empty text="No active workload yet."/>}</div>
         <SectionHead title="Recent activity" action={() => goTo('All Reviews')} />
-        <div className="activity-panel">{reviews.sort((a,b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 6).map(r => <div className="activity-row" key={r.id}><span className={`dot ${r.priority.toLowerCase()}`}/><div><strong>{r.title}</strong><p>{r.area} · {r.stage}</p></div><time>{relativeDate(r.createdAt)}</time></div>)}</div>
+        <div className="activity-panel">{[...reviews].sort((a,b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 6).map(r => <div className="activity-row" key={r.id}><span className={`dot ${r.priority.toLowerCase()}`}/><div><strong>{r.title}</strong><p>{r.area} · {r.stage}</p></div><time>{relativeDate(r.createdAt)}</time></div>)}</div>
       </div>
       <div className="dashboard-rail"><MeetingRail meetings={meetings} goTo={goTo} onNew={onNewMeeting}/><Summary reviews={reviews} completed={completed} blockers={blockers} overdue={overdue}/><SprintSummary sprints={sprints} reviews={reviews}/></div>
     </div>
@@ -279,7 +311,7 @@ function AttentionCard({ review, today, onReview }) {
 }
 function StatusPill({ value }) { return <span className={`status-pill ${value.toLowerCase().replace(' ', '-')}`}>{value}</span>; }
 function Empty({ text }) { return <div className="empty-state">{text}</div>; }
-function MeetingRail({ meetings, goTo, onNew }) { return <aside className="rail-card"><div className="rail-head"><h2>Meetings</h2><button className="new-btn" onClick={onNew}><Plus size={14}/> New</button></div>{meetings.slice(0, 4).map(m => <button className="meeting-row" key={m.id} onClick={() => goTo('Meetings')}><span className="meeting-icon"><CalendarDays size={16}/></span><span><strong>{m.title}</strong><small>{dateLabel(m.date)}</small></span>{m.ai && <Sparkles size={15} className="meeting-ai"/>}</button>)}<button className="view-all" onClick={() => goTo('Meetings')}>View all <ArrowRight size={14}/></button></aside>; }
+function MeetingRail({ meetings, goTo, onNew }) { return <aside className="rail-card"><div className="rail-head"><h2>Meetings</h2><button className="new-btn" onClick={onNew}><Plus size={14}/> New</button></div>{meetings.length ? meetings.slice(0, 4).map(m => <button className="meeting-row" key={m.id} onClick={() => goTo('Meetings')}><span className="meeting-icon"><CalendarDays size={16}/></span><span><strong>{m.title}</strong><small>{dateLabel(m.date)}</small></span>{m.ai && <Sparkles size={15} className="meeting-ai"/>}</button>) : <div className="meeting-empty"><CalendarPlus size={27}/><strong>No meetings yet</strong><p>Start a quick review or schedule one for later.</p><div><button className="primary-button" onClick={onNew}><CalendarPlus size={14}/> Quick start</button><button className="secondary-button" onClick={() => goTo('Meetings')}>View all</button></div></div>}<button className="view-all" onClick={() => goTo('Meetings')}>View all <ArrowRight size={14}/></button></aside>; }
 function Summary({ reviews, completed, blockers, overdue }) { return <aside className="rail-card summary"><h2>Summary</h2><p>Project overview</p><div className="summary-list"><Metric label="Total reviews" value={reviews.length}/><Metric label="Resolved" value={completed}/><Metric label="Blockers" value={blockers}/><Metric label="Open items" value={reviews.length - completed}/><Metric label="Areas" value={new Set(reviews.map(r => r.area)).size}/></div><div className="summary-alert"><Info size={15}/><span>{blockers ? `${blockers} blocker · ` : ''}{overdue} overdue need attention.</span></div></aside>; }
 function SprintSummary({ sprints, reviews }) { const sprint = sprints.find(item => item.status === 'active') || sprints[0]; if (!sprint) return null; const items = reviews.filter(item => item.sprintId === sprint.id || item.sprint === sprint.name); const done = items.filter(item => item.stage === 'Completed' || statusFor(item) === 'Resolved').length; return <aside className="rail-card sprint-summary"><h2>{sprint.name}</h2><p>{sprint.status} sprint{items.length ? ` · ${done}/${items.length} done` : ''}</p><div className="progress"><span style={{width:`${items.length ? done / items.length * 100 : 0}%`}}/></div><small>{sprint.goal || 'No sprint goal yet.'}</small></aside>; }
 function Metric({ label, value }) { return <div><span>{label}</span><strong>{value}</strong></div>; }
