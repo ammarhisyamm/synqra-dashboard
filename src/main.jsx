@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import {
   Archive, ArrowRight, Bell, CalendarBlank as CalendarDays, CalendarPlus, Check, CheckCircle as CheckCircle2, CaretDown as ChevronDown, CaretLeft as ChevronLeft, CaretRight as ChevronRight, CaretUpDown as ChevronsUpDown, Circle as CircleDot,
   ClipboardText as ClipboardList, Clock, Clock as Clock3, Copy, DownloadSimple as Download, ArrowSquareOut as ExternalLink, Eye, FileText, Flag, Folder, House as Home, Info, Kanban as KanbanSquare, SquaresFour as LayoutGrid, Link as Link2, ListChecks, Lock,
-  List as Menu, ChatCircle as MessageCircle, DotsThree as MoreHorizontal, DotsThreeVertical as MoreVertical, CursorClick as MousePointer2, PencilLine as Pencil, PushPin as Pin, Plus, ArrowCounterClockwise as RotateCcw, MagnifyingGlass as Search, Gear as Settings, GearSix as Settings2, ShieldCheck, SlidersHorizontal, Sparkle as Sparkles, Table as Table2, Target, Trash as Trash2, Warning as TriangleAlert, ArrowUUpLeft as Undo2, User, Users, VideoCamera as Video, Rows, X
+  List as Menu, ChatCircle as MessageCircle, DotsThree as MoreHorizontal, DotsThreeVertical as MoreVertical, CursorClick as MousePointer2, PencilLine as Pencil, PushPin as Pin, Plus, ArrowCounterClockwise as RotateCcw, MagnifyingGlass as Search, Gear as Settings, GearSix as Settings2, ShieldCheck, SlidersHorizontal, Sparkle as Sparkles, Table as Table2, Target, Trash as Trash2, Warning as TriangleAlert, ArrowUUpLeft as Undo2, User, UserPlus, EnvelopeSimple, Crown, Users, VideoCamera as Video, Rows, X
 } from '@phosphor-icons/react';
 import './styles.css';
 import './detail.css';
@@ -64,6 +64,7 @@ function App() {
     else setCollapsed(value => { try { localStorage.setItem('synqra-sidebar-collapsed', value ? '0' : '1'); } catch {} return !value; });
   };
   const [projectOpen, setProjectOpen] = useState(false);
+  const [collabOpen, setCollabOpen] = useState(false);
   const [modal, setModal] = useState(null);
   const [toast, setToast] = useState('');
   const [dialog, setDialog] = useState(null);
@@ -142,13 +143,14 @@ function App() {
         <button className="icon-button mobile-menu" onClick={toggleSidebar} aria-label="Toggle menu"><Menu size={20}/></button>
         <label className="global-search"><Search size={17}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search…"/><kbd>⌘K</kbd></label>
         <div className="topbar-actions">
-          <button className="collaborator"><Users size={16}/> Collaborator</button>
+          <button className="collaborator" onClick={() => setCollabOpen(true)}><Users size={16}/> Collaborator</button>
           <button className="notification" aria-label="Notifications" onClick={()=>{setNotificationsOpen(open=>!open);if(!notifications.length)refreshNotifications()}}><Bell size={17}/>{data.unreadNotifications > 0 && <i/>}</button>
         </div>
       </header>
       {query && <GlobalSearchResults query={query} reviews={activeReviews} onOpen={setSelectedReview} onClear={()=>setQuery('')}/>}
       {notificationsOpen && <NotificationMenu notifications={notifications} onClose={()=>setNotificationsOpen(false)} onOpen={setSelectedReview} onRead={markNotificationRead} onReadAll={markAllNotificationsRead}/>} 
       {projectOpen && <ProjectSwitcher project={data.project} onClose={() => setProjectOpen(false)} />}
+      {collabOpen && <CollaboratorModal user={user} onClose={() => setCollabOpen(false)} onToast={setToast} />}
       {page === 'Overview' && <Dashboard reviews={activeReviews} meetings={data.meetings} workload={data.workload || []} reportByStatus={data.reportByStatus || []} sprints={data.sprints || []} goTo={setPage} onSubmitReview={() => setModal('review')} onNewMeeting={() => setModal('meeting')} />}
       {page === 'All Reviews' && <Reviews reviews={activeReviews} query={query} setQuery={setQuery} updateReview={updateReview} archiveReview={archiveReview} setModal={setModal} onOpen={setSelectedReview} />}
       {page === 'Meetings' && <Meetings meetings={data.meetings} reviews={activeReviews} addMeeting={addMeeting} addReview={addReview} onDeleteMeeting={deleteMeeting} setToast={setToast} setModal={setModal} onTasksCreated={count => showSuccess(`${count} review items created`, 'Action items from the meeting notes are now on the board.', 'View board', () => setPage('Kanban Board'))} onOpen={setSelectedReview} />}
@@ -209,6 +211,31 @@ function AuthScreen({ onAuthenticated }) {
   return <div className="auth-shell"><section className="auth-card"><div className="auth-brand"><img className="synqra-logo auth-logo" src="/logo-synqra.png" alt="Synqra — Powered by MULIA"/></div><h1>{mode === 'login' ? 'Welcome back' : 'Create your workspace'}</h1><p>{mode === 'login' ? 'Sign in to continue to your project reviews.' : 'Your first account becomes the workspace super admin.'}</p><form onSubmit={submit}>{mode === 'register' && <label>Name<input value={form.name} onChange={e=>update('name',e.target.value)} autoComplete="name" required/></label>}<label>Email<input type="email" value={form.email} onChange={e=>update('email',e.target.value)} autoComplete="email" required/></label><label>Password<input type="password" value={form.password} onChange={e=>update('password',e.target.value)} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} minLength="10" required/><small>At least 10 characters.</small></label>{error && <div className="auth-error">{error}</div>}<button className="primary-button" disabled={pending}>{pending ? 'Please wait…' : mode === 'login' ? 'Sign in' : 'Create account'} <ArrowRight size={16}/></button></form><button className="auth-toggle" onClick={()=>{setMode(mode === 'login' ? 'register' : 'login');setError('');}}>{mode === 'login' ? 'New to Synqra? Create an account' : 'Already have an account? Sign in'}</button></section></div>;
 }
 
+function CollaboratorModal({ user, onClose, onToast }) {
+  const [members, setMembers] = useState(null);
+  const [email, setEmail] = useState('');
+  const [pending, setPending] = useState(false);
+  const load = () => api('/api/project-members').then(data => setMembers(data.members)).catch(error => onToast(error.message));
+  useEffect(load, []);
+  const invite = async event => {
+    event.preventDefault();
+    const value = email.trim();
+    if (!value || pending) return;
+    setPending(true);
+    try {
+      await api('/api/project-members', { method: 'POST', body: JSON.stringify({ email: value }) });
+      setEmail('');
+      await load();
+      onToast(`Invitation sent to ${value}`);
+    } catch (error) { onToast(error.message); } finally { setPending(false); }
+  };
+  const remove = async member => {
+    try { await api(`/api/project-members/${member.id}`, { method: 'DELETE' }); await load(); }
+    catch (error) { onToast(error.message); }
+  };
+  return <div className="modal-backdrop" onMouseDown={onClose}><section className="collab-modal" onMouseDown={e => e.stopPropagation()}><span className="collab-icon"><Plus size={22}/></span><h2>Collaborator</h2><p className="collab-subtitle">Undang anggota dan atur akses tiap orang: Editor atau Viewer.</p><form className="collab-invite-row" onSubmit={invite}><label className="collab-email"><EnvelopeSimple size={16}/><input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Masukkan alamat email" required/></label><select value="viewer" disabled aria-label="Role"><option value="viewer">Viewer</option></select><button className="primary-button" disabled={pending || !email.trim()}><UserPlus size={16}/> Undang</button></form><p className="collab-note"><strong>Editor</strong> dapat menambah &amp; mengubah review item · <strong>Viewer</strong> hanya bisa melihat.</p><div className="collab-owner"><span className="collab-crown"><Crown size={16}/></span><div><strong>{user.name}</strong><small>{user.email}</small></div><span className="owner-pill">Owner</span></div>{members === null ? <div className="empty-state"><Wave /> Loading members…</div> : members.length ? <div className="collab-list">{members.map(member => <div className="collab-row" key={member.id}><div className="avatar">{member.email.slice(0, 2).toUpperCase()}</div><div><strong>{member.email}</strong><small>Invited {relativeDate(member.createdAt)}</small></div><span className="viewer-pill">Viewer</span><button className="row-action" onClick={() => remove(member)} aria-label={`Remove ${member.email}`}><Trash2 size={15}/></button></div>)}</div> : <p className="collab-empty">Belum ada anggota yang diundang.</p>}</section></div>;
+}
+
 function ProjectSwitcher({ project, onClose }) {
   return <div className="project-switcher"><div className="switcher-title">PROJECT</div><button className="current-project"><Folder size={22}/><span>{project.name}</span><ChevronDown size={17}/></button><label className="project-search"><Search size={19}/><input placeholder="Search projects"/></label><div className="project-list">{PROJECTS.map((name, index) => <button key={name} className={index === 0 ? 'selected' : ''}><Folder size={19}/><span>{name}</span>{index === 0 && <Check size={20}/>}</button>)}</div><button className="new-project"><Plus size={21}/> New project</button><button className="switcher-close" onClick={onClose}><X size={17}/></button></div>;
 }
@@ -235,8 +262,8 @@ function Dashboard({ reviews, meetings, workload, reportByStatus, sprints, goTo,
           const Icon = STAGE_ICONS[index];
           return <article className="stage-card" key={stage}><div className="card-meta"><Icon size={18}/><StatusPill value={blocked ? 'Blocked' : stage === 'Completed' || stage === 'Final' ? 'Complete' : 'In progress'} /></div><h3>{stage}</h3><div className="progress-row"><div className="progress"><span style={{ width: `${items.length ? (done / items.length) * 100 : 0}%` }}/></div><small>{done}/{items.length}</small></div></article>;
         })}</div>
-        <SectionHead title="Workload" aside="Active tasks per person" />
-        <div className="workload-grid">{workload.length ? workload.slice(0, 6).map(item => <article key={item.assignee}><strong>{item.assignee}</strong><span>{item.count} active task{Number(item.count) === 1 ? '' : 's'}</span><div className="workload-bar"><i style={{width:`${Math.min(100, Number(item.count) * 12)}%`}}/></div></article>) : <Empty text="No active workload yet."/>}</div>
+        <SectionHead title="Team Workload" aside="active tasks per member" />
+        <div className="workload-chart">{workload.length ? [...workload].sort((a, b) => Number(b.count) - Number(a.count)).slice(0, 8).map(item => { const max = Math.max(1, ...workload.map(w => Number(w.count))); return <div className="wl-row" key={item.assignee}><span className="wl-name">{item.assignee}</span><div className="wl-bar"><i style={{ width: `${Number(item.count) / max * 100}%` }}/></div><span className="wl-count">{item.count}</span></div>; }) : <Empty text="No active workload yet."/>}</div>
         <SectionHead title="Recent activity" action={() => goTo('All Reviews')} />
         <div className="activity-panel">{reviews.sort((a,b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 6).map(r => <div className="activity-row" key={r.id}><span className={`dot ${r.priority.toLowerCase()}`}/><div><strong>{r.title}</strong><p>{r.area} · {r.stage}</p></div><time>{relativeDate(r.createdAt)}</time></div>)}</div>
       </div>
@@ -370,10 +397,13 @@ function extractNotes(notes) { return notes.split(/[\n.]+/).map(s=>s.replace(/^\
 function Kanban({ reviews, updateReview, archiveReview, setModal, goTo, onOpen }) {
   const [dragId, setDragId] = useState(null);
   const [overCol, setOverCol] = useState(null);
+  const [view, setView] = useState('board');
   const wasDrag = useRef(false);
   const endDrag = () => { setDragId(null); setOverCol(null); setTimeout(() => { wasDrag.current = false; }, 0); };
   const openCard = r => { if (wasDrag.current) { wasDrag.current = false; return; } onOpen(r); };
-  return <section className="page kanban-page"><PageHeading title="Kanban Board" action={<div className="kanban-actions"><div className="view-switch"><LayoutGrid size={16}/><Rows size={16}/></div><button className="ghost-button" onClick={() => goTo('Meetings')}><Pin size={15}/> From Meeting</button><button className="primary-button" onClick={() => setModal('review')}><Plus size={16}/> Submit Review</button></div>}/><div className="board">{STAGE_META.map(({ name: stage, Icon, color }) => <div className={`board-column${overCol === stage ? ' drag-over' : ''}`} key={stage} onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setOverCol(stage); }} onDragLeave={() => setOverCol(cur => cur === stage ? null : cur)} onDrop={e => { e.preventDefault(); if (dragId) updateReview(dragId, { stage }); endDrag(); }}><div className="board-column-head"><h3><Icon size={15} color={color}/> {stage}</h3><span>{reviews.filter(r=>r.stage===stage).length}</span></div>{reviews.filter(r=>r.stage===stage).map(r=><article className={`kanban-card${dragId === r.id ? ' dragging' : ''}`} key={r.id} draggable onDragStart={e => { wasDrag.current = true; setDragId(r.id); e.dataTransfer.effectAllowed = 'move'; }} onDragEnd={endDrag} onClick={() => openCard(r)}><div className="kanban-title-row"><h4>{r.title}</h4><span>{r.key ? `${r.key} · ` : ''}{ageLabel(r.createdAt)}</span></div><p className="kanban-assignee"><User size={12}/> {r.assignee}</p><div className="kanban-footer"><Priority value={r.priority}/><span className="kanban-due"><Clock size={12}/> {shortDate(r.due)}</span></div><div className="kanban-tools"><select value={r.stage} onClick={e=>e.stopPropagation()} onChange={e=>updateReview(r.id,{stage:e.target.value})} aria-label="Move card">{STAGES.map(s=><option key={s}>{s}</option>)}</select><button onClick={e=>{e.stopPropagation(); archiveReview(r.id);}} aria-label="Archive card"><Archive size={14}/></button></div></article>)}<button className="add-card" onClick={()=>setModal('review')}><Plus size={15}/> Add item</button></div>)}</div></section>; }
+  const dropProps = stage => ({ onDragOver: e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setOverCol(stage); }, onDragLeave: () => setOverCol(cur => cur === stage ? null : cur), onDrop: e => { e.preventDefault(); if (dragId) updateReview(dragId, { stage }); endDrag(); } });
+  const cardProps = r => ({ draggable: true, onDragStart: e => { wasDrag.current = true; setDragId(r.id); e.dataTransfer.effectAllowed = 'move'; }, onDragEnd: endDrag, onClick: () => openCard(r) });
+  return <section className="page kanban-page"><PageHeading title="Kanban Board" action={<div className="kanban-actions"><div className="view-switch"><button className={view === 'board' ? 'active' : ''} onClick={() => setView('board')} aria-label="Board view"><LayoutGrid size={16}/></button><button className={view === 'list' ? 'active' : ''} onClick={() => setView('list')} aria-label="List view"><Rows size={16}/></button></div><button className="ghost-button" onClick={() => goTo('Meetings')}><Pin size={15}/> From Meeting</button><button className="primary-button" onClick={() => setModal('review')}><Plus size={16}/> Submit Review</button></div>}/>{view === 'board' ? <div className="board">{STAGE_META.map(({ name: stage, Icon, color }) => <div className={`board-column${overCol === stage ? ' drag-over' : ''}`} key={stage} {...dropProps(stage)}><div className="board-column-head"><h3><Icon size={15} color={color}/> {stage}</h3><span>{reviews.filter(r=>r.stage===stage).length}</span></div>{reviews.filter(r=>r.stage===stage).map(r=><article className={`kanban-card${dragId === r.id ? ' dragging' : ''}`} key={r.id} {...cardProps(r)}><div className="kanban-title-row"><h4>{r.title}</h4><span>{r.key ? `${r.key} · ` : ''}{ageLabel(r.createdAt)}</span></div><p className="kanban-assignee"><User size={12}/> {r.assignee}</p><div className="kanban-footer"><Priority value={r.priority}/><span className="kanban-due"><Clock size={12}/> {shortDate(r.due)}</span></div><div className="kanban-tools"><select value={r.stage} onClick={e=>e.stopPropagation()} onChange={e=>updateReview(r.id,{stage:e.target.value})} aria-label="Move card">{STAGES.map(s=><option key={s}>{s}</option>)}</select><button onClick={e=>{e.stopPropagation(); archiveReview(r.id);}} aria-label="Archive card"><Archive size={14}/></button></div></article>)}<button className="add-card" onClick={()=>setModal('review')}><Plus size={15}/> Add item</button></div>)}</div> : <div className="kanban-list">{STAGE_META.map(({ name: stage, Icon, color }) => { const items = reviews.filter(r => r.stage === stage); return <section className={`kanban-group${overCol === stage ? ' drag-over' : ''}`} key={stage} {...dropProps(stage)}><header className="kanban-group-head"><Icon size={16} color={color}/> {stage}<span>{items.length}</span></header>{items.length ? items.map(r => <article className={`kanban-row${dragId === r.id ? ' dragging' : ''}`} key={r.id} {...cardProps(r)}><strong>{r.title}</strong><span className="kanban-row-assignee"><User size={13}/> {r.assignee || 'Unassigned'}</span><Priority value={r.priority}/><span className="kanban-row-due"><Clock size={12}/> {r.due ? shortDate(r.due) : '—'}</span></article>) : <p className="kanban-empty">Empty</p>}</section>; })}</div>}</section>; }
 
 function ArchivePage({ reviews, restoreReview }) { return <section className="page"><PageHeading eyebrow="PROJECT TRACKER" title="Archive" description="Resolved or paused items stay here without disappearing."/>{reviews.length ? <div className="archive-list">{reviews.map(r=><article key={r.id}><div><Priority value={r.priority}/><h3>{r.title}</h3><p>{r.area} · Archived item</p></div><button className="text-button" onClick={()=>restoreReview(r.id)}>Restore <ArrowRight size={15}/></button></article>)}</div> : <Empty text="Your archive is empty."/>}</section>; }
 

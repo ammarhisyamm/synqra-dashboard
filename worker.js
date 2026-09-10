@@ -145,6 +145,26 @@ async function routeApi(request, env) {
     const result = await env.DB.prepare('SELECT id, email, name, role, created_at AS createdAt FROM users ORDER BY CASE role WHEN \'super_admin\' THEN 0 WHEN \'admin\' THEN 1 ELSE 2 END, name').all();
     return json({ users: result.results });
   }
+  if (request.method === 'GET' && path === '/api/project-members') {
+    const result = await env.DB.prepare('SELECT id, email, role, status, created_at AS createdAt FROM project_members ORDER BY created_at DESC').all();
+    return json({ members: result.results });
+  }
+  if (request.method === 'POST' && path === '/api/project-members') {
+    if (!['super_admin', 'admin'].includes(user.role)) return json({ error: 'Admin access required.' }, 403);
+    const body = await readBody(request); if (!body) return json({ error: 'Invalid JSON.' }, 400);
+    const email = safeText(body.email, 254).toLowerCase();
+    if (!/^\S+@\S+\.\S+$/.test(email)) return json({ error: 'Enter a valid email address.' }, 400);
+    if (await env.DB.prepare('SELECT id FROM project_members WHERE email = ?').bind(email).first()) return json({ error: 'That email has already been invited.' }, 409);
+    const member = { id: id(), email, role: 'viewer', status: 'invited' };
+    await env.DB.prepare('INSERT INTO project_members (id, email, role, status, invited_by) VALUES (?, ?, ?, ?, ?)').bind(member.id, member.email, member.role, member.status, user.id).run();
+    return json(member, 201);
+  }
+  const memberMatch = path.match(/^\/api\/project-members\/([a-zA-Z0-9-]+)$/);
+  if (request.method === 'DELETE' && memberMatch) {
+    if (!['super_admin', 'admin'].includes(user.role)) return json({ error: 'Admin access required.' }, 403);
+    const result = await env.DB.prepare('DELETE FROM project_members WHERE id = ?').bind(memberMatch[1]).run();
+    return result.meta.changes ? json({ ok: true }) : json({ error: 'Invite not found.' }, 404);
+  }
   if (request.method === 'POST' && path === '/api/admin/users') {
     if (user.role !== 'super_admin') return json({ error: 'Super admin access required.' }, 403);
     const body = await readBody(request); if (!body) return json({ error: 'Invalid JSON.' }, 400);
