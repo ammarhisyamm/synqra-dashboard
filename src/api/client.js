@@ -1,6 +1,23 @@
 export async function api(path, options = {}) {
-  const response = await fetch(path, { ...options, headers: { 'content-type': 'application/json', ...(options.headers || {}) } });
-  const body = await response.json();
-  if (!response.ok) throw new Error(body.error || 'Could not save your changes.');
-  return body;
+  const response = await fetch(path, {
+    ...options,
+    headers: { 'content-type': 'application/json', ...(options.headers || {}) }
+  });
+  let body;
+  const contentType = response.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    try {
+      body = await response.json();
+    } catch {
+      body = null;
+    }
+  } else {
+    const text = await response.text();
+    body = text ? { message: text } : null;
+  }
+  if (!response.ok) {
+    throw new Error(body?.error || body?.message || `Request failed with status ${response.status}`);
+  }
+  return body || {};
 }
+

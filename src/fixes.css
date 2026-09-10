@@ -1,2 +1,129 @@
 .detail-grid label:nth-child(n+5)>.field-label{display:flex}.detail-grid label{min-width:0}.detail-grid .app-select{width:100%}.detail-grid .app-select-trigger{min-height:40px;font-size:14px;color:#172238}.detail-wide{grid-column:1/-1}
 .status-timeline:before{left:13px;top:13px;bottom:13px}.status-event{display:grid;grid-template-columns:26px minmax(0,1fr);gap:10px}.status-event>.history-dot{margin:4px auto 0}
+
+/* Design System - Strict Medium typescale for all button elements */
+button,
+.primary-button,
+.secondary-button,
+.ghost-button,
+.review-btn,
+.add-task-btn,
+.text-button,
+.date-filter,
+.collaborator,
+.notification,
+.action-cta,
+.danger-button,
+.sprint-task-action,
+.sprint-status,
+.kanban-view-tabs button,
+.auth-card button,
+.modal-actions button,
+.admin-actions button,
+.share-link button {
+  font-weight: 500 !important;
+  letter-spacing: -0.01em;
+}
+
+/* AI generating overlay & status */
+.ai-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #f5f3ff;
+  color: #7c3aed;
+  border: 1px solid #ddd6fe;
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 500;
+}
+.ai-generating-overlay {
+  margin: 0 0 24px;
+  border: 1px solid #e0e7ff;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #f8fafc, #eff6ff);
+  padding: 24px;
+  text-align: center;
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.08);
+}
+.ai-generating-card h3 {
+  margin: 10px 0 6px;
+  color: #1e293b;
+  font-size: 16px;
+  font-weight: 500;
+}
+.ai-generating-card p {
+  margin: 0 auto 16px;
+  max-width: 480px;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.ai-spark-icon {
+  width: 44px;
+  height: 44px;
+  margin: 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: #e0e7ff;
+  color: #4f46e5;
+}
+.ai-generating-wave {
+  color: #4f46e5;
+  display: inline-flex;
+  padding: 6px 14px;
+  background: #fff;
+  border-radius: 999px;
+  border: 1px solid #c7d2fe;
+}
+.ai-review-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Polished empty state */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 36px 20px;
+  color: #8896aa;
+  text-align: center;
+  gap: 12px;
+}
+.empty-state p {
+  margin: 0;
+  font-size: 13px;
+}
+
+/* Mobile Polish */
+@media (max-width: 650px) {
+  .ai-review-head-actions {
+    margin-top: 14px;
+    justify-content: flex-start;
+  }
+  .app-shell {
+    padding-left: 0 !important;
+  }
+  .sidebar {
+    transform: translateX(-100%);
+    transition: transform 0.24s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .sidebar.open {
+    transform: translateX(0);
+    box-shadow: 0 0 50px rgba(0, 0, 0, 0.25);
+  }
+  .topbar {
+    padding: 0 16px;
+  }
+  .mobile-menu {
+    display: grid !important;
+  }
+  .app-footer {
+    left: 0 !important;
+  }
+}

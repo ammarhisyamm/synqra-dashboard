@@ -21,6 +21,7 @@ import { notificationsApi } from './api/notifications';
 import { projectsApi } from './api/projects';
 import { workflowApi } from './api/workflow';
 import { metadataApi } from './api/metadata';
+import { meetingsApi } from './api/meetings';
 import { NewProjectModal } from './components/projects/NewProjectModal';
 import { DeleteProjectModal } from './components/projects/DeleteProjectModal';
 import { CommandPalette } from './components/navigation/CommandPalette';
@@ -101,6 +102,23 @@ function makeHistoryModel(history, currentStatus, createdAt, now) {
   return { timeline, totals, activeMinutes };
 }
 function historyDateLabel(value) { const date = new Date(value); return Number.isFinite(date.getTime()) ? date.toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }) : '—'; }
+
+function deduplicateNotifications(current, incoming) {
+  if (!incoming || !Array.isArray(incoming)) return current;
+  const seen = new Set();
+  const result = [];
+  // Prioritize newer or existing read state
+  for (const item of incoming) {
+    const key = item.id || `${item.title}-${item.createdAt}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      const existing = current.find(c => c.id === item.id);
+      result.push(existing ? { ...item, read: existing.read || item.read } : item);
+    }
+  }
+  return result;
+}
+
 function App() {
   const [data, setData] = useState(loadData);
   const [cloudReady, setCloudReady] = useState(false);
@@ -229,7 +247,7 @@ function App() {
     const saved = { id: crypto.randomUUID(), itemCount: 0, projectId: activeProjectId, ...meeting };
     setData(prev => ({ ...prev, meetings: [saved, ...prev.meetings] }));
     try {
-      const created = await api('/api/meetings', { method: 'POST', body: JSON.stringify(saved) });
+      const created = await meetingsApi.create(saved);
       setData(prev => ({ ...prev, meetings: prev.meetings.map(item => item.id === saved.id ? created : item) }));
       return created;
     } catch (error) {
@@ -242,7 +260,7 @@ function App() {
     const target = data.meetings.find(m => m.id === id);
     setDialog({ danger: true, icon: <Trash2 size={24}/>, title: 'Delete this meeting?', subtitle: target ? `"${target.title}" and its notes will be permanently deleted.` : 'This meeting will be permanently deleted.', confirmLabel: 'Delete', onConfirm: () => {
       setData(prev => ({ ...prev, meetings: prev.meetings.filter(m => m.id !== id) }));
-      api(`/api/meetings/${id}`, { method: 'DELETE' }).catch(error => setToast(error.message));
+      meetingsApi.remove(id).catch(error => setToast(error.message));
     } });
   };
   const exportData = () => {
@@ -266,7 +284,7 @@ function App() {
       setToast('Settings saved');
     } catch (error) { setToast(error.message); }
   };
-  const refreshNotifications = async () => { try { const result = await notificationsApi.list(); setNotifications(result.notifications); } catch (error) { setToast(error.message); } };
+  const refreshNotifications = async () => { try { const result = await notificationsApi.list(); setNotifications(prev => deduplicateNotifications(prev, result.notifications)); } catch (error) { setToast(error.message); } };
   useEffect(() => {
     if (!user) return undefined;
     let active = true;
@@ -279,7 +297,7 @@ function App() {
           const selectedProject = selectedId && selectedId !== 'default' ? remote.projects.find(item => item.id === selectedId) : remote.project;
           return { ...remote, project: selectedProject || remote.project };
         });
-        setNotifications(notificationResult.notifications);
+        setNotifications(prev => deduplicateNotifications(prev, notificationResult.notifications));
       } catch { /* keep the current optimistic view and retry on the next tick */ }
     };
     sync();
@@ -804,9 +822,61 @@ function SelectField({ label,value,values,onChange }) { const icons = { Phase: C
 function Modal({title,subtitle,onClose,children}) { return <div className="modal-backdrop" onMouseDown={onClose}><section className="modal" onMouseDown={e=>e.stopPropagation()}><button className="modal-close" onClick={onClose}><X size={19}/></button><h2>{title}</h2><p>{subtitle}</p>{children}</section></div>; }
 
 class AppErrorBoundary extends Component {
-  state = { error: null };
+  state = { error: null, info: null };
   static getDerivedStateFromError(error) { return { error }; }
-  render() { return this.state.error ? <div className="auth-shell"><section className="auth-card"><h1>Synqra could not load</h1><p>Please refresh and try again.</p></section></div> : this.props.children; }
+  componentDidCatch(error, info) {
+    console.error('Unhandled Synqra runtime error:', error, info);
+    this.setState({ info });
+  }
+  resetCache = () => {
+    try {
+      localStorage.removeItem('synqra-dashboard-v1');
+      localStorage.removeItem('synqra-sidebar-collapsed');
+    } catch {}
+    window.location.href = window.location.pathname;
+  };
+  reload = () => {
+    window.location.reload();
+  };
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <div className="auth-shell">
+        <section className="auth-card" style={{ maxWidth: 520, textAlign: 'left' }}>
+          <div className="auth-brand" style={{ justifyContent: 'flex-start' }}>
+            <img className="synqra-logo auth-logo" src="/logo-synqra.png" alt="Synqra" />
+          </div>
+          <h1 style={{ fontSize: 22, marginTop: 16 }}>Application Encountered an Error</h1>
+          <p style={{ color: '#687a92', fontSize: 13, lineHeight: 1.5 }}>
+            Synqra caught an unexpected issue during execution. You can reload the application or reset local cache to restore standard operation.
+          </p>
+          <div style={{
+            margin: '14px 0 18px',
+            padding: '12px 14px',
+            borderRadius: 8,
+            background: '#fff3f3',
+            border: '1px solid #fed2d2',
+            color: '#b91c1c',
+            fontSize: 12,
+            fontFamily: 'monospace',
+            maxHeight: 140,
+            overflow: 'auto',
+            whiteSpace: 'pre-wrap'
+          }}>
+            {this.state.error?.message || String(this.state.error)}
+          </div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button className="primary-button" onClick={this.reload}>
+              <RotateCcw size={15} /> Reload Application
+            </button>
+            <button className="secondary-button" onClick={this.resetCache}>
+              Reset Local Cache
+            </button>
+          </div>
+        </section>
+      </div>
+    );
+  }
 }
 
 createRoot(document.getElementById('root')).render(<AppErrorBoundary><App/></AppErrorBoundary>);
