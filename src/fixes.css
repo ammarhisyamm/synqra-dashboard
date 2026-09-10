@@ -328,7 +328,7 @@ button,
 /* --- Row 2: Nav tabs bar --------------------------- */
 .kanban-nav-tabs-bar {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 14px;
@@ -337,14 +337,15 @@ button,
 
 .kanban-nav-tabs-bar .kanban-view-tabs {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
+  gap: 4px;
 }
 
 .view-tab {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 10px 14px;
+  padding: 10px 14px 12px;
   border: none;
   background: transparent;
   color: #8493a8;
@@ -365,7 +366,6 @@ button,
   font-weight: 600;
 }
 
-/* Priority filter — right of nav bar */
 .kanban-nav-tabs-bar .kanban-filter-row {
   display: flex;
   align-items: center;
@@ -406,32 +406,6 @@ button,
 @media (max-width: 720px) {
   .kanban-header-bar .kanban-search { width: 100%; }
   .mini-avatar { display: none; }
-}
-
-.kanban-view-tabs {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.kanban-view-tabs button {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 8px 4px;
-  border: none;
-  background: transparent;
-  color: #71819a;
-  font-size: 13px;
-  border-bottom: 2px solid transparent;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.kanban-view-tabs button.active {
-  color: #111b30;
-  border-bottom-color: #111b30;
-  font-weight: 600;
 }
 
 .kanban-toolbar-actions {

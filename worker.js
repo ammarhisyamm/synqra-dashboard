@@ -11,6 +11,30 @@ const base64ToBytes = value => Uint8Array.from(atob(value), char => char.charCod
 const cookieValue = (request, name) => (request.headers.get('Cookie') || '').split(';').map(v => v.trim()).find(v => v.startsWith(`${name}=`))?.slice(name.length + 1);
 const publicUser = user => ({ id: user.id, email: user.email, username: user.username || user.name, name: user.name, role: user.role });
 const parseJson = (value, fallback) => { try { return value ? JSON.parse(value) : fallback; } catch { return fallback; } };
+async function sendInviteEmail(env, request, { to, inviterName }) {
+  // Returns { sent: true } or { sent: false, reason } — never throws.
+  // Requires RESEND_API_KEY secret; optional EMAIL_FROM secret (defaults to Resend onboarding sender).
+  if (!env.RESEND_API_KEY) return { sent: false, reason: 'email-not-configured' };
+  try {
+    const origin = new URL(request.url).origin;
+    const from = env.EMAIL_FROM || 'Synqra <onboarding@resend.dev>';
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from,
+        to: [to],
+        subject: `${inviterName} invited you to collaborate on Synqra`,
+        text: `${inviterName} invited you to collaborate on Synqra as a Viewer.\n\nOpen the workspace: ${origin}\n\nViewers can see reviews, meetings, and boards. Contact ${inviterName} for an account.`,
+        html: `<div style="font-family:sans-serif;max-width:480px"><h2>You've been invited to Synqra</h2><p><strong>${inviterName}</strong> invited you to collaborate as a <strong>Viewer</strong>.</p><p><a href="${origin}">Open the workspace</a></p><p style="color:#888;font-size:12px">Viewers can see reviews, meetings, and boards. Contact ${inviterName} for an account.</p></div>`
+      })
+    });
+    if (!response.ok) return { sent: false, reason: `email-provider-${response.status}` };
+    return { sent: true };
+  } catch {
+    return { sent: false, reason: 'email-failed' };
+  }
+}
 let workspaceSchema;
 async function ensureWorkspaceSchema(env) {
   workspaceSchema ||= env.DB.batch([
@@ -178,7 +202,8 @@ async function routeApi(request, env) {
     const role = ['viewer', 'editor'].includes(body.role) ? body.role : 'viewer';
     const member = { id: id(), email, role, status: 'invited' };
     await env.DB.batch([env.DB.prepare('INSERT INTO project_members (id, email, role, status, invited_by) VALUES (?, ?, ?, ?, ?)').bind(member.id, member.email, 'viewer', member.status, user.id), env.DB.prepare('INSERT INTO project_member_roles (member_id, role) VALUES (?, ?)').bind(member.id, role)]);
-    return json(member, 201);
+    const emailResult = await sendInviteEmail(env, request, { to: email, inviterName: user.name });
+    return json({ ...member, emailSent: emailResult.sent, emailReason: emailResult.sent ? undefined : emailResult.reason }, 201);
   }
   const memberMatch = path.match(/^\/api\/project-members\/([a-zA-Z0-9-]+)$/);
   if (request.method === 'PATCH' && memberMatch) {

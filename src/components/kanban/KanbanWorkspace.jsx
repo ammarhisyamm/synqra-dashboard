@@ -136,16 +136,14 @@ export function KanbanWorkspace({ project, reviews, sprints = [], metadata = [],
     {/* Row 1: Header with Breadcrumbs & Action Toolbar */}
     <div className="kanban-header-bar">
       <div className="kanban-breadcrumbs">
-        <span className="breadcrumb-muted">MIT</span>
-        <CaretRight size={12} className="breadcrumb-sep" />
-        <span className="breadcrumb-muted">{project?.team || 'MIT'}</span>
-        <CaretRight size={12} className="breadcrumb-sep" />
-        <strong className="breadcrumb-title">{project?.name || 'OMNIX WABA'}</strong>
-        <CaretRight size={12} className="breadcrumb-sep" />
-        <span className="sprint-status-pill">
-          <i className="sprint-status-dot" />
-          {activeSprint?.name || 'Sprint 5'}
-        </span>
+        <strong className="breadcrumb-title">{project?.name || 'Board'}</strong>
+        {activeSprint && <>
+          <CaretRight size={12} className="breadcrumb-sep" />
+          <span className="sprint-status-pill">
+            <i className="sprint-status-dot" />
+            {activeSprint.name}
+          </span>
+        </>}
       </div>
 
       <div className="kanban-toolbar-actions">

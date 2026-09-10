@@ -175,8 +175,13 @@ function App() {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); setCommandOpen(open => !open); }
       if (event.key === 'Escape') { setCommandOpen(false); setNotificationsOpen(false); }
     };
+    const onUnhandled = event => {
+      console.error('Unhandled promise rejection:', event.reason);
+      setToast(`Something didn’t finish: ${event.reason?.message || 'unexpected error'}. Your data is safe — try again.`);
+    };
     window.addEventListener('keydown', onShortcut);
-    return () => window.removeEventListener('keydown', onShortcut);
+    window.addEventListener('unhandledrejection', onUnhandled);
+    return () => { window.removeEventListener('keydown', onShortcut); window.removeEventListener('unhandledrejection', onUnhandled); };
   }, []);
   useEffect(() => {
     if (page !== 'All Reviews') setQuery('');
@@ -474,10 +479,10 @@ function CollaboratorModal({ user, onClose, onToast }) {
     if (!value || pending) return;
     setPending(true);
     try {
-      await api('/api/project-members', { method: 'POST', body: JSON.stringify({ email: value, role }) });
+      const result = await api('/api/project-members', { method: 'POST', body: JSON.stringify({ email: value, role }) });
       setEmail('');
       await load();
-      onToast(`Invitation sent to ${value}`);
+      onToast(result.emailSent ? `Invitation email sent to ${value}` : `Invite saved for ${value} — email service not configured yet`);
     } catch (error) { onToast(error.message); } finally { setPending(false); }
   };
   const remove = async member => {
@@ -938,6 +943,7 @@ class ErrorPanel extends Component {
           <p>We couldn&apos;t load this section. Your saved data is safe.</p>
           <div className="section-error-actions"><button className="secondary-button" onClick={this.retry}>Try again</button><button className="text-button" onClick={this.goBack}>Go back</button></div>
           {this.state.errorId && <small>Error ID: {this.state.errorId}</small>}
+          {this.state.error && <details className="error-details"><summary>Details</summary><code>{String(this.state.error.message || this.state.error)}</code></details>}
         </div>
       );
     }
@@ -952,6 +958,7 @@ class ErrorPanel extends Component {
             We couldn&apos;t load this workspace. Your saved data is safe. Try again or return to the previous page.
           </p>
           {this.state.errorId && <p style={{ color: '#9aa6b5', fontSize: 11 }}>Error ID: {this.state.errorId}</p>}
+          {this.state.error && <details style={{ margin: '0 0 16px' }}><summary style={{ fontSize: 12, color: '#687a92', cursor: 'pointer' }}>Details</summary><code style={{ display: 'block', marginTop: 6, fontSize: 11, color: '#b91c1c', wordBreak: 'break-word' }}>{String(this.state.error.message || this.state.error)}</code></details>}
           <div style={{ display: 'flex', gap: 10 }}>
             <button className="primary-button" onClick={this.retry}>
               <RotateCcw size={15} /> Try again
