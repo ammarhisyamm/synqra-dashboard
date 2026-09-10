@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowRight, ChartPieSlice, Clock, ListChecks, Lightning, ArrowCounterClockwise as RotateCcw, TrendUp, Users, Warning as TriangleAlert, CheckCircle as CheckCircle2, XCircle } from '@phosphor-icons/react';
+import { ArrowRight, CaretDown as ChevronDown, ChartPieSlice, Clock, ListChecks, Lightning, ArrowCounterClockwise as RotateCcw, TrendUp, Users, Warning as TriangleAlert, CheckCircle as CheckCircle2, XCircle } from '@phosphor-icons/react';
 import { REPORT_COLORS, statusFor } from '../../lib/helpers';
 import { activeReviews, isResolved, portfolioProjects, taskOverview, sprintTasks, sprintStats, statusCounts, priorityCounts, teamWorkload, hoursTotals, formatHours } from '../../lib/reports';
 import { slashDate } from '../../lib/dates';
@@ -184,4 +184,3 @@ export function VelocityBars({ stats }) {
   const ticks = [max, max / 2, 0];
   return <div className="velocity"><div className="velocity-plot"><div className="velocity-axis">{ticks.map(t => <span key={t}>{Math.round(t)}h</span>)}</div>{stats.length ? stats.map(s => <div className="velocity-group" key={s.sprint.id}><div className="velocity-bars"><span style={{ height: `${s.est / max * 100}%`, background: REPORT_COLORS.accent }} title={`Estimated ${formatHours(s.est)}`}/><span style={{ height: `${s.doneEst / max * 100}%`, background: REPORT_COLORS.success }} title={`Completed ${formatHours(s.doneEst)}`}/></div><small>{s.sprint.name}</small></div>) : <p>No sprint data.</p>}</div><div className="chart-legend"><span><i style={{ background: REPORT_COLORS.accent }}/>Estimated</span><span><i style={{ background: REPORT_COLORS.success }}/>Completed</span></div></div>;
 }
-

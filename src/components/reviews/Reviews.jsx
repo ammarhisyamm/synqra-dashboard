@@ -1,5 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Archive, ArrowRight, DownloadSimple as Download, Plus, MagnifyingGlass as Search, User, X } from '@phosphor-icons/react';
+import {
+  Archive,
+  ArrowRight,
+  CaretDown as ChevronDown,
+  CaretLeft as ChevronLeft,
+  CaretRight as ChevronRight,
+  DownloadSimple as Download,
+  Plus,
+  MagnifyingGlass as Search,
+  User,
+  X
+} from '@phosphor-icons/react';
 import { AREAS, STAGES, PRIORITIES } from '../../constants/workflow';
 import { slashDate } from '../../lib/dates';
 import { statusFor, downloadReviewsCsv } from '../../lib/helpers';
