@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "synqra-dashboard",
+  "name": "synqra",
   "main": "worker.js",
   "compatibility_date": "2026-09-10",
   "assets": {
