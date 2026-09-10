@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   Archive, ArrowRight, Bell, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronsUpDown, CircleDot,
-  ClipboardList, Download, FileText, Folder, Home, KanbanSquare, LayoutGrid, ListChecks,
+  ClipboardList, Download, FileText, Folder, Home, Info, KanbanSquare, LayoutGrid, ListChecks,
   Menu, MessageCircle, MoreHorizontal, MoreVertical, Plus, Search, Settings, Settings2, ShieldCheck, SlidersHorizontal, Sparkles,
   Table2, Target, Users, Video, X
 } from 'lucide-react';
@@ -126,7 +126,7 @@ function App() {
         </div>
       </header>
       {projectOpen && <ProjectSwitcher project={data.project} onClose={() => setProjectOpen(false)} />}
-      {page === 'Overview' && <Dashboard reviews={activeReviews} meetings={data.meetings} goTo={setPage} />}
+      {page === 'Overview' && <Dashboard reviews={activeReviews} meetings={data.meetings} goTo={setPage} onSubmitReview={() => setModal('review')} onNewMeeting={() => setModal('meeting')} />}
       {page === 'All Reviews' && <Reviews reviews={activeReviews} query={query} setQuery={setQuery} updateReview={updateReview} archiveReview={archiveReview} setModal={setModal} />}
       {page === 'Meetings' && <Meetings meetings={data.meetings} addMeeting={addMeeting} addReview={addReview} setToast={setToast} setModal={setModal} />}
       {page === 'Kanban Board' && <Kanban reviews={activeReviews} updateReview={updateReview} archiveReview={archiveReview} setModal={setModal} />}
@@ -180,38 +180,45 @@ function ProjectSwitcher({ project, onClose }) {
   return <div className="project-switcher"><div className="switcher-title">PROJECT</div><button className="current-project"><Folder size={22}/><span>{project.name}</span><ChevronDown size={17}/></button><label className="project-search"><Search size={19}/><input placeholder="Search projects"/></label><div className="project-list">{PROJECTS.map((name, index) => <button key={name} className={index === 0 ? 'selected' : ''}><Folder size={19}/><span>{name}</span>{index === 0 && <Check size={20}/>}</button>)}</div><button className="new-project"><Plus size={21}/> New project</button><button className="switcher-close" onClick={onClose}><X size={17}/></button></div>;
 }
 
-function Dashboard({ reviews, meetings, goTo }) {
+function Dashboard({ reviews, meetings, goTo, onSubmitReview, onNewMeeting }) {
   const now = new Date();
   const day = new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).format(now);
   const today = new Date().toISOString().slice(0, 10);
-  const needsAttention = reviews.filter(r => r.priority === 'Blocker' || r.due < today).slice(0, 3);
+  const needsAttention = reviews.filter(r => r.priority === 'Blocker' || r.due < today).slice(0, 4);
   const completed = reviews.filter(r => r.stage === 'Completed').length;
   const blockers = reviews.filter(r => r.priority === 'Blocker').length;
+  const overdue = reviews.filter(r => r.due < today && r.stage !== 'Completed').length;
   return <section className="page dashboard-page">
-    <div className="page-title"><div><h1>Overview</h1><p>{day}</p></div><span className="readonly"><CircleDot size={14}/> Live workspace</span></div>
+    <div className="page-title"><div><h1>Overview</h1><p>{day}</p></div><button className="primary-button" onClick={onSubmitReview}><Plus size={16}/> Submit Review</button></div>
     <div className="dashboard-grid">
       <div className="dashboard-main">
         <SectionHead title="Needs attention" action={() => goTo('All Reviews')} />
-        <div className="attention-list">{needsAttention.length ? needsAttention.map(r => <AttentionCard key={r.id} review={r}/>) : <Empty text="Nothing needs attention right now."/>}</div>
-        <SectionHead title="Active stages" aside={`${STAGES.length} stages`} />
+        <div className="attention-list">{needsAttention.length ? needsAttention.map(r => <AttentionCard key={r.id} review={r} today={today} onReview={() => goTo('All Reviews')}/>) : <Empty text="Nothing needs attention right now."/>}</div>
+        <SectionHead title="Active stages" aside="5 stages" />
         <div className="stage-grid">{STAGES.map((stage, index) => {
-          const items = reviews.filter(r => r.stage === stage); const done = stage === 'Completed' || stage === 'Final'; const blocked = items.some(r => r.priority === 'Blocker'); const Icon = STAGE_ICONS[index];
-          return <article className="stage-card" key={stage}><div className="card-meta"><Icon size={17}/><StatusPill value={blocked ? 'Blocked' : done ? 'Complete' : 'In progress'} /></div><h3>{stage}</h3><div className="progress-row"><div className="progress"><span style={{ width: `${Math.min(100, items.length * 34)}%` }}/></div><small>{items.length}/{Math.max(items.length, stage === 'Planning' ? 2 : stage === 'Review' ? 3 : 1)}</small></div></article>;
+          const items = reviews.filter(r => r.stage === stage);
+          const done = items.filter(r => r.stage === 'Completed' || r.stage === 'Final').length;
+          const blocked = items.some(r => r.priority === 'Blocker');
+          const Icon = STAGE_ICONS[index];
+          return <article className="stage-card" key={stage}><div className="card-meta"><Icon size={18}/><StatusPill value={blocked ? 'Blocked' : stage === 'Completed' || stage === 'Final' ? 'Complete' : 'In progress'} /></div><h3>{stage}</h3><div className="progress-row"><div className="progress"><span style={{ width: `${items.length ? (done / items.length) * 100 : 0}%` }}/></div><small>{done}/{items.length}</small></div></article>;
         })}</div>
         <SectionHead title="Recent activity" action={() => goTo('All Reviews')} />
         <div className="activity-panel">{reviews.sort((a,b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 6).map(r => <div className="activity-row" key={r.id}><span className={`dot ${r.priority.toLowerCase()}`}/><div><strong>{r.title}</strong><p>{r.area} · {r.stage}</p></div><time>{relativeDate(r.createdAt)}</time></div>)}</div>
       </div>
-      <div className="dashboard-rail"><MeetingRail meetings={meetings} goTo={goTo}/><Summary reviews={reviews} completed={completed} blockers={blockers}/></div>
+      <div className="dashboard-rail"><MeetingRail meetings={meetings} goTo={goTo} onNew={onNewMeeting}/><Summary reviews={reviews} completed={completed} blockers={blockers} overdue={overdue}/></div>
     </div>
   </section>;
 }
 
 function SectionHead({ title, action, aside }) { return <div className="section-head"><h2>{title}</h2>{action ? <button onClick={action}>View all <ArrowRight size={15}/></button> : <span>{aside}</span>}</div>; }
-function AttentionCard({ review }) { return <article className="attention-card"><span className={`dot ${review.priority.toLowerCase()}`}/><div><strong>{review.title}</strong><p>{review.priority} · {review.stage} · Due {dateLabel(review.due)}</p></div></article>; }
+function AttentionCard({ review, today, onReview }) {
+  const meta = `${review.due < today ? 'Overdue' : review.priority} · ${review.stage} · Due ${dateLabel(review.due)}`;
+  return <article className="attention-card"><div className="attention-top"><span className={`dot ${review.priority.toLowerCase()}`}/><div><strong>{review.title}</strong><p>{meta}</p></div></div><button className="review-btn" onClick={onReview}>Review</button></article>;
+}
 function StatusPill({ value }) { return <span className={`status-pill ${value.toLowerCase().replace(' ', '-')}`}>{value}</span>; }
 function Empty({ text }) { return <div className="empty-state">{text}</div>; }
-function MeetingRail({ meetings, goTo }) { return <aside className="rail-card"><div className="rail-head"><h2>Recent meetings</h2><CalendarDays size={18}/></div>{meetings.slice(0,3).map(m => <button className="meeting-row" key={m.id} onClick={() => goTo('Meetings')}><span className="meeting-icon"><Video size={16}/></span><span><strong>{m.title}</strong><small>{dateLabel(m.date)} <b>⌘ {m.itemCount}</b>{m.ai && <em>· AI</em>}</small></span></button>)}</aside>; }
-function Summary({ reviews, completed, blockers }) { return <aside className="rail-card summary"><h2>Summary</h2><p>Project overview</p><div className="summary-list"><Metric label="Total reviews" value={reviews.length}/><Metric label="Resolved" value={completed}/><Metric label="Blockers" value={blockers}/><Metric label="Open items" value={reviews.length - completed}/><Metric label="Areas" value={new Set(reviews.map(r => r.area)).size}/></div><div className="summary-alert">{blockers} blocker · {reviews.filter(r => r.due < new Date().toISOString().slice(0,10)).length} overdue need attention.</div></aside>; }
+function MeetingRail({ meetings, goTo, onNew }) { return <aside className="rail-card"><div className="rail-head"><h2>Meetings</h2><button className="new-btn" onClick={onNew}><Plus size={14}/> New</button></div>{meetings.slice(0, 4).map(m => <button className="meeting-row" key={m.id} onClick={() => goTo('Meetings')}><span className="meeting-icon"><CalendarDays size={16}/></span><span><strong>{m.title}</strong><small>{dateLabel(m.date)}</small></span>{m.ai && <Sparkles size={15} className="meeting-ai"/>}</button>)}<button className="view-all" onClick={() => goTo('Meetings')}>View all <ArrowRight size={14}/></button></aside>; }
+function Summary({ reviews, completed, blockers, overdue }) { return <aside className="rail-card summary"><h2>Summary</h2><p>Project overview</p><div className="summary-list"><Metric label="Total reviews" value={reviews.length}/><Metric label="Resolved" value={completed}/><Metric label="Blockers" value={blockers}/><Metric label="Open items" value={reviews.length - completed}/><Metric label="Areas" value={new Set(reviews.map(r => r.area)).size}/></div><div className="summary-alert"><Info size={15}/><span>{blockers ? `${blockers} blocker · ` : ''}{overdue} overdue need attention.</span></div></aside>; }
 function Metric({ label, value }) { return <div><span>{label}</span><strong>{value}</strong></div>; }
 
 function Reviews({ reviews, query, setQuery, updateReview, archiveReview, setModal }) {
