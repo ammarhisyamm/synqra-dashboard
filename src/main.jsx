@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import {
   Archive, ArrowRight, Bell, CalendarBlank as CalendarDays, CalendarPlus, Check, CheckCircle as CheckCircle2, CaretDown as ChevronDown, CaretLeft as ChevronLeft, CaretRight as ChevronRight, CaretUpDown as ChevronsUpDown, Circle as CircleDot,
   ClipboardText as ClipboardList, Clock, Clock as Clock3, Copy, DownloadSimple as Download, ArrowSquareOut as ExternalLink, Eye, FileText, Flag, Folder, House as Home, Info, Kanban as KanbanSquare, SquaresFour as LayoutGrid, Link as Link2, ListChecks, Lock,
-  List as Menu, ChatCircle as MessageCircle, DotsThree as MoreHorizontal, DotsThreeVertical as MoreVertical, CursorClick as MousePointer2, PencilLine as Pencil, PushPin as Pin, Plus, ArrowCounterClockwise as RotateCcw, MagnifyingGlass as Search, Gear as Settings, GearSix as Settings2, ShieldCheck, SlidersHorizontal, Sparkle as Sparkles, Table as Table2, Target, Trash as Trash2, Warning as TriangleAlert, ArrowUUpLeft as Undo2, User, UserPlus, EnvelopeSimple, Crown, Users, VideoCamera as Video, Rows, X
+  List as Menu, ChatCircle as MessageCircle, DotsThree as MoreHorizontal, DotsThreeVertical as MoreVertical, CursorClick as MousePointer2, PencilLine as Pencil, PushPin as Pin, Plus, ArrowCounterClockwise as RotateCcw, MagnifyingGlass as Search, Gear as Settings, GearSix as Settings2, ShieldCheck, SlidersHorizontal, Sparkle as Sparkles, Table as Table2, Target, Trash as Trash2, Warning as TriangleAlert, ArrowUUpLeft as Undo2, User, UserPlus, EnvelopeSimple, Crown, Users, VideoCamera as Video, Rows, ChartBar, TrendUp, ChartLine, ChartPieSlice, Lightning, XCircle, X
 } from '@phosphor-icons/react';
 import './styles.css';
 import './detail.css';
@@ -12,8 +12,10 @@ import { Wave } from './components/Wave.jsx';
 import './workflow.css';
 import { STORAGE_KEY, AREAS, STAGES, PRIORITIES, STATUS_OPTIONS, STAGE_ICONS, STAGE_META } from './constants/workflow';
 import { dateLabel, slashDate, shortDate, ageLabel, groupDateLabel, relativeDate } from './lib/dates';
+import { isResolved, isOverdue, activeReviews, portfolioProjects, taskOverview, sprintTasks, sprintStats, statusCounts, priorityCounts, teamWorkload, hoursTotals, formatHours, daysOverdue } from './lib/reports';
 import { api } from './api/client';
 import { reviewsApi } from './api/reviews';
+import { reportsApi } from './api/reports';
 import { notificationsApi } from './api/notifications';
 import { projectsApi } from './api/projects';
 import { NewProjectModal } from './components/projects/NewProjectModal';
@@ -144,6 +146,7 @@ function App() {
     setToast('Project data exported');
   };
   const resetData = () => { setData(seed); setToast('Demo data restored'); };
+  const refreshAll = () => { api('/api/bootstrap').then(remote => { setData(remote); setCloudReady(true); }).catch(error => setToast(error.message)); };
   const signOut = async () => { try { await api('/api/auth/logout', { method: 'POST' }); } finally { setUser(null); setCloudReady(false); setData(seed); } };
   const saveProject = async settings => {
     try {
@@ -185,6 +188,7 @@ function App() {
       {page === 'Meetings' && <Meetings meetings={activeMeetings} reviews={activeReviews} addMeeting={addMeeting} addReview={addReview} onDeleteMeeting={deleteMeeting} setToast={setToast} setModal={setModal} onTasksCreated={count => showSuccess(`${count} review items created`, 'Action items from the meeting notes are now on the board.', 'View board', () => setPage('Kanban Board'))} onOpen={setSelectedReview} />}
       {page === 'Kanban Board' && <Kanban reviews={activeReviews} updateReview={updateReview} archiveReview={archiveReview} setModal={setModal} goTo={setPage} onOpen={setSelectedReview} />}
       {page === 'Archive' && <ArchivePage reviews={data.reviews.filter(r => r.archived)} restoreReview={restoreReview} />}
+      {page === 'Reports' && <Reports reviews={activeReviews} projects={data.projects || []} sprints={data.sprints || []} projectName={data.project.name} onRefresh={refreshAll} onOpen={setSelectedReview} />}
       {page === 'Settings' && <SettingsPageEnhanced project={data.project} user={user} saveProject={saveProject} setToast={setToast} />}
       {page === 'Admin' && <AdminPageEnhanced user={user} setToast={setToast}/>}
     </main>
@@ -207,7 +211,7 @@ function NotificationMenu({ notifications, onClose, onOpen, onRead, onReadAll })
 }
 
 function Sidebar({ page, setPage, menuOpen, setMenuOpen, collapsed, onMenuClick, user, onSignOut, project, onProjectClick }) {
-  const workspace = [["Overview", Home], ["All Reviews", MessageCircle], ["Meetings", CalendarDays], ["Kanban Board", KanbanSquare], ["Archive", Archive]];
+  const workspace = [["Overview", Home], ["All Reviews", MessageCircle], ["Meetings", CalendarDays], ["Kanban Board", KanbanSquare], ["Reports", ChartBar], ["Archive", Archive]];
   const go = name => { setPage(name); setMenuOpen(false); };
   return <aside className={`sidebar${menuOpen ? ' open' : ''}${collapsed ? ' collapsed' : ''}`}>
     <div className="sidebar-head">
@@ -436,6 +440,172 @@ function Kanban({ reviews, updateReview, archiveReview, setModal, goTo, onOpen }
   const dropProps = stage => ({ onDragOver: e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setOverCol(stage); }, onDragLeave: () => setOverCol(cur => cur === stage ? null : cur), onDrop: e => { e.preventDefault(); if (dragId) updateReview(dragId, { stage }); endDrag(); } });
   const cardProps = r => ({ draggable: true, onDragStart: e => { wasDrag.current = true; setDragId(r.id); e.dataTransfer.effectAllowed = 'move'; }, onDragEnd: endDrag, onClick: () => openCard(r) });
   return <section className="page kanban-page"><PageHeading title="Kanban Board" action={<div className="kanban-actions"><div className="view-switch"><button className={view === 'board' ? 'active' : ''} onClick={() => setView('board')} aria-label="Board view"><LayoutGrid size={16}/></button><button className={view === 'list' ? 'active' : ''} onClick={() => setView('list')} aria-label="List view"><Rows size={16}/></button></div><button className="ghost-button" onClick={() => goTo('Meetings')}><Pin size={15}/> From Meeting</button><button className="primary-button" onClick={() => setModal('review')}><Plus size={16}/> Submit Review</button></div>}/>{view === 'board' ? <div className="board">{STAGE_META.map(({ name: stage, Icon, color }) => <div className={`board-column${overCol === stage ? ' drag-over' : ''}`} key={stage} {...dropProps(stage)}><div className="board-column-head"><h3><Icon size={15} color={color}/> {stage}</h3><span>{reviews.filter(r=>r.stage===stage).length}</span></div>{reviews.filter(r=>r.stage===stage).map(r=><article className={`kanban-card${dragId === r.id ? ' dragging' : ''}`} key={r.id} {...cardProps(r)}><div className="kanban-title-row"><h4>{r.title}</h4><span>{r.key ? `${r.key} · ` : ''}{ageLabel(r.createdAt)}</span></div><p className="kanban-assignee"><User size={12}/> {r.assignee}</p><div className="kanban-footer"><Priority value={r.priority}/><span className="kanban-due"><Clock size={12}/> {shortDate(r.due)}</span></div><div className="kanban-tools"><select value={r.stage} onClick={e=>e.stopPropagation()} onChange={e=>updateReview(r.id,{stage:e.target.value})} aria-label="Move card">{STAGES.map(s=><option key={s}>{s}</option>)}</select><button onClick={e=>{e.stopPropagation(); archiveReview(r.id);}} aria-label="Archive card"><Archive size={14}/></button></div></article>)}<button className="add-card" onClick={()=>setModal('review')}><Plus size={15}/> Add item</button></div>)}</div> : <div className="kanban-list">{STAGE_META.map(({ name: stage, Icon, color }) => { const items = reviews.filter(r => r.stage === stage); return <section className={`kanban-group${overCol === stage ? ' drag-over' : ''}`} key={stage} {...dropProps(stage)}><header className="kanban-group-head"><Icon size={16} color={color}/> {stage}<span>{items.length}</span></header>{items.length ? items.map(r => <article className={`kanban-row${dragId === r.id ? ' dragging' : ''}`} key={r.id} {...cardProps(r)}><strong>{r.title}</strong><span className="kanban-row-assignee"><User size={13}/> {r.assignee || 'Unassigned'}</span><Priority value={r.priority}/><span className="kanban-row-due"><Clock size={12}/> {r.due ? shortDate(r.due) : '—'}</span></article>) : <p className="kanban-empty">Empty</p>}</section>; })}</div>}</section>; }
+
+const RAG_META = {
+  'On Track': { color: '#22c55e', Icon: CheckCircle2 },
+  'At Risk': { color: '#f59e0b', Icon: TriangleAlert },
+  Delayed: { color: '#ef4444', Icon: XCircle }
+};
+function RagPill({ value }) {
+  const meta = RAG_META[value] || RAG_META['On Track'];
+  const Icon = meta.Icon;
+  return <span className={`rag ${value.toLowerCase().replace(' ', '-')}`}><Icon size={14}/> {value}</span>;
+}
+function Donut({ segments, size = 150, thickness = 26 }) {
+  const total = segments.reduce((sum, item) => sum + item.value, 0);
+  const radius = (size - thickness) / 2;
+  const circle = 2 * Math.PI * radius;
+  let acc = 0;
+  return <svg className="donut" width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label="Distribution chart">
+    <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#eef1f5" strokeWidth={thickness} />
+    {segments.map((item, index) => {
+      if (!total || !item.value) return null;
+      const frac = item.value / total;
+      const el = <circle key={index} cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={item.color} strokeWidth={thickness} strokeDasharray={`${frac * circle} ${circle}`} strokeDashoffset={-acc * circle} strokeLinecap="butt" transform={`rotate(-90 ${size / 2} ${size / 2})`} />;
+      acc += frac;
+      return el;
+    })}
+  </svg>;
+}
+function BurndownChart({ days }) {
+  const width = 720; const height = 250; const padL = 36; const padR = 10; const padT = 12; const padB = 26;
+  const maxY = Math.max(1, ...days.map(d => Math.max(d.remaining, d.ideal)));
+  const x = i => padL + (days.length > 1 ? i / (days.length - 1) : 0.5) * (width - padL - padR);
+  const y = v => padT + (1 - v / maxY) * (height - padT - padB);
+  const line = points => points.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p).toFixed(1)}`).join(' ');
+  const ticks = [0, Math.round(maxY / 2), Math.ceil(maxY)];
+  const labelIdx = days.length > 4 ? [0, Math.floor(days.length / 3), Math.floor(days.length * 2 / 3), days.length - 1] : days.map((_, i) => i);
+  return <svg className="chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Sprint burndown">
+    {ticks.map(t => <g key={t}><line x1={padL} x2={width - padR} y1={y(t)} y2={y(t)} stroke="#eef1f5" /><text x={padL - 8} y={y(t) + 4} textAnchor="end">{t}</text></g>)}
+    {labelIdx.map(i => <text key={i} x={x(i)} y={height - 6} textAnchor="middle">{days[i].date.slice(5)}</text>)}
+    <path d={line(days.map(d => d.ideal))} fill="none" stroke="#9aa5b5" strokeWidth="1.5" strokeDasharray="5 4" />
+    <path d={line(days.map(d => d.remaining))} fill="none" stroke="#3b82f6" strokeWidth="2" />
+    {days.map((d, i) => <circle key={i} cx={x(i)} cy={y(d.remaining)} r="3" fill="#fff" stroke="#3b82f6" strokeWidth="2" />)}
+  </svg>;
+}
+function CfdChart({ points }) {
+  const width = 720; const height = 240; const padL = 32; const padR = 10; const padT = 12; const padB = 26;
+  const maxY = Math.max(1, ...points.map(p => p.done + p.active + p.todo));
+  const x = i => padL + (points.length > 1 ? i / (points.length - 1) : 0.5) * (width - padL - padR);
+  const y = v => padT + (1 - v / maxY) * (height - padT - padB);
+  const area = (low, high) => {
+    const top = high.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+    const bottom = low.map((v, i) => `L${x(points.length - 1 - i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+    return `${top} ${bottom} Z`;
+  };
+  const done = points.map(p => p.done);
+  const active = points.map(p => p.done + p.active);
+  const todo = points.map(p => p.done + p.active + p.todo);
+  const zeros = points.map(() => 0);
+  return <svg className="chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Cumulative flow">
+    {[0, Math.round(maxY / 2), Math.ceil(maxY)].map(t => <g key={t}><line x1={padL} x2={width - padR} y1={y(t)} y2={y(t)} stroke="#eef1f5" /><text x={padL - 8} y={y(t) + 4} textAnchor="end">{t}</text></g>)}
+    {points.map((p, i) => <text key={i} x={x(i)} y={height - 6} textAnchor="middle">{p.label}</text>)}
+    <path d={area(active, todo)} fill="#cbd5e1" opacity="0.7" />
+    <path d={area(done, active)} fill="#60a5fa" opacity="0.6" />
+    <path d={area(zeros, done)} fill="#34d399" opacity="0.55" />
+  </svg>;
+}
+function Reports({ reviews, projects, sprints, projectName, onRefresh, onOpen }) {
+  const [tab, setTab] = useState('portfolio');
+  const [projectId, setProjectId] = useState('');
+  const [assignee, setAssignee] = useState('');
+  const [burnId, setBurnId] = useState('');
+  const [burn, setBurn] = useState(null);
+  const [burnLoading, setBurnLoading] = useState(false);
+  const [expandedSprint, setExpandedSprint] = useState(null);
+  const [overdueOnly, setOverdueOnly] = useState(false);
+  const today = new Date().toISOString().slice(0, 10);
+  const tabs = [
+    { id: 'portfolio', label: 'Portfolio & PMO', desc: 'Cross-project health, RAG status, portfolio overview' },
+    { id: 'scrum', label: 'Scrum & Agile', desc: 'Sprint reports, velocity, burndown, CFD' },
+    { id: 'tasks', label: 'Tasks & Team', desc: 'Task status, priority, workload, overdue' }
+  ];
+  const portfolio = useMemo(() => portfolioProjects(reviews, projects, projectName, today), [reviews, projects, projectName]);
+  const overview = useMemo(() => taskOverview(reviews, today), [reviews]);
+  const projectList = projects && projects.length ? projects : [{ id: 'default', name: projectName }];
+  const effectiveProjectId = projectId || projectList[0].id;
+  const scopedProject = pid => (r => (r.projectId || 'default') === pid);
+  const projectReviews = useMemo(() => activeReviews(reviews).filter(scopedProject(effectiveProjectId)), [reviews, effectiveProjectId]);
+  const owners = useMemo(() => [...new Set(projectReviews.map(r => r.assignee).filter(Boolean))], [projectReviews]);
+  const teamReviews = useMemo(() => assignee ? projectReviews.filter(r => r.assignee === assignee) : projectReviews, [projectReviews, assignee]);
+  const projectSprints = useMemo(() => {
+    const direct = sprints.filter(s => (s.projectId || 'default') === effectiveProjectId);
+    return direct.length || projectList.length > 1 ? direct : sprints;
+  }, [sprints, effectiveProjectId, projectList.length]);
+  const burnSprintId = burnId || (projectSprints.find(s => s.status === 'active') || projectSprints[0] || {}).id || '';
+  useEffect(() => {
+    if (!burnSprintId) { setBurn(null); return; }
+    let cancelled = false;
+    setBurnLoading(true);
+    reportsApi.burndown(burnSprintId).then(data => { if (!cancelled) { setBurn(data); setBurnLoading(false); } }).catch(() => { if (!cancelled) setBurnLoading(false); });
+    return () => { cancelled = true; };
+  }, [burnSprintId]);
+  const velocity = useMemo(() => projectSprints.map(sprint => ({ sprint, ...sprintStats(teamReviews, sprint, today) })), [projectSprints, teamReviews]);
+  const cfd = useMemo(() => projectSprints.map(sprint => {
+    const items = sprintTasks(teamReviews, sprint);
+    const done = items.filter(isResolved).length;
+    const active = items.filter(r => !isResolved(r) && (r.stage === 'In Progress' || r.stage === 'Review')).length;
+    return { label: sprint.name, done, active, todo: items.length - done - active };
+  }), [projectSprints, teamReviews]);
+  const statusData = useMemo(() => statusCounts(teamReviews), [teamReviews]);
+  const priorityData = useMemo(() => priorityCounts(teamReviews), [teamReviews]);
+  const workloadRows = useMemo(() => teamWorkload(teamReviews), [teamReviews]);
+  const hours = useMemo(() => hoursTotals(teamReviews), [teamReviews]);
+  const taskRows = useMemo(() => {
+    const rows = [...teamReviews].sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999'));
+    return overdueOnly ? rows.filter(r => r.due && r.due < today && !isResolved(r)) : rows;
+  }, [teamReviews, overdueOnly, today]);
+  const ragCounts = { 'On Track': 0, 'At Risk': 0, Delayed: 0 };
+  portfolio.forEach(p => { ragCounts[p.status] += 1; });
+  const activeTab = tabs.find(t => t.id === tab);
+  return <section className="page reports-page">
+    <PageHeading title="Reports" description={activeTab.desc} action={<button className="ghost-button" onClick={onRefresh}><RotateCcw size={15}/> Refresh</button>} />
+    <div className="report-tabs">{tabs.map(t => <button key={t.id} className={tab === t.id ? 'active' : ''} onClick={() => setTab(t.id)}>{t.label}</button>)}</div>
+    {tab === 'portfolio' && <>
+      <div className="review-kpis report-kpis"><MetricCard label="Total Projects" value={portfolio.length}/><MetricCard label="On Track" value={ragCounts['On Track']}/><MetricCard label="At Risk" value={ragCounts['At Risk']}/><MetricCard label="Delayed" value={ragCounts.Delayed}/></div>
+      <div className="report-grid-2">
+        <div className="rail-card"><h2>Projects by Status</h2><div className="donut-wrap"><Donut segments={[{ value: ragCounts['At Risk'], color: '#f59e0b' }, { value: ragCounts['On Track'], color: '#22c55e' }, { value: ragCounts.Delayed, color: '#ef4444' }]} /><div className="donut-legend"><span><i style={{ background: '#f59e0b' }}/>At Risk</span><span><i style={{ background: '#22c55e' }}/>On Track</span>{ragCounts.Delayed > 0 && <span><i style={{ background: '#ef4444' }}/>Delayed</span>}</div></div></div>
+        <div className="rail-card"><h2>Task Overview</h2><div className="report-progress-head"><span>Overall Progress</span><span>{Math.round(overview.progress * 1000) / 10}%</span></div><div className="progress report-progress"><span style={{ width: `${overview.progress * 100}%` }}/></div><div className="report-stats"><div><ListChecks size={20}/><strong>{overview.total}</strong><span>Total Tasks</span></div><div><TrendUp size={20}/><strong>{overview.done}</strong><span>Completed</span></div><div><Clock size={20}/><strong>{overview.overdue}</strong><span>Overdue</span></div></div></div>
+      </div>
+      <div className="rail-card report-table-card"><h2><Lightning size={17}/> Project Health Report</h2><div className="table-wrap"><table><thead><tr><th>Project</th><th>Status</th><th>Tasks</th><th>Done</th><th>Overdue</th><th>Progress</th><th>Active Sprint</th><th>Reason</th></tr></thead><tbody>{portfolio.map(p => {
+        const pct = Math.round(p.progress * 100);
+        const activeSprint = sprints.find(s => (s.projectId || 'default') === p.id && s.status === 'active');
+        return <tr key={p.id}><td><span className="project-cell"><span className="avatar" style={{ background: '#6366f1' }}>{p.name.slice(0, 2).toUpperCase()}</span><strong>{p.name}</strong></span></td><td><RagPill value={p.status}/></td><td>{p.tasks}</td><td className="num-done">{p.done}</td><td className={p.overdue ? 'num-overdue' : ''}>{p.overdue}</td><td><span className="health-progress"><span className="progress"><span style={{ width: `${pct}%` }}/></span>{pct}%</span></td><td>{activeSprint ? activeSprint.name : '—'}</td><td>{p.tasks === 0 ? 'No tasks yet' : p.overdue > 0 ? `Only ${pct}% complete` : `${pct}% complete`}</td></tr>;
+      })}</tbody></table></div></div>
+    </>}
+    {tab === 'scrum' && <>
+      <div className="report-filters"><label>Select Project: <select value={effectiveProjectId} onChange={e => setProjectId(e.target.value)}>{projectList.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label><label>Filter Assignee: <select value={assignee} onChange={e => setAssignee(e.target.value)}><option value="">Semua User</option>{owners.map(o => <option key={o} value={o}>{o}</option>)}</select></label></div>
+      <div className="report-grid-2">
+        <div className="rail-card"><h2><TrendUp size={17}/> Velocity Report</h2><p>Estimated vs completed hours per sprint</p><VelocityBars stats={velocity} /></div>
+        <div className="rail-card"><h2><TrendUp size={17}/> Cumulative Flow Diagram</h2><p>Task distribution per sprint (current snapshot)</p>{cfd.length ? <><CfdChart points={cfd} /><div className="chart-legend"><span><i style={{ background: '#22c55e' }}/>Done</span><span><i style={{ background: '#3b82f6' }}/>In Progress</span><span><i style={{ background: '#94a3b8' }}/>To Do</span></div></> : <Empty text="No sprints yet." />}</div>
+      </div>
+      <div className="report-filters"><label>Burndown for: <select value={burnSprintId} onChange={e => setBurnId(e.target.value)}>{projectSprints.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label></div>
+      <div className="rail-card"><h2><TrendUp size={17}/> Sprint Burndown — {burn?.sprint?.name || ''}</h2><p>Remaining tasks per day vs ideal progress</p>{burnLoading ? <div className="empty-state"><Wave /> Loading burndown…</div> : burn && burn.total ? <><BurndownChart days={burn.days} /><div className="chart-legend"><span><i style={{ background: '#9aa5b5' }}/>Ideal</span><span><i style={{ background: '#3b82f6' }}/>Remaining</span></div></> : <Empty text="No burndown data for this sprint." />}</div>
+      <div className="report-section-head"><h2><Clock size={17}/> Sprint Reports ({projectSprints.length} sprints)</h2></div>
+      {projectSprints.map(sprint => {
+        const stats = sprintStats(teamReviews, sprint, today);
+        const pct = stats.total ? Math.round(stats.done / stats.total * 100) : 0;
+        const open = expandedSprint === sprint.id;
+        const items = open ? sprintTasks(teamReviews, sprint) : [];
+        return <div className="rail-card sprint-row" key={sprint.id}><button className="sprint-row-head" onClick={() => setExpandedSprint(open ? null : sprint.id)}><ChevronDown size={16} className={open ? 'open' : ''}/><div><strong>{sprint.name}</strong><StatusPill value={sprint.status === 'active' ? 'In Progress' : sprint.status === 'completed' ? 'Resolved' : 'Open'}/><small>{sprint.startDate || '—'} → {sprint.endDate || '—'} · {stats.done}/{stats.total} tasks</small></div><div className="sprint-row-stats"><span>Estimate<strong>{formatHours(stats.est)}</strong></span><span className="progress"><span style={{ width: `${pct}%` }}/></span><span>{pct}%</span></div></button>{open && <div className="sprint-row-tasks">{items.length ? items.map(r => <button key={r.id} onClick={() => onOpen(r)}><span className="dot"/><span><strong>{r.key ? `${r.key} ` : ''}{r.title}</strong><small>{r.area} · {statusFor(r)}</small></span><ArrowRight size={15}/></button>) : <p>No tasks in this sprint.</p>}</div>}</div>;
+      })}
+    </>}
+    {tab === 'tasks' && <>
+      <div className="review-kpis report-kpis"><MetricCard label="Total Tasks" value={teamReviews.length}/><MetricCard label="Overdue" value={teamReviews.filter(r => r.due && r.due < today && !isResolved(r)).length}/><MetricCard label="Est. Hours" value={formatHours(hours.est)}/><MetricCard label="Resolved" value={teamReviews.filter(isResolved).length}/></div>
+      <div className="report-grid-2">
+        <div className="rail-card"><h2><ChartPieSlice size={17}/> Task Status Report</h2><p>Distribution of tasks by status</p><div className="donut-split"><Donut size={130} segments={statusData.map((s, i) => ({ value: s.count, color: ['#6366f1', '#3b82f6', '#f59e0b', '#94a3b8', '#22c55e', '#ef4444'][i % 6] }))} /><div className="donut-legend counts">{statusData.map((s, i) => <span key={s.stage}><i style={{ background: ['#6366f1', '#3b82f6', '#f59e0b', '#94a3b8', '#22c55e', '#ef4444'][i % 6] }}/>{s.stage}<b>{s.count}</b></span>)}</div></div></div>
+        <div className="rail-card"><h2><TriangleAlert size={17}/> Priority Distribution</h2><p>Tasks per priority level</p><div className="priority-bars">{priorityData.map(p => { const max = Math.max(1, ...priorityData.map(x => x.count)); const color = p.priority === 'Blocker' ? '#ef4444' : p.priority === 'Major' ? '#f59e0b' : '#94a3b8'; return <div className="wl-row" key={p.priority}><span className="wl-name">{p.priority}</span><div className="wl-bar"><i style={{ width: `${p.count / max * 100}%`, background: color }}/></div><span className="wl-count">{p.count}</span></div>; })}</div></div>
+      </div>
+      <div className="rail-card"><h2><Users size={16}/> Team Workload</h2><p>Task count + estimated hours per person</p><div className="team-rows">{workloadRows.map(w => <div className="team-row-full" key={w.name}><span className="avatar">{w.name.slice(0, 2).toUpperCase()}</span><div><strong>{w.name}</strong><small>Est: {formatHours(w.est)}</small></div><span>{w.tasks} tasks</span></div>)}</div></div>
+      <div className="rail-card report-table-card"><div className="report-table-head"><h2><ListChecks size={17}/> Task List ({taskRows.length} tasks)</h2><label className="overdue-toggle"><input type="checkbox" checked={overdueOnly} onChange={e => setOverdueOnly(e.target.checked)}/> Show overdue only</label></div><div className="table-wrap"><table><thead><tr><th>Task</th><th>Status</th><th>Priority</th><th>Assignee</th><th>Due Date</th><th>Estimate</th></tr></thead><tbody>{taskRows.map(r => <tr key={r.id}><td><small className="row-description">{r.key || ''}</small><strong>{r.title}</strong></td><td><StatusPill value={statusFor(r)}/></td><td><Priority value={r.priority}/></td><td>{r.assignee || '—'}</td><td className={r.due && r.due < today && !isResolved(r) ? 'num-overdue' : ''}>{r.due ? slashDate(r.due) : '—'}</td><td>{r.estimateHours != null ? formatHours(r.estimateHours) : '—'}</td></tr>)}</tbody></table></div></div>
+    </>}
+  </section>;
+}
+function VelocityBars({ stats }) {
+  const max = Math.max(1, ...stats.flatMap(s => [s.est, s.doneEst]));
+  const ticks = [max, max / 2, 0];
+  return <div className="velocity"><div className="velocity-plot"><div className="velocity-axis">{ticks.map(t => <span key={t}>{Math.round(t)}h</span>)}</div>{stats.length ? stats.map(s => <div className="velocity-group" key={s.sprint.id}><div className="velocity-bars"><span style={{ height: `${s.est / max * 100}%`, background: '#6366f1' }} title={`Estimated ${formatHours(s.est)}`}/><span style={{ height: `${s.doneEst / max * 100}%`, background: '#22c55e' }} title={`Completed ${formatHours(s.doneEst)}`}/></div><small>{s.sprint.name}</small></div>) : <p>No sprint data.</p>}</div><div className="chart-legend"><span><i style={{ background: '#6366f1' }}/>Estimated</span><span><i style={{ background: '#22c55e' }}/>Completed</span></div></div>;
+}
 
 function ArchivePage({ reviews, restoreReview }) { return <section className="page"><PageHeading eyebrow="PROJECT TRACKER" title="Archive" description="Resolved or paused items stay here without disappearing."/>{reviews.length ? <div className="archive-list">{reviews.map(r=><article key={r.id}><div><Priority value={r.priority}/><h3>{r.title}</h3><p>{r.area} · Archived item</p></div><button className="text-button" onClick={()=>restoreReview(r.id)}>Restore <ArrowRight size={15}/></button></article>)}</div> : <Empty text="Your archive is empty."/>}</section>; }
 

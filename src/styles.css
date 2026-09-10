@@ -435,3 +435,85 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .auth-card{padding:24px}
 .auth-card h1{font-size:20px}
 }
+.report-tabs{display:flex;gap:26px;border-bottom:1px solid #e9edf3;margin-bottom:22px}
+.report-tabs button{padding:10px 2px;font-size:14px;color:#8b96a8;border-bottom:2px solid transparent;margin-bottom:-1px}
+.report-tabs button.active{color:#4f46e5;font-weight:600;border-bottom-color:#4f46e5}
+.report-kpis{grid-template-columns:repeat(4,1fr)}
+.report-grid-2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:14px;margin-bottom:14px}
+.rail-card h2 svg{vertical-align:-3px;margin-right:2px}
+.rail-card>p{margin:4px 0 13px;font-size:12px;color:#99a3b2}
+.donut-wrap{display:flex;flex-direction:column;align-items:center;gap:14px;padding:10px 0}
+.donut-legend{display:flex;gap:16px;flex-wrap:wrap;justify-content:center;font-size:12px;color:#5b6a7f}
+.donut-legend span{display:inline-flex;align-items:center;gap:6px}
+.donut-legend i{width:8px;height:8px;border-radius:50%}
+.donut-legend.counts{flex-direction:column;align-items:stretch;gap:8px}
+.donut-legend.counts span{display:flex;gap:8px}
+.donut-legend.counts b{margin-left:auto;color:#232f42}
+.donut-split{display:flex;align-items:center;gap:22px}
+.report-progress-head{display:flex;justify-content:space-between;font-size:13px;color:#5b6a7f;margin-bottom:8px}
+.report-progress{height:6px;margin-bottom:18px}
+.report-progress span{background:#4f46e5}
+.report-stats{display:grid;grid-template-columns:repeat(3,1fr);text-align:center;gap:10px}
+.report-stats svg{color:#5b6a7f}
+.report-stats strong{display:block;font-size:24px;font-weight:700;color:#1c2739;margin:6px 0 2px}
+.report-stats span{font-size:12px;color:#98a4b3}
+.report-table-card{margin-bottom:14px}
+.report-table-card h2{display:flex;align-items:center;gap:8px;margin-bottom:14px}
+.project-cell{display:flex;align-items:center;gap:10px}
+.project-cell .avatar{width:30px;height:30px;font-size:10px;flex:none;color:#fff}
+.num-done{color:#22c55e;font-weight:600}
+.num-overdue{color:#e05252;font-weight:600}
+.health-progress{display:flex;align-items:center;gap:8px;min-width:140px}
+.health-progress .progress{flex:1;height:5px}
+.health-progress .progress span{background:#4f46e5}
+.rag{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;border-radius:999px;padding:4px 10px;white-space:nowrap}
+.rag.on-track{background:#e9f9f0;color:#189a5f}
+.rag.at-risk{background:#fef5e7;color:#d9930d}
+.rag.delayed{background:#fdeeee;color:#e05252}
+.report-filters{display:flex;align-items:center;gap:14px;margin-bottom:16px;flex-wrap:wrap}
+.report-filters label{display:flex;align-items:center;gap:8px;font-size:13px;color:#5b6a7f}
+.report-filters select{height:36px;border:1px solid #e6ebf2;border-radius:9px;padding:0 10px;font-size:13px;color:#232f42;background:#fff;min-width:180px}
+.report-section-head{margin:22px 0 12px}
+.report-section-head h2{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:600;margin:0}
+.chart{width:100%;height:auto}
+.chart text{font-size:11px;fill:#98a4b3}
+.chart-legend{display:flex;gap:16px;justify-content:center;font-size:12px;color:#5b6a7f;margin-top:10px}
+.chart-legend span{display:inline-flex;align-items:center;gap:6px}
+.chart-legend i{width:8px;height:8px;border-radius:50%}
+.velocity-plot{display:flex;gap:6px;align-items:stretch;min-height:220px}
+.velocity-axis{display:flex;flex-direction:column;justify-content:space-between;font-size:11px;color:#98a4b3;padding:0 4px 22px 0;text-align:right}
+.velocity-group{flex:1;display:flex;flex-direction:column;align-items:center;gap:8px;min-width:0}
+.velocity-bars{flex:1;display:flex;align-items:flex-end;gap:8px;min-height:180px;width:100%;justify-content:center;border-left:1px solid #eef1f5;border-bottom:1px solid #eef1f5;padding:0 8px}
+.velocity-bars span{width:36px;max-width:40%;border-radius:5px 5px 0 0;min-height:3px}
+.velocity-group small{font-size:12px;color:#5b6a7f}
+.sprint-row{margin-bottom:12px}
+.sprint-row-head{width:100%;display:flex;align-items:center;gap:12px;text-align:left;padding:4px 0}
+.sprint-row-head>svg{color:#8b96a8;flex:none;transition:transform .15s}
+.sprint-row-head>svg.open{transform:rotate(180deg)}
+.sprint-row-head>div:nth-child(2){flex:1;min-width:0}
+.sprint-row-head strong{font-size:14px;font-weight:600;color:#232f42;margin-right:8px}
+.sprint-row-head small{display:block;font-size:12px;color:#98a4b3;margin-top:4px}
+.sprint-row-stats{display:flex;align-items:center;gap:14px;font-size:12px;color:#98a4b3}
+.sprint-row-stats strong{display:block;font-size:15px;color:#232f42}
+.sprint-row-stats .progress{width:90px;height:5px}
+.sprint-row-tasks{border-top:1px solid #eef1f5;margin-top:12px;padding-top:6px}
+.sprint-row-tasks>button{width:100%;display:flex;align-items:center;gap:10px;text-align:left;padding:10px 4px;border-bottom:1px solid #f2f5f8}
+.sprint-row-tasks>button:last-child{border-bottom:0}
+.sprint-row-tasks strong{font-size:13px;font-weight:500;color:#232f42}
+.sprint-row-tasks small{display:block;font-size:11px;color:#98a4b3;margin-top:2px}
+.sprint-row-tasks>button>span:nth-child(2){flex:1;min-width:0}
+.sprint-row-tasks>button>svg{color:#98a4b3;flex:none}
+.sprint-row-tasks p{font-size:12px;color:#98a4b3;padding:8px 4px}
+.priority-bars{display:grid;gap:4px;padding:6px 0}
+.team-rows{display:grid}
+.team-row-full{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid #eef1f5}
+.team-row-full:last-child{border-bottom:0}
+.team-row-full .avatar{width:32px;height:32px;flex:none;font-size:11px;background:#eef2f7;color:#5b6a7f}
+.team-row-full>div:nth-child(2){flex:1;min-width:0}
+.team-row-full strong{display:block;font-size:13px;font-weight:600;color:#232f42}
+.team-row-full small{display:block;font-size:11px;color:#98a4b3;margin-top:2px}
+.team-row-full>span:last-child{font-size:12px;color:#5b6a7f;white-space:nowrap}
+.report-table-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.report-table-head h2{display:flex;align-items:center;gap:8px;margin:0}
+.overdue-toggle{display:flex;align-items:center;gap:7px;font-size:12px;color:#5b6a7f}
+@media(max-width:900px){.report-grid-2{grid-template-columns:1fr}.report-kpis{grid-template-columns:repeat(2,1fr)}}
