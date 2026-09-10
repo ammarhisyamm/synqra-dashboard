@@ -27,6 +27,7 @@ import { DeleteProjectModal } from './components/projects/DeleteProjectModal';
 import { CommandPalette } from './components/navigation/CommandPalette';
 import { MeetingEditor } from './components/meetings/MeetingEditor';
 import { KanbanWorkspace } from './components/kanban/KanbanWorkspace';
+import { AppSelect } from './components/common/AppSelect';
 
 const REPORT_COLORS = {
   accent: '#111b30',
@@ -834,7 +835,6 @@ function ActionDialog({ dialog, onClose }) {
   return <div className="modal-backdrop" onMouseDown={onClose}><section className="action-dialog" onMouseDown={e => e.stopPropagation()}><span className={`action-icon${dialog.danger ? ' danger' : ''}${isSuccess ? ' success' : ''}`}>{dialog.icon}</span><h2>{dialog.title}</h2><p>{dialog.subtitle}</p>{isSuccess ? <button className="primary-button action-cta" onClick={() => { onClose(); dialog.onCta && dialog.onCta(); }}>{dialog.ctaLabel || 'Done'}</button> : <div className="modal-actions action-buttons"><button className="text-button" onClick={onClose}>{dialog.cancelLabel || 'Cancel'}</button><button className={dialog.danger ? 'danger-button' : 'primary-button'} onClick={() => { dialog.onConfirm && dialog.onConfirm(); onClose(); }}>{dialog.confirmLabel || 'Confirm'}</button></div>}</section></div>;
 }
 
-function AppSelectLegacy({ value, options, onChange, ariaLabel, placeholder = 'Select…' }) { const [open, setOpen] = useState(false); const items = options.map(option => typeof option === 'string' ? { value: option, label: option } : option); const current = items.find(item => item.value === value); return <span className="app-select"><button type="button" className="app-select-trigger" aria-label={ariaLabel} aria-expanded={open} onClick={() => setOpen(current => !current)}><span>{current?.label || placeholder}</span><ChevronDown size={15}/></button>{open && <span className="app-select-menu">{items.map(item => <button type="button" key={item.value} className={item.value === value ? 'selected' : ''} onClick={() => { onChange(item.value); setOpen(false); }}><span>{item.label}</span>{item.value === value && <Check size={14}/>}</button>)}</span>}</span>; }
 function SelectField({ label,value,values,onChange }) { const icons = { Phase: ClipboardList, Team: Users, Status: CircleDot, Priority: Flag, Epic: Target, Feature: SquaresFour, Sprint: Rows, Labels: Tag, 'Estimate (hours)': Clock3 }; const Icon = icons[label] || SlidersHorizontal; return <label><span className="field-label"><Icon size={14}/>{label}</span><AppSelect value={value} options={values} onChange={onChange} ariaLabel={label}/></label>; }
 function Modal({title,subtitle,onClose,children}) { return <div className="modal-backdrop" onMouseDown={onClose}><section className="modal" onMouseDown={e=>e.stopPropagation()}><button className="modal-close" onClick={onClose}><X size={19}/></button><h2>{title}</h2><p>{subtitle}</p>{children}</section></div>; }
 
