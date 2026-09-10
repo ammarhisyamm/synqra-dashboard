@@ -116,3 +116,19 @@ h1,h2,h3,h4,strong,b,button,.breadcrumb-title,.side-label,.command-group-label,.
 .collab-invite-row{display:grid;grid-template-columns:minmax(0,1fr) 120px auto;gap:10px}.collab-email{width:100%;padding:0 11px}.collab-invite-row>.app-select{width:100%}.collab-owner,.collab-row{border-color:var(--ui-border);border-radius:var(--ui-radius-md)}
 
 @media(max-width:650px){.modal,.action-dialog,.project-modal,.delete-project-modal,.collab-modal,.metadata-modal,.sprint-modal{width:min(100% - 24px,520px);padding:20px}.collab-invite-row{grid-template-columns:1fr}.collab-invite-row .primary-button{width:100%}.project-modal-icon,.collab-icon,.sprint-modal-icon,.delete-project-icon{margin-bottom:14px}}
+
+/* Board header: keep the project anchor centered while controls fill the row. */
+@media(min-width:1181px){
+  .kanban-header-bar{display:grid;grid-template-columns:max-content minmax(0,1fr);align-items:center;flex-wrap:nowrap}
+  .kanban-breadcrumbs{align-self:center;justify-self:start}
+  .kanban-toolbar-actions{width:100%;flex:1 1 auto;min-width:0;flex-wrap:nowrap;justify-content:stretch}
+  .kanban-header-bar .kanban-search{width:auto;flex:1 1 190px;min-width:150px}
+  .kanban-header-bar .toolbar-select{flex:1 1 0;min-width:0;height:auto;padding:0;border:0;background:transparent}
+  .kanban-header-bar .toolbar-select.compact{flex:1 1 0;min-width:0}
+  .kanban-header-bar .toolbar-select .app-select-trigger{width:100%;min-width:0}
+}
+
+/* AppSelect owns the control chrome; its wrapper must never create a second border. */
+.kanban-header-bar .toolbar-select{height:auto;padding:0;border:0;background:transparent}
+.kanban-header-bar .toolbar-select .app-select-menu{min-width:100%;width:max-content;max-width:min(320px,calc(100vw - 32px))}
+.kanban-header-bar .toolbar-select .app-select-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
