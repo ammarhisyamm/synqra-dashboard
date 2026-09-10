@@ -2,12 +2,12 @@ import { STORAGE_KEY } from '../constants/workflow';
 
 export const REPORT_COLORS = {
   accent: '#111b30',
-  accentSoft: '#4f46e5',
-  info: '#6366f1',
-  success: '#334155',
-  warning: '#64748b',
-  danger: '#94a3b8',
-  muted: '#cbd5e1'
+  accentSoft: '#33445e',
+  info: '#526784',
+  success: '#248764',
+  warning: '#a76d2a',
+  danger: '#c24d4d',
+  muted: '#a7b3c2'
 };
 
 export const seed = {

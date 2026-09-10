@@ -7,10 +7,10 @@ export const PRIORITIES = ['Blocker', 'Major', 'Minor'];
 export const STATUS_OPTIONS = ['Open', 'In Progress', 'Review', 'Resolved', 'Rejected'];
 export const STAGE_ICONS = [ClipboardList, CircleDot, Target, CheckCircle2, Check];
 export const STAGE_META = [
-  { name: 'Planning', Icon: ListChecks, color: '#8b5cf6' },
-  { name: 'Review', Icon: MessageCircle, color: '#3b82f6' },
-  { name: 'In Progress', Icon: MousePointer2, color: '#a855f7' },
-  { name: 'Final', Icon: Flag, color: '#3b82f6' },
-  { name: 'Completed', Icon: CheckCircle2, color: '#22c55e' }
+  { name: 'Planning', Icon: ListChecks, color: '#718199' },
+  { name: 'Review', Icon: MessageCircle, color: '#526784' },
+  { name: 'In Progress', Icon: MousePointer2, color: '#33445e' },
+  { name: 'Final', Icon: Flag, color: '#111b30' },
+  { name: 'Completed', Icon: CheckCircle2, color: '#248764' }
 ];
 export const PROJECTS = ['Omnichannel', 'Kaizen Project', 'Billing Portal', 'Onboarding Revamp', 'Test ER'];

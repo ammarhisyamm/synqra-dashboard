@@ -11,21 +11,23 @@ Use CSS custom properties for new work. Existing literal values should be migrat
 ```css
 :root {
   --color-primary: #111b30;
-  --color-primary-hover: #1e2b45;
+  --color-primary-hover: #25334a;
+  --color-primary-soft: #edf1f6;
   --color-text: #172238;
-  --color-text-muted: #71819a;
-  --color-text-subtle: #94a3b8;
+  --color-text-secondary: #526075;
+  --color-text-muted: #718199;
+  --color-text-subtle: #98a6b9;
   --color-surface: #ffffff;
-  --color-surface-subtle: #f6f8fb;
-  --color-surface-muted: #eef2f6;
-  --color-border: #e2e8f0;
-  --color-border-strong: #dbe4ee;
-  --color-focus: #9aaccc;
-  --color-focus-ring: #e8effb;
-  --color-success: #1db77a;
-  --color-warning: #f08322;
-  --color-danger: #d8525b;
-  --color-info: #6366f1;
+  --color-surface-subtle: #f3f6f9;
+  --color-canvas: #f7f9fc;
+  --color-border: #dfe7f0;
+  --color-border-strong: #c9d5e3;
+  --color-focus: #526784;
+  --color-focus-ring: #e1e8f0;
+  --color-success: #248764;
+  --color-warning: #a76d2a;
+  --color-danger: #c24d4d;
+  --color-info: #526784;
 }
 ```
 
@@ -73,7 +75,7 @@ Use a 4px base unit. Do not add one-off margins or padding values unless an exis
 | `space-10` | 40px | Large page separation |
 | `space-12` | 48px | Major content separation |
 
-Desktop page padding is `28px 32px 62px`; mobile page padding is `20px 16px 58px` unless a dedicated full-bleed editor needs different treatment.
+Desktop page padding is `32px clamp(20px, 3vw, 44px) 72px`; mobile page padding is `20px 16px 58px` unless a dedicated full-bleed editor needs different treatment.
 
 ### Shape, borders, and elevation
 
@@ -130,7 +132,7 @@ Only use these variants for new controls:
 | Ghost / text | No container, muted text | Low-priority navigation or cancel |
 | Danger | White surface, danger border/text | Irreversible action |
 
-Default height is 35px. Use 13px UI text at weight 500. Include a 7–8px icon gap. Disabled controls use opacity and must not look enabled.
+Default height is 36px. Use 13px UI text at weight 500. Include a 7–8px icon gap. Disabled controls use opacity and must not look enabled.
 
 ### Inputs, search, and select
 
@@ -190,16 +192,16 @@ Before implementing a component or feature:
 4. Verify keyboard access, focus, close behaviour, and loading/error feedback for every request.
 5. Update this document when a reusable decision changes. Do not fork a local visual convention.
 
-## 6. Migration priorities
+## 6. Applied UI coverage
 
-When touching legacy UI, migrate only the touched component in this order:
+The shared system is applied to every current product surface:
 
-1. Typography weight and text hierarchy.
-2. Button, input, select, and modal contracts.
-3. Colour tokens and semantic status mapping.
-4. Spacing/radius/grid alignment.
+- Application shell, sidebar, top bar, project switcher, notifications, and command palette.
+- Overview, reviews, reports, admin tables, archive, meetings, meeting editor, and AI review.
+- Board, sprint planning, timeline, task-detail drawer, settings, authentication, loading, empty, and error states.
+- All shared buttons, fields, dropdowns, cards, tables, pills, dialogs, and responsive layouts.
 
-Avoid a single global visual refactor: it risks changing the approved Synqra look. This guide standardizes future work while allowing controlled incremental cleanup.
+Legacy styles may remain for structural compatibility, but `src/design-system.css` is loaded last and owns the final visual contract. A feature is incomplete if it bypasses this layer or introduces a competing palette, type scale, radius, or field anatomy.
 
 ## 7. Source of truth for implementation
 
