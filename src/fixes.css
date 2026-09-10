@@ -599,8 +599,6 @@ button,
 
 .app-select-item.selected {
   background-color: #f8fafc;
-.app-select-item.selected {
-  background-color: #f8fafc;
   color: #0f172a;
   font-weight: 500;
 }
