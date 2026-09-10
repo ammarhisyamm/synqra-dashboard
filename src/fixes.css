@@ -1,5 +1,5 @@
 .detail-grid label:nth-child(n+5)>.field-label{display:flex}.detail-grid label{min-width:0}.detail-grid .app-select{width:100%}.detail-grid .app-select-trigger{min-height:40px;font-size:14px;color:#172238}.detail-wide{grid-column:1/-1}
-.status-timeline:before{left:13px;top:13px;bottom:13px}.status-event{display:grid;grid-template-columns:26px minmax(0,1fr);gap:10px}.status-event>.history-dot{margin:4px auto 0}
+
 
 /* Design System - Strict Medium typescale for all button elements */
 button,
