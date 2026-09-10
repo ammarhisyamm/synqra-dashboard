@@ -14,6 +14,8 @@ input[type=checkbox]:checked{background:#172238;border-color:#172238;box-shadow:
 .detail-section h3{font-size:11px;letter-spacing:.12em;margin-bottom:16px;color:#7f91aa}
 .detail-grid{gap:20px 24px;border:1px solid #dfe7f1;border-radius:16px;padding:22px 20px;background:#fbfcfe}
 .detail-grid label{font-size:11px;color:#647894;gap:8px}
+.field-label{display:flex;align-items:center;gap:7px;text-transform:uppercase;letter-spacing:.08em;color:#647894;font-weight:500}
+.field-label svg{color:#647b9b;flex:none}
 .detail-grid input,.detail-grid select,.detail-section>label input,.detail-section>label select{min-height:40px;border-radius:9px;background:#fff;font-size:14px;color:#172238;padding:9px 12px}
 .detail-grid select,.detail-section>label select{appearance:auto}
 .detail-section>label{max-width:100%;font-size:11px;color:#647894}
