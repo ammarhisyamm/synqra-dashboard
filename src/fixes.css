@@ -128,15 +128,284 @@ button,
   }
 }
 
-/* Kanban Toolbar Pixel-Perfect Alignment */
-.kanban-toolbar {
+/* =====================================================
+   Kanban — New 2-row header (breadcrumbs + toolbar)
+   Only these new elements are styled here.
+   Existing kanban-list-view / kanban-board-grid / etc
+   are NOT touched — they keep their styles from
+   kanban-workspace.css.
+   ===================================================== */
+
+/* --- Row 1: Header bar ----------------------------- */
+.kanban-header-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0 12px;
+  border-bottom: 1px solid #e9edf3;
+  flex-wrap: wrap;
+}
+
+/* Breadcrumbs */
+.kanban-breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.breadcrumb-muted {
+  color: #8493a8;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.breadcrumb-sep { color: #b9c4d1; flex-shrink: 0; }
+
+.breadcrumb-title {
+  color: #1a253a;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.sprint-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #f0f9f4;
+  color: #16a34a;
+  border: 1px solid #bbf7d0;
+  border-radius: 999px;
+  padding: 3px 9px 3px 7px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.sprint-status-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #22c55e;
+  flex-shrink: 0;
+}
+
+/* Toolbar in header bar */
+.kanban-header-bar .kanban-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.kanban-header-bar .kanban-search {
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  background: #fff;
+  color: #6d7e96;
+  box-sizing: border-box;
+}
+
+.kanban-header-bar .kanban-search input {
+  border: none;
+  outline: none;
+  font-size: 13px;
+  color: #34445d;
+  background: transparent;
+  width: 140px;
+}
+
+.kanban-header-bar .toolbar-select .app-select-trigger {
+  height: 36px;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  color: #334155;
+  box-sizing: border-box;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.kanban-header-bar .toolbar-select .app-select-trigger:hover { border-color: #c7d2e0; }
+.kanban-header-bar .toolbar-select .app-select-icon { color: #64748b; flex-shrink: 0; }
+.kanban-header-bar .toolbar-select .app-select-label { font-size: 13px; font-weight: 500; color: #334155; }
+
+.kanban-header-bar .secondary-button,
+.kanban-header-bar .primary-button,
+.kanban-header-bar .create-task-cta {
+  height: 36px;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 14px;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 500;
+  box-sizing: border-box;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.kanban-header-bar .secondary-button {
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  color: #334155;
+}
+
+.kanban-header-bar .create-task-cta,
+.kanban-header-bar .primary-button {
+  border: none;
+  background: #1e293b;
+  color: #fff;
+}
+
+.kanban-header-bar .create-task-cta:hover,
+.kanban-header-bar .primary-button:hover { background: #0f172a; }
+
+/* Team avatar stack */
+.team-avatar-stack {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 2px;
+}
+
+.mini-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  font-size: 8px;
+  font-weight: 700;
+  color: #fff;
+  border: 1.5px solid #fff;
+  margin-left: -5px;
+  flex-shrink: 0;
+}
+
+.mini-avatar:first-child { margin-left: 0; }
+.avatar-bg-0 { background: #6366f1; }
+.avatar-bg-1 { background: #f59e0b; }
+.avatar-bg-2 { background: #10b981; }
+
+/* Badge count inside AppSelect */
+.app-select-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #6366f1;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+/* --- Row 2: Nav tabs bar --------------------------- */
+.kanban-nav-tabs-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin: -6px 0 16px;
-  padding-bottom: 12px;
+  margin-bottom: 14px;
   border-bottom: 1px solid #e9edf3;
+}
+
+.kanban-nav-tabs-bar .kanban-view-tabs {
+  display: flex;
+  align-items: center;
+}
+
+.view-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 14px;
+  border: none;
+  background: transparent;
+  color: #8493a8;
+  font-size: 13px;
+  font-weight: 500;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+
+.view-tab:hover { color: #334155; }
+
+.view-tab.active {
+  color: #1e293b;
+  border-bottom-color: #6366f1;
+  font-weight: 600;
+}
+
+/* Priority filter — right of nav bar */
+.kanban-nav-tabs-bar .kanban-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  padding-bottom: 4px;
+}
+
+.kanban-nav-tabs-bar .kanban-filter-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #7d8da3;
+  font-size: 12px;
+}
+
+.clear-filters-btn {
+  font-size: 12px;
+  color: #6366f1;
+  text-decoration: underline;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.task-count-label {
+  font-size: 12px;
+  color: #94a3b8;
+  white-space: nowrap;
+}
+
+@media (max-width: 1180px) {
+  .kanban-header-bar { flex-direction: column; align-items: flex-start; }
+  .kanban-nav-tabs-bar { flex-direction: column; align-items: flex-start; gap: 0; }
+}
+
+@media (max-width: 720px) {
+  .kanban-header-bar .kanban-search { width: 100%; }
+  .mini-avatar { display: none; }
 }
 
 .kanban-view-tabs {
