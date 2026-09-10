@@ -31,12 +31,12 @@ import { AppSelect } from './components/common/AppSelect';
 
 const REPORT_COLORS = {
   accent: '#111b30',
-  accentSoft: '#64748b',
-  info: '#7b8799',
-  success: '#34445d',
-  warning: '#53627a',
-  danger: '#273650',
-  muted: '#c5ceda'
+  accentSoft: '#6366f1',
+  info: '#3b82f6',
+  success: '#22c55e',
+  warning: '#f59e0b',
+  danger: '#e05252',
+  muted: '#94a3b8'
 };
 
 const seed = {
@@ -203,7 +203,11 @@ function App() {
     if (!previous) return;
     setData(prev => ({ ...prev, reviews: prev.reviews.map(r => r.id === id ? { ...r, ...patch } : r) }));
     setPendingOps(count => count + 1);
-    if (field) setSavingField({ id, field });
+    if (field) {
+      setSavingField({ id, field });
+      setSavedField(prev => (prev && prev.id === id && prev.field === field ? null : prev));
+      setFailedField(prev => (prev && prev.id === id && prev.field === field ? null : prev));
+    }
     try {
       const saved = await reviewsApi.update(id, patch);
       setData(prev => ({ ...prev, reviews: prev.reviews.map(item => item.id === id ? { ...item, ...saved } : item) }));
@@ -378,7 +382,7 @@ function App() {
       {collabOpen && <CollaboratorModal user={user} onClose={() => setCollabOpen(false)} onToast={setToast} />}
       <ErrorPanel compact key={page}>
       {page === 'Overview' && <Dashboard reviews={activeReviews} meetings={activeMeetings} workload={activeWorkload} reportByStatus={activeReportByStatus} sprints={activeSprints} goTo={setPage} onSubmitReview={() => setModal('review')} onNewMeeting={openNewMeeting} />}
-      {page === 'All Reviews' && <Reviews reviews={activeReviews} query={query} setQuery={setQuery} updateReview={updateReview} archiveReview={archiveReview} setModal={setModal} onOpen={setSelectedReview} />}
+      {page === 'All Reviews' && <Reviews reviews={activeReviews} query={query} setQuery={setQuery} updateReview={updateReview} archiveReview={archiveReview} setModal={setModal} onOpen={setSelectedReview} sync={{ saving: savingField, saved: savedField, failed: failedField }} onRetry={failed => { setFailedField(null); updateReview(failed.id, failed.patch, failed.field); }} />}
       {page === 'Meetings' && <Meetings meetings={activeMeetings} reviews={activeReviews} addMeeting={addMeeting} addReview={addReview} onDeleteMeeting={deleteMeeting} setToast={setToast} setModal={setModal} onNewMeeting={openNewMeeting} onTasksCreated={count => showSuccess(`${count} review items created`, 'Action items from the meeting notes are now on the board.', 'View board', () => setPage('Board'))} onOpen={setSelectedReview} />}
       {page === 'Meeting Editor' && <MeetingEditor user={user} onClose={() => setPage('Meetings')} onToast={setToast} onCreate={createMeetingFromEditor} />}
       {page === 'Board' && <KanbanWorkspace project={data.project} reviews={activeReviews} sprints={activeSprints} metadata={(data.metadata || []).filter(item => !item.projectId || item.projectId === activeProjectId)} projectId={activeProjectId} updateReview={updateReview} createSprint={addSprint} updateSprint={updateSprint} refreshMetadata={refreshMetadata} setModal={setModal} onOpen={setSelectedReview} />}
@@ -533,38 +537,75 @@ function Summary({ reviews, completed, blockers, overdue }) { return <aside clas
 function SprintSummary({ sprints, reviews }) { const sprint = sprints.find(item => item.status === 'active') || sprints[0]; if (!sprint) return null; const items = reviews.filter(item => item.sprintId === sprint.id || item.sprint === sprint.name); const done = items.filter(item => item.stage === 'Completed' || statusFor(item) === 'Resolved').length; return <aside className="rail-card sprint-summary"><h2>{sprint.name}</h2><p>{sprint.status} sprint{items.length ? ` · ${done}/${items.length} done` : ''}</p><div className="progress"><span style={{width:`${items.length ? done / items.length * 100 : 0}%`}}/></div><small>{sprint.goal || 'No sprint goal yet.'}</small></aside>; }
 function Metric({ label, value }) { return <div><span>{label}</span><strong>{value}</strong></div>; }
 
-function Reviews({ reviews, query, setQuery, updateReview, archiveReview, setModal, onOpen }) {
+function Reviews({ reviews, query, setQuery, updateReview, archiveReview, setModal, onOpen, sync, onRetry }) {
+  const STATUS_LIST = ['Open', 'In Progress', 'Review', 'Resolved', 'Rejected'];
+  const PRIORITY_RANK = { Blocker: 0, Major: 1, Minor: 2 };
+  const [team, setTeam] = useState('All teams');
   const [status, setStatus] = useState('All statuses');
   const [priority, setPriority] = useState('All priorities');
   const [owner, setOwner] = useState('All owners');
   const [phase, setPhase] = useState('All phases');
+  const [due, setDue] = useState('All dates');
+  const [sort, setSort] = useState('Newest');
   const [pageIdx, setPageIdx] = useState(0);
   const [selected, setSelected] = useState([]);
   const today = new Date().toISOString().slice(0, 10);
-  const owners = useMemo(() => [...new Set(reviews.map(r => r.assignee))], [reviews]);
+  const owners = useMemo(() => [...new Set(reviews.map(r => r.assignee).filter(Boolean))], [reviews]);
+  useEffect(() => { setPageIdx(0); }, [team, status, priority, owner, phase, due, sort, query]);
+  const matchDue = r => due === 'All dates' ? true : due === 'Due today' ? r.due === today : due === 'Overdue' ? Boolean(r.due && r.due < today && statusFor(r) !== 'Resolved') : due === 'Upcoming' ? Boolean(r.due && r.due >= today) : !r.due;
   const filtered = reviews.filter(r =>
+    (team === 'All teams' || r.area === team) &&
     (status === 'All statuses' || statusFor(r) === status) &&
     (priority === 'All priorities' || r.priority === priority) &&
     (owner === 'All owners' || r.assignee === owner) &&
     (phase === 'All phases' || r.stage === phase) &&
+    matchDue(r) &&
     `${r.title} ${r.description || ''} ${r.assignee || ''}`.toLowerCase().includes(query.toLowerCase()));
+  const sorted = [...filtered].sort((a, b) => {
+    if (sort === 'Oldest') return (a.createdAt || '').localeCompare(b.createdAt || '');
+    if (sort === 'Due date') return (a.due || '9999').localeCompare(b.due || '9999');
+    if (sort === 'Priority') return (PRIORITY_RANK[a.priority] ?? 9) - (PRIORITY_RANK[b.priority] ?? 9);
+    if (sort === 'Title A–Z') return a.title.localeCompare(b.title);
+    return (b.createdAt || '').localeCompare(a.createdAt || '');
+  });
+  const chips = [
+    team !== 'All teams' && { key: 'team', label: team, clear: () => setTeam('All teams') },
+    status !== 'All statuses' && { key: 'status', label: status, clear: () => setStatus('All statuses') },
+    priority !== 'All priorities' && { key: 'priority', label: priority, clear: () => setPriority('All priorities') },
+    owner !== 'All owners' && { key: 'owner', label: owner, clear: () => setOwner('All owners') },
+    phase !== 'All phases' && { key: 'phase', label: phase, clear: () => setPhase('All phases') },
+    due !== 'All dates' && { key: 'due', label: due, clear: () => setDue('All dates') },
+    query.trim() && { key: 'query', label: `“${query.trim()}”`, clear: () => setQuery('') }
+  ].filter(Boolean);
+  const clearAll = () => { setTeam('All teams'); setStatus('All statuses'); setPriority('All priorities'); setOwner('All owners'); setPhase('All phases'); setDue('All dates'); setQuery(''); };
   const allSelected = filtered.length > 0 && filtered.every(r => selected.includes(r.id));
   const toggleAll = () => setSelected(allSelected ? selected.filter(id => !filtered.some(r => r.id === id)) : [...new Set([...selected, ...filtered.map(r => r.id)])]);
   const open = reviews.filter(r => statusFor(r) === 'Open').length;
   const dueToday = reviews.filter(r => r.due === today).length;
   const overdue = reviews.filter(r => r.due < today && statusFor(r) !== 'Resolved').length;
   const pageSize = 10;
-  const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const pages = Math.max(1, Math.ceil(sorted.length / pageSize));
   const safePage = Math.min(pageIdx, pages - 1);
-  const rows = filtered.slice(safePage * pageSize, safePage * pageSize + pageSize);
-  const from = filtered.length ? safePage * pageSize + 1 : 0;
-  const to = Math.min(filtered.length, safePage * pageSize + pageSize);
+  const rows = sorted.slice(safePage * pageSize, safePage * pageSize + pageSize);
+  const from = sorted.length ? safePage * pageSize + 1 : 0;
+  const to = Math.min(sorted.length, safePage * pageSize + pageSize);
+  const bulkSet = patch => { selected.forEach(id => updateReview(id, patch, Object.keys(patch)[0])); };
   const archiveSelected = () => { selected.forEach(id => updateReview(id, { archived: true })); setSelected([]); };
+  const filterClass = active => `filter${active ? ' active' : ''}`;
   return <section className="page reviews-page"><PageHeading title="All Reviews" action={<div className="heading-actions"><button className="secondary-button" onClick={() => downloadReviewsCsv(filtered)}><Download size={16}/> Export CSV</button><button className="primary-button" onClick={() => setModal('review')}><Plus size={17}/> Submit Review</button></div>}/>
     <div className="review-kpis"><MetricCard label="Total Tasks" value={reviews.length}/><MetricCard label="Open" value={open}/><MetricCard label="Assigned to me" value={reviews.filter(r=>r.assignee==='Aria').length}/><MetricCard label="Due today" value={dueToday}/><MetricCard label="Overdue" value={overdue}/></div>
-    <div className="table-wrap"><table><thead><tr><th><input type="checkbox" checked={allSelected} onChange={toggleAll} aria-label="Select all"/></th><th>Title</th><th>Team</th><th>Phase</th><th>Priority</th><th>Assignee</th><th>Status</th><th>Due Date</th><th/></tr></thead><tbody>{rows.map(r => <tr key={r.id} className={`review-row${selected.includes(r.id) ? ' selected' : ''}`} onClick={() => onOpen(r)}><td><input type="checkbox" checked={selected.includes(r.id)} aria-label={`Select ${r.title}`} onClick={e=>e.stopPropagation()} onChange={()=>setSelected(s=>s.includes(r.id)?s.filter(id=>id!==r.id):[...s,r.id])}/></td><td><strong>{r.title}</strong>{r.key ? <small className="row-description">{r.key}</small> : null}{r.description && <small className="row-description">{r.description}</small>}</td><td>{r.area}</td><td onClick={e => e.stopPropagation()}><AppSelect value={r.stage} options={STAGES} onChange={val => updateReview(r.id, { stage: val })} ariaLabel="Change phase"/></td><td><Priority value={r.priority}/></td><td onClick={e => e.stopPropagation()}><span className="assignee"><User size={13}/><AppSelect value={r.assignee || ''} options={owners.map(o => ({ value: o, label: o }))} onChange={val => updateReview(r.id, { assignee: val })} ariaLabel="Change assignee"/></span></td><td><StatusPill value={statusFor(r)}/></td><td>{r.due ? slashDate(r.due) : '—'}</td><td><button className="row-action" onClick={e=>{e.stopPropagation(); archiveReview(r.id);}} aria-label="Archive review"><Archive size={16}/></button></td></tr>)}</tbody></table><div className="table-pagination"><span>{selected.length ? `${selected.length} selected` : 'Rows per page'} <b>10 <ChevronDown size={13}/></b></span><span>{from}–{to} of {filtered.length}</span><span className="pagination-arrows"><button className="page-arrow" disabled={safePage===0} onClick={()=>setPageIdx(safePage-1)} aria-label="Previous page"><ChevronLeft size={15}/></button> {safePage + 1} / {pages} <button className="page-arrow" disabled={safePage>=pages-1} onClick={()=>setPageIdx(safePage+1)} aria-label="Next page"><ChevronRight size={15}/></button></span></div></div>
-    {selected.length > 0 && <div className="bulk-bar"><strong>{selected.length} selected</strong><button onClick={() => setSelected([])}><X size={15}/> Clear</button><button onClick={archiveSelected}><Archive size={15}/> Archive</button></div>}
+    <div className="toolbar"><label className="search"><Search size={17}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search title, description, assignee…" aria-label="Search reviews"/></label><AppSelect className={filterClass(team !== 'All teams')} value={team} options={['All teams', ...AREAS]} onChange={setTeam} ariaLabel="Filter by team"/><AppSelect className={filterClass(status !== 'All statuses')} value={status} options={['All statuses', ...STATUS_LIST]} onChange={setStatus} ariaLabel="Filter by status"/><AppSelect className={filterClass(priority !== 'All priorities')} value={priority} options={['All priorities', ...PRIORITIES]} onChange={setPriority} ariaLabel="Filter by priority"/><AppSelect className={filterClass(owner !== 'All owners')} value={owner} options={['All owners', ...owners]} onChange={setOwner} ariaLabel="Filter by assignee"/><AppSelect className={filterClass(phase !== 'All phases')} value={phase} options={['All phases', ...STAGES]} onChange={setPhase} ariaLabel="Filter by phase"/><AppSelect className={filterClass(due !== 'All dates')} value={due} options={['All dates', 'Due today', 'Overdue', 'Upcoming', 'No due date']} onChange={setDue} ariaLabel="Filter by due date"/><AppSelect className="filter" value={sort} options={['Newest', 'Oldest', 'Due date', 'Priority', 'Title A–Z']} onChange={setSort} ariaLabel="Sort reviews"/>{chips.length > 0 && <button className="text-button" onClick={clearAll}>Clear filters</button>}</div>
+    {chips.length > 0 && <div className="chip-row" aria-label="Active filters">{chips.map(chip => <button key={chip.key} className="chip" onClick={chip.clear} title={`Remove ${chip.label} filter`}>{chip.label}<X size={13}/></button>)}</div>}
+    <div className="table-wrap"><table><thead><tr><th><input ref={el => { if (el) el.indeterminate = selected.length > 0 && !allSelected; }} type="checkbox" checked={allSelected} onChange={toggleAll} aria-label="Select all matching reviews" title={`Selects all ${filtered.length} matching reviews across every page`}/></th><th>Title</th><th>Team</th><th>Phase</th><th>Priority</th><th>Assignee</th><th>Status</th><th>Due Date</th><th/></tr></thead><tbody>{rows.map(r => <tr key={r.id} className={`review-row${selected.includes(r.id) ? ' selected' : ''}`} onClick={() => onOpen(r)}><td><input type="checkbox" checked={selected.includes(r.id)} aria-label={`Select ${r.title}`} onClick={e=>e.stopPropagation()} onChange={()=>setSelected(s=>s.includes(r.id)?s.filter(id=>id!==r.id):[...s,r.id])}/></td><td><strong>{r.title}</strong>{r.key ? <small className="row-description">{r.key}</small> : null}{r.description && <small className="row-description">{r.description}</small>}</td><td>{r.area}</td><td onClick={e => e.stopPropagation()}><span className="cell-stack"><AppSelect className="inline" value={r.stage} options={STAGES} onChange={val => updateReview(r.id, { stage: val }, 'stage')} ariaLabel={`Change phase of ${r.title}`}/><InlineSync rowId={r.id} field="stage" sync={sync} onRetry={onRetry}/></span></td><td><Priority value={r.priority}/></td><td onClick={e => e.stopPropagation()}><span className="cell-stack"><span className="assignee"><User size={13}/><AppSelect className="inline" value={r.assignee || ''} options={[{ value: '', label: 'Unassigned' }, ...owners.map(o => ({ value: o, label: o }))]} onChange={val => updateReview(r.id, { assignee: val }, 'assignee')} ariaLabel={`Change assignee of ${r.title}`}/></span><InlineSync rowId={r.id} field="assignee" sync={sync} onRetry={onRetry}/></span></td><td><StatusPill value={statusFor(r)}/></td><td>{r.due ? slashDate(r.due) : '—'}</td><td><button className="row-action" onClick={e=>{e.stopPropagation(); archiveReview(r.id);}} aria-label={`Archive ${r.title}`} title="Archive"><Archive size={16}/></button></td></tr>)}</tbody></table><div className="table-pagination"><span>{selected.length ? `${selected.length} selected` : 'Rows per page'} <b>10 <ChevronDown size={13}/></b></span><span>{from}–{to} of {sorted.length}</span><span className="pagination-arrows"><button className="page-arrow" disabled={safePage===0} onClick={()=>setPageIdx(safePage-1)} aria-label="Previous page"><ChevronLeft size={15}/></button> {safePage + 1} / {pages} <button className="page-arrow" disabled={safePage>=pages-1} onClick={()=>setPageIdx(safePage+1)} aria-label="Next page"><ChevronRight size={15}/></button></span></div></div>
+    {selected.length > 0 && <div className="bulk-bar"><strong>{selected.length} selected</strong><AppSelect className="bulk" value="" options={[{ value: '', label: 'Assign…' }, { value: '__unassigned', label: 'Unassigned' }, ...owners.map(o => ({ value: o, label: o }))]} onChange={val => { if (val) bulkSet({ assignee: val === '__unassigned' ? '' : val }); }} ariaLabel="Assign selected"/><AppSelect className="bulk" value="" options={[{ value: '', label: 'Phase…' }, ...STAGES]} onChange={val => { if (val) bulkSet({ stage: val }); }} ariaLabel="Change phase of selected"/><AppSelect className="bulk" value="" options={[{ value: '', label: 'Status…' }, ...STATUS_LIST]} onChange={val => { if (val) bulkSet({ status: val }); }} ariaLabel="Change status of selected"/><button onClick={() => downloadReviewsCsv(reviews.filter(r => selected.includes(r.id)))}><Download size={15}/> Export</button><button onClick={archiveSelected}><Archive size={15}/> Archive</button><button onClick={() => setSelected([])}><X size={15}/> Clear</button></div>}
   </section>;
+}
+function InlineSync({ rowId, field, sync, onRetry }) {
+  if (!sync) return null;
+  if (sync.saving && sync.saving.id === rowId && sync.saving.field === field) return <span className="inline-sync saving" role="status">Saving…</span>;
+  if (sync.failed && sync.failed.id === rowId && sync.failed.field === field) return <span className="inline-sync failed" role="alert">Failed <button type="button" className="link-button" onClick={e => { e.stopPropagation(); onRetry(sync.failed); }}>Retry</button></span>;
+  if (sync.saved && sync.saved.id === rowId && sync.saved.field === field) return <span className="inline-sync saved" role="status">Saved</span>;
+  return null;
 }
 function ReviewDetailEnhanced({ review, meetings, metadata = [], sprints = [], user, onClose, onUpdated, onDeleted, onToast, onRemoveRequest }) {
   const [detail, setDetail] = useState(null); const [draft, setDraft] = useState(review); const [comment, setComment] = useState(''); const [subtask, setSubtask] = useState(''); const [uploading, setUploading] = useState(false); const [now, setNow] = useState(Date.now()); const hydrated = useRef(false);
