@@ -279,7 +279,7 @@ button,
 }
 
 .kanban-header-bar .create-task-cta:hover,
-.kanban-header-bar .primary-button:hover { background: #0f172a; }
+.kanban-header-bar .primary-button:hover { background: #1e2b45; }
 
 /* Team avatar stack */
 .team-avatar-stack {
@@ -780,7 +780,7 @@ button,
   color: #fff;
 }
 
-.kanban-header-bar .create-task-cta:hover { background: #0f172a; }
+.kanban-header-bar .create-task-cta:hover { background: #1e2b45; }
 
 /* --- Row 2: Nav Tabs Bar ------------------------------ */
 .kanban-nav-tabs-bar {

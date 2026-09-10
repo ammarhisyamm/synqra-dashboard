@@ -97,7 +97,8 @@ function Timeline({ tasks, onOpen }) {
   return <section className="timeline-board"><div className="timeline-scroll"><div className="timeline-head"><strong>Task</strong><div>{dates.map(date => <span key={date}>{toDate(date).getDate()}</span>)}</div></div>{Object.entries(grouped).map(([epic, items]) => <div className="timeline-group" key={epic}><strong className="timeline-group-label"><i/>{epic}</strong>{items.map(task => { const taskStart = task.startDate || task.due || dates[0]; const taskEnd = task.due || task.startDate || taskStart; const offset = Math.max(0, Math.min(13, daysBetween(dates[0], taskStart))); const span = Math.max(1, Math.min(14 - offset, daysBetween(taskStart, taskEnd) + 1)); return <div className="timeline-row" key={task.id}><button onClick={() => onOpen(task)}><span>{task.key || 'TASK'}</span><strong>{task.title}</strong><small>{task.assignee || 'Unassigned'}</small></button><div className="timeline-track">{dates.map(date => <i key={date}/>) }<button className="timeline-bar" style={{ gridColumn: `${offset + 1} / span ${span}` }} onClick={() => onOpen(task)} title={`${task.title} · ${labelDate(taskStart)} – ${labelDate(taskEnd)}`}>{span > 2 && task.title}</button></div></div>; })}</div>)}</div></section>;
 }
 
-export function KanbanWorkspace({ project, reviews, sprints = [], metadata = [], projectId, updateReview, createSprint, updateSprint, refreshMetadata, setModal, onOpen }) {
+export function KanbanWorkspace({ project, team = [], reviews, sprints = [], metadata = [], projectId, updateReview, createSprint, updateSprint, refreshMetadata, setModal, onOpen }) {
+  const teamNames = team.map(t => t.name);
   const [view, setView] = useState('board');
   const [search, setSearch] = useState('');
   const [assignee, setAssignee] = useState('');
@@ -109,7 +110,7 @@ export function KanbanWorkspace({ project, reviews, sprints = [], metadata = [],
   const [dragId, setDragId] = useState(null);
   const [metadataOpen, setMetadataOpen] = useState(false);
 
-  const owners = useMemo(() => [...new Set(reviews.map(task => task.assignee).filter(Boolean))], [reviews]);
+  const owners = useMemo(() => teamNames.length ? teamNames : [...new Set(reviews.map(task => task.assignee).filter(Boolean))], [teamNames, reviews]);
   const epics = useMemo(() => [...new Set([...metadata.filter(item => item.type === 'epic').map(item => item.name), ...reviews.map(task => task.epic).filter(Boolean)])], [metadata, reviews]);
   const features = useMemo(() => [...new Set([...metadata.filter(item => item.type === 'feature').map(item => item.name), ...reviews.map(task => task.feature).filter(Boolean)])], [metadata, reviews]);
   const labels = useMemo(() => [...new Set([...metadata.filter(item => item.type === 'label').map(item => item.name), ...reviews.flatMap(task => Array.isArray(task.labels) ? task.labels : [])])], [metadata, reviews]);

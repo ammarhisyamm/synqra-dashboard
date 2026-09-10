@@ -193,6 +193,25 @@ async function routeApi(request, env) {
     const result = await env.DB.prepare("SELECT m.id, m.email, COALESCE(r.role, m.role, 'viewer') AS role, m.status, m.created_at AS createdAt FROM project_members m LEFT JOIN project_member_roles r ON r.member_id = m.id ORDER BY m.created_at DESC").all();
     return json({ members: result.results });
   }
+  if (request.method === 'GET' && path === '/api/team') {
+    // Assignable people: workspace users + invited members (email invites without accounts yet).
+    const [users, members] = await env.DB.batch([
+      env.DB.prepare('SELECT id, name, email FROM users ORDER BY name'),
+      env.DB.prepare('SELECT email FROM project_members ORDER BY created_at DESC')
+    ]);
+    const seen = new Set();
+    const team = [];
+    for (const u of users.results) {
+      const name = (u.name || '').trim() || u.email.split('@')[0];
+      if (!seen.has(name.toLowerCase())) { seen.add(name.toLowerCase()); team.push({ name, email: u.email, source: 'user' }); }
+    }
+    for (const m of members.results) {
+      const email = (m.email || '').trim().toLowerCase();
+      if (!email) continue;
+      if (!team.some(t => t.email.toLowerCase() === email)) team.push({ name: email.split('@')[0], email, source: 'invite' });
+    }
+    return json({ team });
+  }
   if (request.method === 'POST' && path === '/api/project-members') {
     if (!['super_admin', 'admin'].includes(user.role)) return json({ error: 'Admin access required.' }, 403);
     const body = await readBody(request); if (!body) return json({ error: 'Invalid JSON.' }, 400);
