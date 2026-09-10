@@ -13,6 +13,7 @@ const bytesToBase64 = bytes => btoa(String.fromCharCode(...bytes));
 const base64ToBytes = value => Uint8Array.from(atob(value), char => char.charCodeAt(0));
 const cookieValue = (request, name) => (request.headers.get('Cookie') || '').split(';').map(v => v.trim()).find(v => v.startsWith(`${name}=`))?.slice(name.length + 1);
 const publicUser = user => ({ id: user.id, email: user.email, name: user.name, role: user.role });
+const parseJson = (value, fallback) => { try { return value ? JSON.parse(value) : fallback; } catch { return fallback; } };
 
 async function passwordHash(password, salt = crypto.getRandomValues(new Uint8Array(16))) {
   const key = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveBits']);
@@ -61,16 +62,31 @@ function normalizeReview(input, partial = false) {
   if (!partial || 'status' in input) { if (!statuses.has(input.status || 'Open')) throw new Error('Invalid review status.'); review.status = input.status || 'Open'; }
   if (!partial || 'submittedBy' in input) review.submitted_by = safeText(input.submittedBy, 120);
   if (!partial || 'meetingId' in input) review.meeting_id = safeText(input.meetingId, 80) || null;
+  if (!partial || 'reporter' in input) review.reporter = safeText(input.reporter, 120);
+  if (!partial || 'estimateHours' in input) {
+    const estimate = input.estimateHours === '' || input.estimateHours == null ? null : Number(input.estimateHours);
+    if (estimate !== null && (!Number.isFinite(estimate) || estimate < 0 || estimate > 1000)) throw new Error('Estimate must be between 0 and 1000 hours.');
+    review.estimate_hours = estimate;
+  }
+  if (!partial || 'epic' in input) review.epic = safeText(input.epic, 120);
+  if (!partial || 'feature' in input) review.feature = safeText(input.feature, 120);
+  if (!partial || 'sprint' in input) review.sprint = safeText(input.sprint, 120);
+  if (!partial || 'labels' in input) review.labels = JSON.stringify((Array.isArray(input.labels) ? input.labels : []).map(label => safeText(label, 40)).filter(Boolean).slice(0, 20));
   if ('archived' in input) review.archived = input.archived ? 1 : 0;
   return review;
 }
 
 async function bootstrap(env) {
-  const [reviews, meetings] = await env.DB.batch([
-    env.DB.prepare('SELECT id, title, area, priority, stage, assignee, due, description, status, submitted_by AS submittedBy, meeting_id AS meetingId, created_at AS createdAt, updated_at AS updatedAt, archived FROM reviews ORDER BY created_at DESC'),
-    env.DB.prepare('SELECT id, title, date, ai, notes, item_count AS itemCount FROM meetings ORDER BY date DESC')
+  const [reviews, meetings, project] = await env.DB.batch([
+    env.DB.prepare("SELECT id, title, area, priority, stage, assignee, due, description, status, submitted_by AS submittedBy, reporter, meeting_id AS meetingId, estimate_hours AS estimateHours, epic, feature, sprint, labels, created_at AS createdAt, updated_at AS updatedAt, archived FROM reviews ORDER BY created_at DESC"),
+    env.DB.prepare("SELECT id, title, date, ai, notes, (SELECT COUNT(*) FROM reviews WHERE meeting_id = m.id AND archived = 0) AS itemCount, attendees FROM meetings m ORDER BY date DESC"),
+    env.DB.prepare("SELECT name, description, access_mode AS accessMode FROM project_settings WHERE id = 'default'")
   ]);
-  return { project: { name: 'Acme Redesign', initials: 'A' }, reviews: reviews.results, meetings: meetings.results.map(m => ({ ...m, ai: Boolean(m.ai) })) };
+  const settings = project.results[0] || { name: 'Acme Redesign', description: '', accessMode: 'link' };
+  return { project: { ...settings, initials: settings.name.slice(0, 1).toUpperCase() }, reviews: reviews.results.map(r => ({ ...r, labels: parseJson(r.labels, []) })), meetings: meetings.results.map(m => ({ ...m, ai: Boolean(m.ai), attendees: parseJson(m.attendees, []) })) };
+}
+async function reviewSnapshot(env, reviewId) {
+  return env.DB.prepare("SELECT id, title, area, priority, stage, assignee, due, description, status, submitted_by AS submittedBy, reporter, meeting_id AS meetingId, estimate_hours AS estimateHours, epic, feature, sprint, labels, created_at AS createdAt, updated_at AS updatedAt, archived FROM reviews WHERE id = ?").bind(reviewId).first();
 }
 
 async function recordActivity(env, reviewId, userId, action, metadata = {}) {
@@ -132,29 +148,58 @@ async function routeApi(request, env) {
     const result = await env.DB.prepare('UPDATE users SET role = ? WHERE id = ?').bind(role, adminMatch[1]).run();
     return result.meta.changes ? json({ ok: true }) : json({ error: 'User not found.' }, 404);
   }
+  if (request.method === 'DELETE' && adminMatch) {
+    if (user.role !== 'super_admin') return json({ error: 'Super admin access required.' }, 403);
+    if (adminMatch[1] === user.id) return json({ error: 'You cannot delete your own account.' }, 400);
+    const result = await env.DB.prepare('DELETE FROM users WHERE id = ?').bind(adminMatch[1]).run();
+    return result.meta.changes ? json({ ok: true }) : json({ error: 'User not found.' }, 404);
+  }
   if (request.method === 'GET' && path === '/api/bootstrap') return json(await bootstrap(env));
+
+  if (request.method === 'GET' && path === '/api/project-settings') {
+    const settings = await env.DB.prepare("SELECT name, description, access_mode AS accessMode FROM project_settings WHERE id = 'default'").first();
+    return json(settings || { name: 'Acme Redesign', description: '', accessMode: 'link' });
+  }
+  if (request.method === 'PATCH' && path === '/api/project-settings') {
+    if (!['super_admin', 'admin'].includes(user.role)) return json({ error: 'Admin access required.' }, 403);
+    const body = await readBody(request); if (!body) return json({ error: 'Invalid JSON.' }, 400);
+    const name = safeText(body.name, 120); const description = safeText(body.description, 2000); const accessMode = body.accessMode;
+    if (!name) return json({ error: 'Project name is required.' }, 400);
+    if (!['invite', 'link'].includes(accessMode)) return json({ error: 'Invalid access mode.' }, 400);
+    await env.DB.prepare("INSERT INTO project_settings (id, name, description, access_mode) VALUES ('default', ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name, description = excluded.description, access_mode = excluded.access_mode, updated_at = CURRENT_TIMESTAMP").bind(name, description, accessMode).run();
+    return json({ name, description, accessMode, initials: name.slice(0, 1).toUpperCase() });
+  }
+  if (request.method === 'GET' && path === '/api/notifications') {
+    const result = await env.DB.prepare("SELECT a.id, a.action, a.metadata, a.created_at AS createdAt, u.name, r.id AS reviewId, r.title FROM review_activity a LEFT JOIN users u ON u.id = a.user_id JOIN reviews r ON r.id = a.review_id ORDER BY a.created_at DESC LIMIT 25").all();
+    return json({ notifications: result.results.map(item => ({ ...item, metadata: parseJson(item.metadata, {}) })) });
+  }
 
   if (request.method === 'POST' && path === '/api/reviews') {
     const body = await readBody(request); if (!body) return json({ error: 'Invalid JSON.' }, 400);
     try {
       const review = normalizeReview(body);
       const newReview = { id: body.id && /^[a-zA-Z0-9-]{8,80}$/.test(body.id) ? body.id : id(), ...review, submitted_by: review.submitted_by || user.name, archived: 0 };
-      await env.DB.prepare('INSERT INTO reviews (id, title, area, priority, stage, assignee, due, description, status, submitted_by, meeting_id, archived) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(newReview.id, newReview.title, newReview.area, newReview.priority, newReview.stage, newReview.assignee, newReview.due, newReview.description, newReview.status, newReview.submitted_by, newReview.meeting_id, newReview.archived).run();
+      if (newReview.meeting_id && !await env.DB.prepare('SELECT id FROM meetings WHERE id = ?').bind(newReview.meeting_id).first()) return json({ error: 'Related meeting not found.' }, 400);
+      await env.DB.prepare('INSERT INTO reviews (id, title, area, priority, stage, assignee, due, description, status, submitted_by, meeting_id, reporter, estimate_hours, epic, feature, sprint, labels, archived) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(newReview.id, newReview.title, newReview.area, newReview.priority, newReview.stage, newReview.assignee, newReview.due, newReview.description, newReview.status, newReview.submitted_by, newReview.meeting_id, newReview.reporter || user.name, newReview.estimate_hours ?? null, newReview.epic || '', newReview.feature || '', newReview.sprint || '', newReview.labels || '[]', newReview.archived).run();
+      await env.DB.prepare('INSERT INTO review_status_history (id, review_id, from_status, to_status, user_id) VALUES (?, ?, ?, ?, ?)').bind(id(), newReview.id, null, newReview.status, user.id).run();
       await recordActivity(env, newReview.id, user.id, 'created', { title: newReview.title });
-      return json(newReview, 201);
+      const saved = await reviewSnapshot(env, newReview.id);
+      return json({ ...saved, labels: parseJson(saved.labels, []) }, 201);
     } catch (error) { return json({ error: error.message }, 400); }
   }
 
   const detailsMatch = path.match(/^\/api\/reviews\/([a-zA-Z0-9-]+)\/details$/);
   if (request.method === 'GET' && detailsMatch) {
-    const review = await env.DB.prepare('SELECT id, title, area, priority, stage, assignee, due, description, status, submitted_by AS submittedBy, meeting_id AS meetingId, created_at AS createdAt, updated_at AS updatedAt, archived FROM reviews WHERE id = ?').bind(detailsMatch[1]).first();
+    const review = await reviewSnapshot(env, detailsMatch[1]);
     if (!review) return json({ error: 'Review not found.' }, 404);
-    const [comments, activity, meeting] = await env.DB.batch([
+    const [comments, activity, meeting, subtasks, history] = await env.DB.batch([
       env.DB.prepare('SELECT c.id, c.body, c.created_at AS createdAt, u.name, u.email FROM review_comments c JOIN users u ON u.id = c.user_id WHERE c.review_id = ? ORDER BY c.created_at ASC').bind(detailsMatch[1]),
       env.DB.prepare('SELECT a.id, a.action, a.metadata, a.created_at AS createdAt, u.name, u.email FROM review_activity a LEFT JOIN users u ON u.id = a.user_id WHERE a.review_id = ? ORDER BY a.created_at DESC').bind(detailsMatch[1]),
-      env.DB.prepare('SELECT id, title, date, notes, item_count AS itemCount FROM meetings WHERE id = (SELECT meeting_id FROM reviews WHERE id = ?)').bind(detailsMatch[1])
+      env.DB.prepare('SELECT id, title, date, notes, (SELECT COUNT(*) FROM reviews WHERE meeting_id = m.id AND archived = 0) AS itemCount FROM meetings m WHERE id = (SELECT meeting_id FROM reviews WHERE id = ?)').bind(detailsMatch[1]),
+      env.DB.prepare('SELECT id, title, completed, created_at AS createdAt, updated_at AS updatedAt FROM review_subtasks WHERE review_id = ? ORDER BY created_at ASC').bind(detailsMatch[1]),
+      env.DB.prepare('SELECT h.id, h.from_status AS fromStatus, h.to_status AS toStatus, h.created_at AS createdAt, u.name FROM review_status_history h LEFT JOIN users u ON u.id = h.user_id WHERE h.review_id = ? ORDER BY h.created_at DESC').bind(detailsMatch[1])
     ]);
-    return json({ review, meeting: meeting.results[0] || null, comments: comments.results, activity: activity.results.map(item => ({ ...item, metadata: JSON.parse(item.metadata || '{}') })) });
+    return json({ review: { ...review, labels: parseJson(review.labels, []) }, meeting: meeting.results[0] || null, comments: comments.results, subtasks: subtasks.results.map(item => ({ ...item, completed: Boolean(item.completed) })), history: history.results, activity: activity.results.map(item => ({ ...item, metadata: parseJson(item.metadata, {}) })) });
   }
   const commentMatch = path.match(/^\/api\/reviews\/([a-zA-Z0-9-]+)\/comments$/);
   if (request.method === 'POST' && commentMatch) {
@@ -171,14 +216,19 @@ async function routeApi(request, env) {
   if (request.method === 'PATCH' && reviewMatch) {
     const body = await readBody(request); if (!body) return json({ error: 'Invalid JSON.' }, 400);
     try {
+      const before = await reviewSnapshot(env, reviewMatch[1]);
+      if (!before) return json({ error: 'Review not found.' }, 404);
       const patch = normalizeReview(body, true); const keys = Object.keys(patch);
       if (!keys.length) return json({ error: 'No changes supplied.' }, 400);
+      if ('meeting_id' in patch && patch.meeting_id && !await env.DB.prepare('SELECT id FROM meetings WHERE id = ?').bind(patch.meeting_id).first()) return json({ error: 'Related meeting not found.' }, 400);
       const values = keys.map(key => patch[key]);
       const result = await env.DB.prepare(`UPDATE reviews SET ${keys.map(key => `${key} = ?`).join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(...values, reviewMatch[1]).run();
       if (!result.meta.changes) return json({ error: 'Review not found.' }, 404);
-      await recordActivity(env, reviewMatch[1], user.id, 'updated', { fields: keys });
-      const saved = await env.DB.prepare('SELECT id, title, area, priority, stage, assignee, due, description, status, submitted_by AS submittedBy, meeting_id AS meetingId, created_at AS createdAt, updated_at AS updatedAt, archived FROM reviews WHERE id = ?').bind(reviewMatch[1]).first();
-      return json(saved);
+      const saved = await reviewSnapshot(env, reviewMatch[1]);
+      if ('status' in patch && patch.status !== before.status) await env.DB.prepare('INSERT INTO review_status_history (id, review_id, from_status, to_status, user_id) VALUES (?, ?, ?, ?, ?)').bind(id(), reviewMatch[1], before.status, patch.status, user.id).run();
+      const changes = Object.fromEntries(keys.map(key => [key, { from: before[key], to: saved[key] }]));
+      await recordActivity(env, reviewMatch[1], user.id, 'updated', { fields: keys, changes });
+      return json({ ...saved, labels: parseJson(saved.labels, []) });
     } catch (error) { return json({ error: error.message }, 400); }
   }
 
@@ -187,20 +237,60 @@ async function routeApi(request, env) {
     return result.meta.changes ? json({ ok: true }) : json({ error: 'Review not found.' }, 404);
   }
 
+  const subtasksPostMatch = path.match(/^\/api\/reviews\/([a-zA-Z0-9-]+)\/subtasks$/);
+  if (request.method === 'POST' && subtasksPostMatch) {
+    const body = await readBody(request); const title = safeText(body?.title, 240);
+    if (!title) return json({ error: 'Subtask title is required.' }, 400);
+    if (!await env.DB.prepare('SELECT id FROM reviews WHERE id = ?').bind(subtasksPostMatch[1]).first()) return json({ error: 'Review not found.' }, 404);
+    const subtask = { id: id(), title, completed: 0 };
+    await env.DB.prepare('INSERT INTO review_subtasks (id, review_id, title, completed) VALUES (?, ?, ?, 0)').bind(subtask.id, subtasksPostMatch[1], title).run();
+    await recordActivity(env, subtasksPostMatch[1], user.id, 'subtask_added', { title });
+    return json(subtask, 201);
+  }
+  const subtaskMatch = path.match(/^\/api\/reviews\/([a-zA-Z0-9-]+)\/subtasks\/([a-zA-Z0-9-]+)$/);
+  if (subtaskMatch && request.method === 'PATCH') {
+    const body = await readBody(request); const patch = {};
+    if ('title' in (body || {})) patch.title = safeText(body.title, 240);
+    if ('completed' in (body || {})) patch.completed = body.completed ? 1 : 0;
+    if (!Object.keys(patch).length) return json({ error: 'No changes supplied.' }, 400);
+    const keys = Object.keys(patch); const result = await env.DB.prepare(`UPDATE review_subtasks SET ${keys.map(key => `${key} = ?`).join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND review_id = ?`).bind(...keys.map(key => patch[key]), subtaskMatch[2], subtaskMatch[1]).run();
+    return result.meta.changes ? json({ ...patch, id: subtaskMatch[2], completed: Boolean(patch.completed) }) : json({ error: 'Subtask not found.' }, 404);
+  }
+  if (subtaskMatch && request.method === 'DELETE') {
+    const result = await env.DB.prepare('DELETE FROM review_subtasks WHERE id = ? AND review_id = ?').bind(subtaskMatch[2], subtaskMatch[1]).run();
+    return result.meta.changes ? json({ ok: true }) : json({ error: 'Subtask not found.' }, 404);
+  }
+
   if (request.method === 'POST' && path === '/api/meetings') {
     const body = await readBody(request); if (!body) return json({ error: 'Invalid JSON.' }, 400);
     const title = safeText(body.title); const date = /^\d{4}-\d{2}-\d{2}$/.test(body.date || '') ? body.date : null;
     if (!title || !date) return json({ error: 'Meeting title and date are required.' }, 400);
-    const meeting = { id: body.id && /^[a-zA-Z0-9-]{8,80}$/.test(body.id) ? body.id : id(), title, date, notes: safeText(body.notes, 5000), ai: body.ai ? 1 : 0, itemCount: 0 };
-    await env.DB.prepare('INSERT INTO meetings (id, title, date, ai, notes, item_count) VALUES (?, ?, ?, ?, ?, ?)').bind(meeting.id, meeting.title, meeting.date, meeting.ai, meeting.notes, meeting.itemCount).run();
+    const meeting = { id: body.id && /^[a-zA-Z0-9-]{8,80}$/.test(body.id) ? body.id : id(), title, date, notes: safeText(body.notes, 5000), ai: body.ai ? 1 : 0, itemCount: 0, attendees: Array.isArray(body.attendees) ? body.attendees.map(x => safeText(x, 120)).filter(Boolean).slice(0, 30) : [] };
+    await env.DB.prepare('INSERT INTO meetings (id, title, date, ai, notes, item_count, attendees) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(meeting.id, meeting.title, meeting.date, meeting.ai, meeting.notes, meeting.itemCount, JSON.stringify(meeting.attendees)).run();
     return json({ ...meeting, ai: Boolean(meeting.ai) }, 201);
   }
 
   const meetingMatch = path.match(/^\/api\/meetings\/([a-zA-Z0-9-]+)$/);
-  if (request.method === 'DELETE' && meetingMatch) {
-    const result = await env.DB.prepare('DELETE FROM meetings WHERE id = ?').bind(meetingMatch[1]).run();
+  if (request.method === 'PATCH' && meetingMatch) {
+    const body = await readBody(request); if (!body) return json({ error: 'Invalid JSON.' }, 400);
+    const patch = {};
+    if ('title' in body) { patch.title = safeText(body.title, 200); if (!patch.title) return json({ error: 'Meeting title is required.' }, 400); }
+    if ('date' in body) { if (!/^\d{4}-\d{2}-\d{2}$/.test(body.date || '')) return json({ error: 'Invalid meeting date.' }, 400); patch.date = body.date; }
+    if ('notes' in body) patch.notes = safeText(body.notes, 5000);
+    if ('ai' in body) patch.ai = body.ai ? 1 : 0;
+    if ('attendees' in body) patch.attendees = JSON.stringify(Array.isArray(body.attendees) ? body.attendees.map(x => safeText(x, 120)).filter(Boolean).slice(0, 30) : []);
+    const keys = Object.keys(patch); if (!keys.length) return json({ error: 'No changes supplied.' }, 400);
+    const result = await env.DB.prepare(`UPDATE meetings SET ${keys.map(key => `${key} = ?`).join(', ')} WHERE id = ?`).bind(...keys.map(key => patch[key]), meetingMatch[1]).run();
     if (!result.meta.changes) return json({ error: 'Meeting not found.' }, 404);
-    return json({ ok: true });
+    const saved = await env.DB.prepare('SELECT id, title, date, ai, notes, (SELECT COUNT(*) FROM reviews WHERE meeting_id = m.id AND archived = 0) AS itemCount, attendees FROM meetings m WHERE id = ?').bind(meetingMatch[1]).first();
+    return json({ ...saved, ai: Boolean(saved.ai), attendees: parseJson(saved.attendees, []) });
+  }
+  if (request.method === 'DELETE' && meetingMatch) {
+    const result = await env.DB.batch([
+      env.DB.prepare('UPDATE reviews SET meeting_id = NULL WHERE meeting_id = ?').bind(meetingMatch[1]),
+      env.DB.prepare('DELETE FROM meetings WHERE id = ?').bind(meetingMatch[1])
+    ]);
+    return result[1].meta.changes ? json({ ok: true }) : json({ error: 'Meeting not found.' }, 404);
   }
 
   return json({ error: 'Not found.' }, 404);
