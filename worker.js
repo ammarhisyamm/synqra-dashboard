@@ -112,6 +112,11 @@ async function reviewSnapshot(env, reviewId) {
   return env.DB.prepare("SELECT id, key, title, area, priority, stage, assignee, due, start_date AS startDate, description, status, submitted_by AS submittedBy, reporter, meeting_id AS meetingId, estimate_hours AS estimateHours, epic, feature, sprint, labels, project_id AS projectId, parent_id AS parentId, item_type AS itemType, sprint_id AS sprintId, created_at AS createdAt, updated_at AS updatedAt, archived FROM reviews WHERE id = ?").bind(reviewId).first();
 }
 
+async function notifyUsers(env, excludeUserId, { type, title, body, reviewId = null }) {
+  const recipients = await env.DB.prepare('SELECT id FROM users WHERE id != ?').bind(excludeUserId).all();
+  if (!recipients.results.length) return;
+  await env.DB.batch(recipients.results.map(recipient => env.DB.prepare('INSERT INTO notifications (id, user_id, review_id, type, title, body) VALUES (?, ?, ?, ?, ?, ?)').bind(id(), recipient.id, reviewId, type, title, body)));
+}
 async function recordActivity(env, reviewId, userId, action, metadata = {}) {
   const review = await env.DB.prepare('SELECT title, assignee FROM reviews WHERE id = ?').bind(reviewId).first();
   const recipients = await env.DB.prepare('SELECT id FROM users WHERE id != ?').bind(userId).all();
@@ -518,6 +523,7 @@ async function routeApi(request, env) {
     const meeting = { id: body.id && /^[a-zA-Z0-9-]{8,80}$/.test(body.id) ? body.id : id(), title, date, projectId: safeText(body.projectId, 80) || 'default', notes: safeText(body.notes, 5000), ai: body.ai ? 1 : 0, itemCount: 0, attendees: Array.isArray(body.attendees) ? body.attendees.map(x => safeText(x, 120)).filter(Boolean).slice(0, 30) : [] };
     if (!await env.DB.prepare('SELECT id FROM projects WHERE id = ?').bind(meeting.projectId).first()) return json({ error: 'Project not found.' }, 400);
     await env.DB.prepare('INSERT INTO meetings (id, project_id, title, date, ai, notes, item_count, attendees) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').bind(meeting.id, meeting.projectId, meeting.title, meeting.date, meeting.ai, meeting.notes, meeting.itemCount, JSON.stringify(meeting.attendees)).run();
+    await notifyUsers(env, user.id, { type: 'meeting_created', title: 'New meeting scheduled', body: `"${meeting.title}" on ${meeting.date}` });
     return json({ ...meeting, ai: Boolean(meeting.ai) }, 201);
   }
 
@@ -537,10 +543,12 @@ async function routeApi(request, env) {
     return json({ ...saved, ai: Boolean(saved.ai), attendees: parseJson(saved.attendees, []) });
   }
   if (request.method === 'DELETE' && meetingMatch) {
+    const doomed = await env.DB.prepare('SELECT title FROM meetings WHERE id = ?').bind(meetingMatch[1]).first();
     const result = await env.DB.batch([
       env.DB.prepare('UPDATE reviews SET meeting_id = NULL WHERE meeting_id = ?').bind(meetingMatch[1]),
       env.DB.prepare('DELETE FROM meetings WHERE id = ?').bind(meetingMatch[1])
     ]);
+    if (result[1].meta.changes && doomed) await notifyUsers(env, user.id, { type: 'meeting_deleted', title: 'Meeting deleted', body: `"${doomed.title}" was removed` });
     return result[1].meta.changes ? json({ ok: true }) : json({ error: 'Meeting not found.' }, 404);
   }
 
