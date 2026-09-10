@@ -2,15 +2,15 @@ import { Component, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   Archive, ArrowRight, Bell, CalendarBlank as CalendarDays, CalendarPlus, Check, CheckCircle as CheckCircle2, CaretDown as ChevronDown, CaretLeft as ChevronLeft, CaretRight as ChevronRight, CaretUpDown as ChevronsUpDown, Circle as CircleDot,
-  ClipboardText as ClipboardList, Clock, Clock as Clock3, Copy, DownloadSimple as Download, ArrowSquareOut as ExternalLink, Eye, FileText, Flag, Folder, House as Home, Info, Kanban as KanbanSquare, SquaresFour as LayoutGrid, Link as Link2, ListChecks, Lock,
-  List as Menu, ChatCircle as MessageCircle, DotsThree as MoreHorizontal, DotsThreeVertical as MoreVertical, CursorClick as MousePointer2, PencilLine as Pencil, PushPin as Pin, Plus, ArrowCounterClockwise as RotateCcw, MagnifyingGlass as Search, Gear as Settings, GearSix as Settings2, ShieldCheck, SlidersHorizontal, Sparkle as Sparkles, Table as Table2, Target, Trash as Trash2, Warning as TriangleAlert, ArrowUUpLeft as Undo2, User, UserPlus, EnvelopeSimple, Crown, Users, VideoCamera as Video, Rows, ChartBar, TrendUp, ChartLine, ChartPieSlice, Lightning, XCircle, X
+  ClipboardText as ClipboardList, Clock, Clock as Clock3, Copy, DownloadSimple as Download, ArrowSquareOut as ExternalLink, Eye, FileText, Flag, Folder, House as Home, Info, Kanban as KanbanSquare, Link as Link2, ListChecks, Lock,
+  List as Menu, ChatCircle as MessageCircle, DotsThree as MoreHorizontal, DotsThreeVertical as MoreVertical, CursorClick as MousePointer2, PencilLine as Pencil, Plus, ArrowCounterClockwise as RotateCcw, MagnifyingGlass as Search, Gear as Settings, GearSix as Settings2, ShieldCheck, SlidersHorizontal, Sparkle as Sparkles, Table as Table2, Target, Trash as Trash2, Warning as TriangleAlert, ArrowUUpLeft as Undo2, User, UserPlus, EnvelopeSimple, Crown, Users, VideoCamera as Video, ChartBar, TrendUp, ChartLine, ChartPieSlice, Lightning, XCircle, X
 } from '@phosphor-icons/react';
 import './styles.css';
 import './detail.css';
 import './detail-overrides.css';
 import { Wave } from './components/Wave.jsx';
 import './workflow.css';
-import { STORAGE_KEY, AREAS, STAGES, PRIORITIES, STATUS_OPTIONS, STAGE_ICONS, STAGE_META } from './constants/workflow';
+import { STORAGE_KEY, AREAS, STAGES, PRIORITIES, STATUS_OPTIONS, STAGE_ICONS } from './constants/workflow';
 import { dateLabel, slashDate, shortDate, ageLabel, groupDateLabel, relativeDate } from './lib/dates';
 import { isResolved, isOverdue, activeReviews, portfolioProjects, taskOverview, sprintTasks, sprintStats, statusCounts, priorityCounts, teamWorkload, hoursTotals, formatHours, daysOverdue } from './lib/reports';
 import { api } from './api/client';
@@ -18,10 +18,12 @@ import { reviewsApi } from './api/reviews';
 import { reportsApi } from './api/reports';
 import { notificationsApi } from './api/notifications';
 import { projectsApi } from './api/projects';
+import { workflowApi } from './api/workflow';
 import { NewProjectModal } from './components/projects/NewProjectModal';
 import { DeleteProjectModal } from './components/projects/DeleteProjectModal';
 import { CommandPalette } from './components/navigation/CommandPalette';
 import { MeetingEditor } from './components/meetings/MeetingEditor';
+import { KanbanWorkspace } from './components/kanban/KanbanWorkspace';
 
 const REPORT_COLORS = {
   accent: '#111b30',
@@ -164,9 +166,18 @@ function App() {
     return result;
   }, {})).map(([stage, count]) => ({ stage, count })).sort((a, b) => b.count - a.count), [activeReviews]);
   const activeSprints = useMemo(() => (data.sprints || []).filter(sprint => !sprint.projectId || sprint.projectId === activeProjectId), [data.sprints, activeProjectId]);
-  const updateReview = (id, patch) => {
+  const updateReview = async (id, patch) => {
+    const previous = data.reviews.find(item => item.id === id);
+    if (!previous) return;
     setData(prev => ({ ...prev, reviews: prev.reviews.map(r => r.id === id ? { ...r, ...patch } : r) }));
-    reviewsApi.update(id, patch).catch(error => setToast(error.message));
+    try {
+      const saved = await reviewsApi.update(id, patch);
+      setData(prev => ({ ...prev, reviews: prev.reviews.map(item => item.id === id ? { ...item, ...saved } : item) }));
+      return saved;
+    } catch (error) {
+      setData(prev => ({ ...prev, reviews: prev.reviews.map(item => item.id === id ? previous : item) }));
+      setToast(error.message);
+    }
   };
   const addReview = (review) => {
     const saved = { id: crypto.randomUUID(), createdAt: new Date().toISOString().slice(0, 10), archived: false, projectId: data.project?.id || 'default', ...review };
@@ -174,7 +185,34 @@ function App() {
     setData(prev => ({ ...prev, reviews: [saved, ...prev.reviews] }));
     reviewsApi.create(saved).then(created => {
       setData(prev => ({ ...prev, reviews: prev.reviews.map(r => r.id === saved.id ? created : r) }));
-    }).catch(error => setToast(error.message));
+    }).catch(error => { setData(prev => ({ ...prev, reviews: prev.reviews.filter(item => item.id !== saved.id) })); setToast(error.message); });
+  };
+  const addSprint = async sprint => {
+    const optimistic = { id: crypto.randomUUID(), projectId: activeProjectId, ...sprint };
+    setData(prev => ({ ...prev, sprints: [optimistic, ...(prev.sprints || [])] }));
+    try {
+      const created = await workflowApi.createSprint(optimistic);
+      setData(prev => ({ ...prev, sprints: (prev.sprints || []).map(item => item.id === optimistic.id ? created : item) }));
+      setToast('Sprint created');
+      return created;
+    } catch (error) {
+      setData(prev => ({ ...prev, sprints: (prev.sprints || []).filter(item => item.id !== optimistic.id) }));
+      setToast(error.message);
+      throw error;
+    }
+  };
+  const updateSprint = async (id, patch) => {
+    const previous = (data.sprints || []).find(item => item.id === id);
+    if (!previous) return;
+    setData(prev => ({ ...prev, sprints: (prev.sprints || []).map(item => item.id === id ? { ...item, ...patch } : item) }));
+    try {
+      const saved = await workflowApi.updateSprint(id, patch);
+      setData(prev => ({ ...prev, sprints: (prev.sprints || []).map(item => item.id === id ? saved : item) }));
+      setToast(`Sprint ${saved.status}`);
+    } catch (error) {
+      setData(prev => ({ ...prev, sprints: (prev.sprints || []).map(item => item.id === id ? previous : item) }));
+      setToast(error.message);
+    }
   };
   const showSuccess = (title, subtitle, ctaLabel, onCta) => setDialog({ success: true, icon: <CheckCircle2 size={24}/>, title, subtitle, ctaLabel, onCta });
   const archiveReview = (id) => {
@@ -289,7 +327,7 @@ function App() {
       {page === 'All Reviews' && <Reviews reviews={activeReviews} query={query} setQuery={setQuery} updateReview={updateReview} archiveReview={archiveReview} setModal={setModal} onOpen={setSelectedReview} />}
       {page === 'Meetings' && <Meetings meetings={activeMeetings} reviews={activeReviews} addMeeting={addMeeting} addReview={addReview} onDeleteMeeting={deleteMeeting} setToast={setToast} setModal={setModal} onNewMeeting={openNewMeeting} onTasksCreated={count => showSuccess(`${count} review items created`, 'Action items from the meeting notes are now on the board.', 'View board', () => setPage('Kanban Board'))} onOpen={setSelectedReview} />}
       {page === 'Meeting Editor' && <MeetingEditor user={user} onClose={() => setPage('Meetings')} onToast={setToast} onCreate={createMeetingFromEditor} />}
-      {page === 'Kanban Board' && <Kanban reviews={activeReviews} updateReview={updateReview} archiveReview={archiveReview} setModal={setModal} goTo={setPage} onOpen={setSelectedReview} />}
+      {page === 'Kanban Board' && <KanbanWorkspace reviews={activeReviews} sprints={activeSprints} updateReview={updateReview} createSprint={addSprint} updateSprint={updateSprint} setModal={setModal} onOpen={setSelectedReview} />}
       {page === 'Archive' && <ArchivePage reviews={data.reviews.filter(r => r.archived)} restoreReview={restoreReview} />}
       {page === 'Reports' && <Reports reviews={data.reviews} projects={data.projects || []} sprints={data.sprints || []} projectName={data.project.name} onRefresh={refreshAll} onOpen={setSelectedReview} />}
       {page === 'Settings' && <SettingsPageEnhanced project={data.project} user={user} saveProject={saveProject} setToast={setToast} onDeleteProject={() => setModal('delete-project')} />}
@@ -543,17 +581,6 @@ function Meetings({ meetings, reviews = [], addMeeting, addReview, onDeleteMeeti
     </div></section>;
 }
 function extractNotes(notes) { return notes.split(/[\n.]+/).map(s=>s.replace(/^\s*(?:[-•*]\s*)?/, '').trim()).filter(s=>s.length>4).slice(0,6); }
-
-function Kanban({ reviews, updateReview, archiveReview, setModal, goTo, onOpen }) {
-  const [dragId, setDragId] = useState(null);
-  const [overCol, setOverCol] = useState(null);
-  const [view, setView] = useState('board');
-  const wasDrag = useRef(false);
-  const endDrag = () => { setDragId(null); setOverCol(null); setTimeout(() => { wasDrag.current = false; }, 0); };
-  const openCard = r => { if (wasDrag.current) { wasDrag.current = false; return; } onOpen(r); };
-  const dropProps = stage => ({ onDragOver: e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setOverCol(stage); }, onDragLeave: () => setOverCol(cur => cur === stage ? null : cur), onDrop: e => { e.preventDefault(); if (dragId) updateReview(dragId, { stage }); endDrag(); } });
-  const cardProps = r => ({ draggable: true, onDragStart: e => { wasDrag.current = true; setDragId(r.id); e.dataTransfer.effectAllowed = 'move'; }, onDragEnd: endDrag, onClick: () => openCard(r) });
-  return <section className="page kanban-page"><PageHeading title="Kanban Board" action={<div className="kanban-actions"><div className="view-switch"><button className={view === 'board' ? 'active' : ''} onClick={() => setView('board')} aria-label="Board view"><LayoutGrid size={16}/></button><button className={view === 'list' ? 'active' : ''} onClick={() => setView('list')} aria-label="List view"><Rows size={16}/></button></div><button className="ghost-button" onClick={() => goTo('Meetings')}><Pin size={15}/> From Meeting</button><button className="primary-button" onClick={() => setModal('review')}><Plus size={16}/> Submit Review</button></div>}/>{view === 'board' ? <div className="board">{STAGE_META.map(({ name: stage, Icon, color }) => <div className={`board-column${overCol === stage ? ' drag-over' : ''}`} key={stage} {...dropProps(stage)}><div className="board-column-head"><h3><Icon size={15} color={color}/> {stage}</h3><span>{reviews.filter(r=>r.stage===stage).length}</span></div>{reviews.filter(r=>r.stage===stage).map(r=><article className={`kanban-card${dragId === r.id ? ' dragging' : ''}`} key={r.id} {...cardProps(r)}><div className="kanban-title-row"><h4>{r.title}</h4><span>{r.key ? `${r.key} · ` : ''}{ageLabel(r.createdAt)}</span></div><p className="kanban-assignee"><User size={12}/> {r.assignee}</p><div className="kanban-footer"><Priority value={r.priority}/><span className="kanban-due"><Clock size={12}/> {shortDate(r.due)}</span></div><div className="kanban-tools"><select value={r.stage} onClick={e=>e.stopPropagation()} onChange={e=>updateReview(r.id,{stage:e.target.value})} aria-label="Move card">{STAGES.map(s=><option key={s}>{s}</option>)}</select><button onClick={e=>{e.stopPropagation(); archiveReview(r.id);}} aria-label="Archive card"><Archive size={14}/></button></div></article>)}<button className="add-card" onClick={()=>setModal('review')}><Plus size={15}/> Add item</button></div>)}</div> : <div className="kanban-list">{STAGE_META.map(({ name: stage, Icon, color }) => { const items = reviews.filter(r => r.stage === stage); return <section className={`kanban-group${overCol === stage ? ' drag-over' : ''}`} key={stage} {...dropProps(stage)}><header className="kanban-group-head"><Icon size={16} color={color}/> {stage}<span>{items.length}</span></header>{items.length ? items.map(r => <article className={`kanban-row${dragId === r.id ? ' dragging' : ''}`} key={r.id} {...cardProps(r)}><strong>{r.title}</strong><span className="kanban-row-assignee"><User size={13}/> {r.assignee || 'Unassigned'}</span><Priority value={r.priority}/><span className="kanban-row-due"><Clock size={12}/> {r.due ? shortDate(r.due) : '—'}</span></article>) : <p className="kanban-empty">Empty</p>}</section>; })}</div>}</section>; }
 
 const RAG_META = {
   'On Track': { color: REPORT_COLORS.success, Icon: CheckCircle2 },

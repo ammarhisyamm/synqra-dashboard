@@ -321,8 +321,26 @@ async function routeApi(request, env) {
   if (request.method === 'POST' && path === '/api/workflow/sprints') {
     if (!['super_admin', 'admin'].includes(user.role)) return json({ error: 'Admin access required.' }, 403);
     const body = await readBody(request); const name = safeText(body?.name, 100); if (!name) return json({ error: 'Sprint name is required.' }, 400);
-    const item = { id: id(), name, goal: safeText(body.goal, 500), startDate: safeText(body.startDate, 10) || null, endDate: safeText(body.endDate, 10) || null, status: ['planned','active','completed'].includes(body.status) ? body.status : 'planned' };
-    try { await env.DB.prepare('INSERT INTO sprints (id, project_id, name, goal, start_date, end_date, status) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(item.id, 'default', item.name, item.goal, item.startDate, item.endDate, item.status).run(); return json(item, 201); } catch { return json({ error: 'Sprint already exists.' }, 409); }
+    const projectId = safeText(body.projectId, 80) || 'default';
+    if (!await env.DB.prepare('SELECT id FROM projects WHERE id = ?').bind(projectId).first()) return json({ error: 'Project not found.' }, 400);
+    const item = { id: id(), projectId, name, goal: safeText(body.goal, 500), startDate: safeText(body.startDate, 10) || null, endDate: safeText(body.endDate, 10) || null, status: ['planned','active','completed'].includes(body.status) ? body.status : 'planned' };
+    try { await env.DB.prepare('INSERT INTO sprints (id, project_id, name, goal, start_date, end_date, status) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(item.id, item.projectId, item.name, item.goal, item.startDate, item.endDate, item.status).run(); return json(item, 201); } catch { return json({ error: 'Sprint already exists.' }, 409); }
+  }
+  const sprintMatch = path.match(/^\/api\/workflow\/sprints\/([a-zA-Z0-9-]+)$/);
+  if (request.method === 'PATCH' && sprintMatch) {
+    if (!['super_admin', 'admin'].includes(user.role)) return json({ error: 'Admin access required.' }, 403);
+    const body = await readBody(request) || {};
+    const fields = {};
+    if ('name' in body) fields.name = safeText(body.name, 100);
+    if ('goal' in body) fields.goal = safeText(body.goal, 500);
+    if ('startDate' in body) fields.start_date = safeText(body.startDate, 10) || null;
+    if ('endDate' in body) fields.end_date = safeText(body.endDate, 10) || null;
+    if ('status' in body && ['planned', 'active', 'completed'].includes(body.status)) fields.status = body.status;
+    if (!Object.keys(fields).length) return json({ error: 'No changes supplied.' }, 400);
+    const result = await env.DB.prepare(`UPDATE sprints SET ${Object.keys(fields).map(key => `${key} = ?`).join(', ')} WHERE id = ?`).bind(...Object.values(fields), sprintMatch[1]).run();
+    if (!result.meta.changes) return json({ error: 'Sprint not found.' }, 404);
+    const saved = await env.DB.prepare('SELECT id, project_id AS projectId, name, goal, start_date AS startDate, end_date AS endDate, status FROM sprints WHERE id = ?').bind(sprintMatch[1]).first();
+    return json(saved);
   }
 
   if (request.method === 'POST' && path === '/api/reviews') {

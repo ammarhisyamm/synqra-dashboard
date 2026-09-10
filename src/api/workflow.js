@@ -4,5 +4,6 @@ export const workflowApi = {
   createStatus: body => api('/api/workflow/statuses', { method: 'POST', body: JSON.stringify(body) }),
   updateStatus: (id, body) => api(`/api/workflow/statuses/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   sprints: () => api('/api/workflow/sprints'),
-  createSprint: body => api('/api/workflow/sprints', { method: 'POST', body: JSON.stringify(body) })
+  createSprint: body => api('/api/workflow/sprints', { method: 'POST', body: JSON.stringify(body) }),
+  updateSprint: (id, body) => api(`/api/workflow/sprints/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
 };
