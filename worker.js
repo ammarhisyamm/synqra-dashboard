@@ -1,7 +1,4 @@
-const stages = new Set(['Planning', 'Review', 'In Progress', 'Final', 'Completed']);
-const areas = new Set(['Design', 'Engineering', 'Marketing']);
-const priorities = new Set(['Blocker', 'Major', 'Minor']);
-const statuses = new Set(['Open', 'In Progress', 'Review', 'Resolved', 'Rejected']);
+import { stages, areas, priorities, statuses, MAX_ATTACHMENT_BYTES } from './worker/constants.js';
 
 const json = (body, status = 200) => Response.json(body, { status, headers: { 'cache-control': 'no-store' } });
 const safeText = (value, max = 200) => typeof value === 'string' ? value.trim().slice(0, max) : '';
@@ -344,7 +341,7 @@ async function routeApi(request, env) {
     if (!env.ATTACHMENTS) return json({ error: 'R2 attachments are not configured.' }, 503);
     const form = await request.formData(); const file = form.get('file');
     if (!(file instanceof File) || !file.size) return json({ error: 'Choose a file to upload.' }, 400);
-    if (file.size > 50 * 1024 * 1024) return json({ error: 'Files must be 50 MB or smaller.' }, 413);
+    if (file.size > MAX_ATTACHMENT_BYTES) return json({ error: 'Files must be 50 MB or smaller.' }, 413);
     if (!await env.DB.prepare('SELECT id FROM reviews WHERE id = ?').bind(attachmentPostMatch[1]).first()) return json({ error: 'Review not found.' }, 404);
     const filename = safeText(file.name, 180) || 'attachment'; const key = `${attachmentPostMatch[1]}/${id()}-${filename.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
     await env.ATTACHMENTS.put(key, file.stream(), { httpMetadata: { contentType: file.type || 'application/octet-stream' } });

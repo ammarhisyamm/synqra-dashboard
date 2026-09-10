@@ -9,20 +9,11 @@ import './styles.css';
 import './detail.css';
 import './detail-overrides.css';
 import './workflow.css';
-
-const STORAGE_KEY = 'synqra-dashboard-v1';
-const AREAS = ['Design', 'Engineering', 'Marketing'];
-const STAGES = ['Planning', 'Review', 'In Progress', 'Final', 'Completed'];
-const PRIORITIES = ['Blocker', 'Major', 'Minor'];
-const STAGE_ICONS = [ClipboardList, CircleDot, Target, CheckCircle2, Check];
-const STAGE_META = [
-  { name: 'Planning', Icon: ListChecks, color: '#8b5cf6' },
-  { name: 'Review', Icon: MessageCircle, color: '#3b82f6' },
-  { name: 'In Progress', Icon: MousePointer2, color: '#a855f7' },
-  { name: 'Final', Icon: Flag, color: '#3b82f6' },
-  { name: 'Completed', Icon: CheckCircle2, color: '#22c55e' }
-];
-const PROJECTS = ['Omnichannel', 'Kaizen Project', 'Billing Portal', 'Onboarding Revamp', 'Test ER'];
+import { STORAGE_KEY, AREAS, STAGES, PRIORITIES, STATUS_OPTIONS, STAGE_ICONS, STAGE_META, PROJECTS } from './constants/workflow';
+import { dateLabel, slashDate, shortDate, ageLabel, groupDateLabel, relativeDate } from './lib/dates';
+import { api } from './api/client';
+import { reviewsApi } from './api/reviews';
+import { notificationsApi } from './api/notifications';
 
 const seed = {
   project: { name: 'Acme Redesign', initials: 'A' },
@@ -48,31 +39,6 @@ function loadData() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || seed; } catch { return seed; }
 }
 
-function dateLabel(date) {
-  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(`${date}T12:00:00`));
-}
-function slashDate(date) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) return '—';
-  const [y, m, d] = date.split('-');
-  return `${m}/${d}/${y}`;
-}
-function shortDate(date) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) return '—';
-  return new Intl.DateTimeFormat('en-US', { day: 'numeric', month: 'short' }).format(new Date(`${date}T12:00:00`));
-}
-function ageLabel(createdAt) {
-  const then = new Date(createdAt.length === 10 ? `${createdAt}T12:00:00` : createdAt).getTime();
-  const d = Math.max(0, Math.floor((Date.now() - then) / 86400000));
-  return `${d}d`;
-}
-function groupDateLabel(date) {
-  return new Intl.DateTimeFormat('en-US', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(`${date}T12:00:00`));
-}
-function relativeDate(date) {
-  const dateValue = new Date(date.length === 10 ? `${date}T12:00:00` : date);
-  const d = Math.max(0, Math.floor((Date.now() - dateValue.getTime()) / 86400000));
-  return d === 0 ? 'today' : `${d} day${d === 1 ? '' : 's'} ago`;
-}
 function toKey(title) { return title.toLowerCase().replace(/[^a-z0-9]+/g, '-'); }
 function statusFor(review) {
   if (review.status) return review.status;
@@ -81,13 +47,6 @@ function statusFor(review) {
   if (review.stage === 'In Progress') return 'In Progress';
   return 'Open';
 }
-async function api(path, options = {}) {
-  const response = await fetch(path, { ...options, headers: { 'content-type': 'application/json', ...(options.headers || {}) } });
-  const body = await response.json();
-  if (!response.ok) throw new Error(body.error || 'Could not save your changes.');
-  return body;
-}
-
 function App() {
   const [data, setData] = useState(loadData);
   const [cloudReady, setCloudReady] = useState(false);
@@ -124,12 +83,12 @@ function App() {
   const activeReviews = useMemo(() => data.reviews.filter(r => !r.archived), [data.reviews]);
   const updateReview = (id, patch) => {
     setData(prev => ({ ...prev, reviews: prev.reviews.map(r => r.id === id ? { ...r, ...patch } : r) }));
-    api(`/api/reviews/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }).catch(error => setToast(error.message));
+    reviewsApi.update(id, patch).catch(error => setToast(error.message));
   };
   const addReview = (review) => {
     const saved = { id: crypto.randomUUID(), createdAt: new Date().toISOString().slice(0, 10), archived: false, ...review };
     setData(prev => ({ ...prev, reviews: [saved, ...prev.reviews] }));
-    api('/api/reviews', { method: 'POST', body: JSON.stringify(saved) }).catch(error => setToast(error.message));
+    reviewsApi.create(saved).catch(error => setToast(error.message));
   };
   const showSuccess = (title, subtitle, ctaLabel, onCta) => setDialog({ success: true, icon: <CheckCircle2 size={24}/>, title, subtitle, ctaLabel, onCta });
   const archiveReview = (id) => {
@@ -161,9 +120,9 @@ function App() {
   const resetData = () => { setData(seed); setToast('Demo data restored'); };
   const signOut = async () => { try { await api('/api/auth/logout', { method: 'POST' }); } finally { setUser(null); setCloudReady(false); setData(seed); } };
   const saveProject = async settings => { try { const saved = await api('/api/project-settings', { method: 'PATCH', body: JSON.stringify(settings) }); setData(prev => ({ ...prev, project: saved })); setToast('Settings saved'); } catch (error) { setToast(error.message); } };
-  const refreshNotifications = async () => { try { const result = await api('/api/notifications'); setNotifications(result.notifications); } catch (error) { setToast(error.message); } };
-  const markNotificationRead = async notification => { try { await api(`/api/notifications/${notification.id}`, { method: 'PATCH' }); setNotifications(items => items.map(item => item.id === notification.id ? { ...item, read: true } : item)); setData(prev => ({ ...prev, unreadNotifications: Math.max(0, (prev.unreadNotifications || 0) - (notification.read ? 0 : 1)) })); } catch (error) { setToast(error.message); } };
-  const markAllNotificationsRead = async () => { try { await api('/api/notifications/read-all', { method: 'POST' }); setNotifications(items => items.map(item => ({ ...item, read: true }))); setData(prev => ({ ...prev, unreadNotifications: 0 })); } catch (error) { setToast(error.message); } };
+  const refreshNotifications = async () => { try { const result = await notificationsApi.list(); setNotifications(result.notifications); } catch (error) { setToast(error.message); } };
+  const markNotificationRead = async notification => { try { await notificationsApi.read(notification.id); setNotifications(items => items.map(item => item.id === notification.id ? { ...item, read: true } : item)); setData(prev => ({ ...prev, unreadNotifications: Math.max(0, (prev.unreadNotifications || 0) - (notification.read ? 0 : 1)) })); } catch (error) { setToast(error.message); } };
+  const markAllNotificationsRead = async () => { try { await notificationsApi.readAll(); setNotifications(items => items.map(item => ({ ...item, read: true }))); setData(prev => ({ ...prev, unreadNotifications: 0 })); } catch (error) { setToast(error.message); } };
 
   if (user === undefined) return <AuthLoading/>;
   if (!user) return <AuthScreen onAuthenticated={signedInUser => { setUser(signedInUser); api('/api/bootstrap').then(remote => { setData(remote); setCloudReady(true); }).catch(() => setCloudReady(false)); }}/>;
@@ -335,7 +294,7 @@ function ReviewDetail({ review, meetings, user, onClose, onUpdated, onDeleted, o
 }
 function ReviewDetailEnhanced({ review, meetings, user, onClose, onUpdated, onDeleted, onToast, onRemoveRequest }) {
   const [detail, setDetail] = useState(null); const [draft, setDraft] = useState(review); const [comment, setComment] = useState(''); const [subtask, setSubtask] = useState(''); const [uploading, setUploading] = useState(false);
-  useEffect(() => { api(`/api/reviews/${review.id}/details`).then(result => { setDetail(result); setDraft(result.review); }).catch(error => onToast(error.message)); }, [review.id]);
+  useEffect(() => { reviewsApi.details(review.id).then(result => { setDetail(result); setDraft(result.review); }).catch(error => onToast(error.message)); }, [review.id]);
   const save = async patch => { try { const saved = await api(`/api/reviews/${review.id}`, { method: 'PATCH', body: JSON.stringify(patch) }); setDraft(saved); setDetail(previous => ({ ...previous, review: saved })); onUpdated(saved); onToast('Task updated'); } catch (error) { onToast(error.message); } };
   const addSubtask = async event => { event.preventDefault(); if (!subtask.trim()) return; try { const saved = await api(`/api/reviews/${review.id}/subtasks`, { method: 'POST', body: JSON.stringify({ title: subtask }) }); setDetail(previous => ({ ...previous, subtasks: [...(previous.subtasks || []), saved] })); setSubtask(''); } catch (error) { onToast(error.message); } };
   const toggleSubtask = async item => { try { const saved = await api(`/api/reviews/${review.id}/subtasks/${item.id}`, { method: 'PATCH', body: JSON.stringify({ completed: !item.completed }) }); setDetail(previous => ({ ...previous, subtasks: previous.subtasks.map(current => current.id === item.id ? { ...current, ...saved } : current) })); } catch (error) { onToast(error.message); } };
