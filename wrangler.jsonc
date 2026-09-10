@@ -3,6 +3,11 @@
   "name": "synqra-dashboard",
   "main": "worker.js",
   "compatibility_date": "2026-09-10",
+  "observability": {
+    "enabled": true,
+    "logs": { "enabled": true, "head_sampling_rate": 1 },
+    "traces": { "enabled": true, "head_sampling_rate": 0.05 }
+  },
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",

@@ -12,10 +12,10 @@ export function DeleteProjectModal({ project, onClose, onDelete }) {
     try { await onDelete(project.id); } finally { setPending(false); }
   };
   return <div className="modal-backdrop" onMouseDown={onClose}>
-    <section className="delete-project-modal" onMouseDown={event => event.stopPropagation()}>
-      <button className="modal-close" onClick={onClose} aria-label="Close"><X size={19}/></button>
+    <section className="delete-project-modal" role="alertdialog" aria-modal="true" aria-labelledby="delete-project-dialog-title" onMouseDown={event => event.stopPropagation()}>
+      <button className="modal-close" type="button" onClick={onClose} aria-label="Close delete project dialog"><X size={19}/></button>
       <div className="delete-project-icon"><Warning size={25}/></div>
-      <h2>Delete project?</h2>
+      <h2 id="delete-project-dialog-title">Delete project?</h2>
       <p>This will permanently delete <strong>“{project.name}”</strong> and all associated data. This cannot be undone.</p>
       <span className="delete-project-label">THE FOLLOWING WILL BE DELETED:</span>
       <div className="delete-project-effects"><span><Check size={14}/> Reviews</span><span><Check size={14}/> Meetings</span><span><Check size={14}/> Comments</span><span><Check size={14}/> Workflow data</span></div>
