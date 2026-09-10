@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
-  Archive, ArrowRight, Bell, CalendarDays, Check, CheckCircle2, ChevronDown, CircleDot,
+  Archive, ArrowRight, Bell, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronsUpDown, CircleDot,
   ClipboardList, Download, FileText, Folder, Home, KanbanSquare, LayoutGrid, ListChecks,
-  Menu, MoreHorizontal, Plus, Search, Settings2, ShieldCheck, SlidersHorizontal, Sparkles,
+  Menu, MessageCircle, MoreHorizontal, MoreVertical, Plus, Search, Settings, Settings2, ShieldCheck, SlidersHorizontal, Sparkles,
   Table2, Target, Users, Video, X
 } from 'lucide-react';
 import './styles.css';
@@ -65,7 +65,7 @@ function App() {
   const [data, setData] = useState(loadData);
   const [cloudReady, setCloudReady] = useState(false);
   const [user, setUser] = useState(undefined);
-  const [page, setPage] = useState('Dashboard');
+  const [page, setPage] = useState('Overview');
   const [menuOpen, setMenuOpen] = useState(false);
   const [projectOpen, setProjectOpen] = useState(false);
   const [modal, setModal] = useState(null);
@@ -115,11 +115,10 @@ function App() {
   if (!user) return <AuthScreen onAuthenticated={signedInUser => { setUser(signedInUser); api('/api/bootstrap').then(remote => { setData(remote); setCloudReady(true); }).catch(() => setCloudReady(false)); }}/>;
 
   return <div className="app-shell">
-    <Sidebar page={page} setPage={setPage} menuOpen={menuOpen} setMenuOpen={setMenuOpen} user={user} onSignOut={signOut} />
+    <Sidebar page={page} setPage={setPage} menuOpen={menuOpen} setMenuOpen={setMenuOpen} user={user} onSignOut={signOut} project={data.project} onProjectClick={() => setProjectOpen(!projectOpen)} />
     <main className="workspace">
       <header className="topbar">
         <button className="icon-button mobile-menu" onClick={() => setMenuOpen(!menuOpen)} aria-label="Toggle menu"><Menu size={20}/></button>
-        <button className="top-brand" onClick={() => setProjectOpen(!projectOpen)}><span className="brand-symbol"><span/></span><strong>Synqra</strong><small>Powered by MULIA</small><ChevronDown size={15}/></button>
         <label className="global-search"><Search size={17}/><input placeholder="Search…"/><kbd>⌘K</kbd></label>
         <div className="topbar-actions">
           <button className="collaborator"><Users size={16}/> Collaborator</button>
@@ -127,10 +126,10 @@ function App() {
         </div>
       </header>
       {projectOpen && <ProjectSwitcher project={data.project} onClose={() => setProjectOpen(false)} />}
-      {page === 'Dashboard' && <Dashboard reviews={activeReviews} meetings={data.meetings} goTo={setPage} />}
+      {page === 'Overview' && <Dashboard reviews={activeReviews} meetings={data.meetings} goTo={setPage} />}
       {page === 'All Reviews' && <Reviews reviews={activeReviews} query={query} setQuery={setQuery} updateReview={updateReview} archiveReview={archiveReview} setModal={setModal} />}
       {page === 'Meetings' && <Meetings meetings={data.meetings} addMeeting={addMeeting} addReview={addReview} setToast={setToast} setModal={setModal} />}
-      {page === 'Kanban' && <Kanban reviews={activeReviews} updateReview={updateReview} archiveReview={archiveReview} setModal={setModal} />}
+      {page === 'Kanban Board' && <Kanban reviews={activeReviews} updateReview={updateReview} archiveReview={archiveReview} setModal={setModal} />}
       {page === 'Archive' && <ArchivePage reviews={data.reviews.filter(r => r.archived)} restoreReview={restoreReview} />}
       {page === 'Settings' && <SettingsPage project={data.project} setToast={setToast} />}
       {page === 'Admin' && <AdminPage user={user}/>} 
@@ -142,12 +141,31 @@ function App() {
   </div>;
 }
 
-function Sidebar({ page, setPage, menuOpen, setMenuOpen, user, onSignOut }) {
-  const items = [["Dashboard", Home], ["All Reviews", ListChecks], ["Meetings", CalendarDays], ["Kanban", LayoutGrid], ["Archive", Archive]];
+function Sidebar({ page, setPage, menuOpen, setMenuOpen, user, onSignOut, project, onProjectClick }) {
+  const workspace = [["Overview", Home], ["All Reviews", MessageCircle], ["Meetings", CalendarDays], ["Kanban Board", KanbanSquare], ["Archive", Archive]];
+  const go = name => { setPage(name); setMenuOpen(false); };
   return <aside className={`sidebar ${menuOpen ? 'open' : ''}`}>
-    <nav>{items.map(([name, Icon]) => <button key={name} className={page === name ? 'active' : ''} onClick={() => { setPage(name); setMenuOpen(false); }}><Icon size={18}/><span>{name}</span></button>)}</nav>
-    <div className="sidebar-bottom"><button className={page === 'Settings' ? 'active settings' : 'settings'} onClick={() => setPage('Settings')}><Settings2 size={18}/><span>Settings</span></button>{['super_admin','admin'].includes(user.role) && <button className={page === 'Admin' ? 'active settings' : 'settings'} onClick={() => setPage('Admin')}><ShieldCheck size={18}/><span>Admin</span></button>}<button className="team-row" onClick={onSignOut} title="Sign out"><div className="avatar avatar-dark">{user.name.slice(0,2).toUpperCase()}</div><span>{user.name}</span><MoreHorizontal size={16}/></button></div>
+    <div className="sidebar-head">
+      <button className="sidebar-menu-btn" onClick={() => setMenuOpen(!menuOpen)} aria-label="Toggle menu"><Menu size={22}/></button>
+      <div className="sidebar-brand"><SynqraMark/><div><strong>Synqra</strong><small>Powered by MULIA</small></div></div>
+    </div>
+    <div className="sidebar-scroll">
+      <section><p className="side-label">PROJECT</p><button className="project-select" onClick={onProjectClick}><Folder size={20}/><span>{project.name}</span><ChevronsUpDown size={17}/></button></section>
+      <section><p className="side-label">WORKSPACE</p><nav className="side-nav">{workspace.map(([name, Icon]) => <button key={name} className={page === name ? 'active' : ''} onClick={() => go(name)}><Icon size={20} {...(name === 'Overview' && page === name ? { fill: 'currentColor' } : {})}/><span>{name}</span></button>)}</nav></section>
+    </div>
+    <div className="sidebar-foot">
+      <p className="side-label">MANAGEMENT</p>
+      <nav className="side-nav">
+        <button className={page === 'Settings' ? 'active' : ''} onClick={() => go('Settings')}><Settings size={20}/><span>Settings</span></button>
+        {['super_admin','admin'].includes(user.role) && <button className={page === 'Admin' ? 'active' : ''} onClick={() => go('Admin')}><ShieldCheck size={20}/><span>Admin Management</span></button>}
+      </nav>
+      <button className="user-card" onClick={onSignOut} title="Sign out"><div className="avatar avatar-dark">{user.name.slice(0,2).toUpperCase()}</div><div><strong>{user.name}</strong><small>{user.email}</small></div><MoreVertical size={18}/></button>
+    </div>
   </aside>;
+}
+
+function SynqraMark() {
+  return <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 2.5 28.5 9.7v12.6L16 29.5 3.5 22.3V9.7Z" fill="none" stroke="#10182b" strokeWidth="3" strokeLinejoin="round"/><path d="M16 10.2l5.8 3.3v6.7l-5.8 3.3-5.8-3.3v-6.7Z" fill="#10182b"/></svg>;
 }
 
 function AuthLoading() { return <div className="auth-shell"><div className="auth-card auth-loading"><span className="brand-symbol"><span/></span><strong>Checking your session…</strong></div></div>; }
@@ -170,7 +188,7 @@ function Dashboard({ reviews, meetings, goTo }) {
   const completed = reviews.filter(r => r.stage === 'Completed').length;
   const blockers = reviews.filter(r => r.priority === 'Blocker').length;
   return <section className="page dashboard-page">
-    <div className="page-title"><div><h1>Dashboard</h1><p>{day}</p></div><span className="readonly"><CircleDot size={14}/> Live workspace</span></div>
+    <div className="page-title"><div><h1>Overview</h1><p>{day}</p></div><span className="readonly"><CircleDot size={14}/> Live workspace</span></div>
     <div className="dashboard-grid">
       <div className="dashboard-main">
         <SectionHead title="Needs attention" action={() => goTo('All Reviews')} />
