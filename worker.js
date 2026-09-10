@@ -11,6 +11,15 @@ const base64ToBytes = value => Uint8Array.from(atob(value), char => char.charCod
 const cookieValue = (request, name) => (request.headers.get('Cookie') || '').split(';').map(v => v.trim()).find(v => v.startsWith(`${name}=`))?.slice(name.length + 1);
 const publicUser = user => ({ id: user.id, email: user.email, username: user.username || user.name, name: user.name, role: user.role });
 const parseJson = (value, fallback) => { try { return value ? JSON.parse(value) : fallback; } catch { return fallback; } };
+let workspaceSchema;
+async function ensureWorkspaceSchema(env) {
+  workspaceSchema ||= env.DB.batch([
+    env.DB.prepare("CREATE TABLE IF NOT EXISTS project_metadata (id TEXT PRIMARY KEY, project_id TEXT NOT NULL DEFAULT 'default', type TEXT NOT NULL CHECK (type IN ('epic','feature','label')), name TEXT NOT NULL, parent_id TEXT, color TEXT NOT NULL DEFAULT '#111b30', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(project_id, type, name))"),
+    env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_project_metadata_project_type ON project_metadata(project_id, type)'),
+    env.DB.prepare("CREATE TABLE IF NOT EXISTS project_member_roles (member_id TEXT PRIMARY KEY, role TEXT NOT NULL DEFAULT 'viewer' CHECK (role IN ('viewer','editor')), updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY (member_id) REFERENCES project_members(id) ON DELETE CASCADE)")
+  ]);
+  return workspaceSchema;
+}
 
 async function passwordHash(password, salt = crypto.getRandomValues(new Uint8Array(16))) {
   const key = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveBits']);
@@ -82,7 +91,8 @@ function normalizeReview(input, partial = false) {
 }
 
 async function bootstrap(env, userId) {
-  const [reviews, meetings, project, spaces, projects, workflowStatuses, sprints, unread, workload, report] = await env.DB.batch([
+  await ensureWorkspaceSchema(env);
+  const [reviews, meetings, project, spaces, projects, workflowStatuses, sprints, metadata, unread, workload, report] = await env.DB.batch([
     env.DB.prepare("SELECT id, key, title, area, priority, stage, assignee, due, start_date AS startDate, description, status, submitted_by AS submittedBy, reporter, meeting_id AS meetingId, estimate_hours AS estimateHours, epic, feature, sprint, labels, project_id AS projectId, parent_id AS parentId, item_type AS itemType, sprint_id AS sprintId, created_at AS createdAt, updated_at AS updatedAt, archived FROM reviews ORDER BY created_at DESC"),
     env.DB.prepare("SELECT id, title, date, ai, notes, project_id AS projectId, (SELECT COUNT(*) FROM reviews WHERE meeting_id = m.id AND archived = 0) AS itemCount, attendees FROM meetings m ORDER BY date DESC"),
     env.DB.prepare("SELECT name, description, access_mode AS accessMode FROM project_settings WHERE id = 'default'"),
@@ -90,12 +100,13 @@ async function bootstrap(env, userId) {
     env.DB.prepare('SELECT id, space_id AS spaceId, name, description, access_mode AS accessMode FROM projects ORDER BY name'),
     env.DB.prepare('SELECT id, project_id AS projectId, name, color, position, is_terminal AS isTerminal FROM workflow_statuses ORDER BY project_id, position'),
     env.DB.prepare('SELECT id, project_id AS projectId, name, goal, start_date AS startDate, end_date AS endDate, status FROM sprints ORDER BY start_date DESC'),
+    env.DB.prepare('SELECT id, project_id AS projectId, type, name, parent_id AS parentId, color FROM project_metadata ORDER BY type, name'),
     env.DB.prepare('SELECT COUNT(*) AS count FROM notifications WHERE user_id = ? AND read_at IS NULL').bind(userId),
     env.DB.prepare("SELECT COALESCE(NULLIF(assignee,''),'Unassigned') AS assignee, COUNT(*) AS count FROM reviews WHERE archived = 0 GROUP BY COALESCE(NULLIF(assignee,''),'Unassigned') ORDER BY count DESC"),
     env.DB.prepare("SELECT stage, COUNT(*) AS count FROM reviews WHERE archived = 0 GROUP BY stage ORDER BY count DESC")
   ]);
   const settings = project.results[0] || { name: 'Acme Redesign', description: '', accessMode: 'link' };
-  return { project: { id: 'default', ...settings, initials: settings.name.slice(0, 1).toUpperCase() }, reviews: reviews.results.map(r => ({ ...r, labels: parseJson(r.labels, []) })), meetings: meetings.results.map(m => ({ ...m, ai: Boolean(m.ai), attendees: parseJson(m.attendees, []) })), spaces: spaces.results, projects: projects.results, workflowStatuses: workflowStatuses.results.map(s => ({ ...s, isTerminal: Boolean(s.isTerminal) })), sprints: sprints.results, unreadNotifications: Number(unread.results[0]?.count || 0), workload: workload.results, reportByStatus: report.results };
+  return { project: { id: 'default', ...settings, initials: settings.name.slice(0, 1).toUpperCase() }, reviews: reviews.results.map(r => ({ ...r, labels: parseJson(r.labels, []) })), meetings: meetings.results.map(m => ({ ...m, ai: Boolean(m.ai), attendees: parseJson(m.attendees, []) })), spaces: spaces.results, projects: projects.results, workflowStatuses: workflowStatuses.results.map(s => ({ ...s, isTerminal: Boolean(s.isTerminal) })), sprints: sprints.results, metadata: metadata.results, unreadNotifications: Number(unread.results[0]?.count || 0), workload: workload.results, reportByStatus: report.results };
 }
 async function reviewSnapshot(env, reviewId) {
   return env.DB.prepare("SELECT id, key, title, area, priority, stage, assignee, due, start_date AS startDate, description, status, submitted_by AS submittedBy, reporter, meeting_id AS meetingId, estimate_hours AS estimateHours, epic, feature, sprint, labels, project_id AS projectId, parent_id AS parentId, item_type AS itemType, sprint_id AS sprintId, created_at AS createdAt, updated_at AS updatedAt, archived FROM reviews WHERE id = ?").bind(reviewId).first();
@@ -143,13 +154,14 @@ async function routeApi(request, env) {
 
   const user = await sessionUser(request, env);
   if (!user) return json({ error: 'Sign in required.' }, 401);
+  await ensureWorkspaceSchema(env);
   if (request.method === 'GET' && path === '/api/admin/users') {
     if (!['super_admin', 'admin'].includes(user.role)) return json({ error: 'Admin access required.' }, 403);
     const result = await env.DB.prepare('SELECT id, email, username, name, role, created_at AS createdAt FROM users ORDER BY CASE role WHEN \'super_admin\' THEN 0 WHEN \'admin\' THEN 1 ELSE 2 END, name').all();
     return json({ users: result.results });
   }
   if (request.method === 'GET' && path === '/api/project-members') {
-    const result = await env.DB.prepare('SELECT id, email, role, status, created_at AS createdAt FROM project_members ORDER BY created_at DESC').all();
+    const result = await env.DB.prepare("SELECT m.id, m.email, COALESCE(r.role, m.role, 'viewer') AS role, m.status, m.created_at AS createdAt FROM project_members m LEFT JOIN project_member_roles r ON r.member_id = m.id ORDER BY m.created_at DESC").all();
     return json({ members: result.results });
   }
   if (request.method === 'POST' && path === '/api/project-members') {
@@ -158,15 +170,50 @@ async function routeApi(request, env) {
     const email = safeText(body.email, 254).toLowerCase();
     if (!/^\S+@\S+\.\S+$/.test(email)) return json({ error: 'Enter a valid email address.' }, 400);
     if (await env.DB.prepare('SELECT id FROM project_members WHERE email = ?').bind(email).first()) return json({ error: 'That email has already been invited.' }, 409);
-    const member = { id: id(), email, role: 'viewer', status: 'invited' };
-    await env.DB.prepare('INSERT INTO project_members (id, email, role, status, invited_by) VALUES (?, ?, ?, ?, ?)').bind(member.id, member.email, member.role, member.status, user.id).run();
+    const role = ['viewer', 'editor'].includes(body.role) ? body.role : 'viewer';
+    const member = { id: id(), email, role, status: 'invited' };
+    await env.DB.batch([env.DB.prepare('INSERT INTO project_members (id, email, role, status, invited_by) VALUES (?, ?, ?, ?, ?)').bind(member.id, member.email, 'viewer', member.status, user.id), env.DB.prepare('INSERT INTO project_member_roles (member_id, role) VALUES (?, ?)').bind(member.id, role)]);
     return json(member, 201);
   }
   const memberMatch = path.match(/^\/api\/project-members\/([a-zA-Z0-9-]+)$/);
+  if (request.method === 'PATCH' && memberMatch) {
+    if (!['super_admin', 'admin'].includes(user.role)) return json({ error: 'Admin access required.' }, 403);
+    const body = await readBody(request); const role = body?.role;
+    if (!['viewer', 'editor'].includes(role)) return json({ error: 'Choose Viewer or Editor.' }, 400);
+    const exists = await env.DB.prepare('SELECT id FROM project_members WHERE id = ?').bind(memberMatch[1]).first();
+    if (!exists) return json({ error: 'Invite not found.' }, 404);
+    await env.DB.prepare("INSERT INTO project_member_roles (member_id, role, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP) ON CONFLICT(member_id) DO UPDATE SET role = excluded.role, updated_at = CURRENT_TIMESTAMP").bind(memberMatch[1], role).run();
+    return json({ ok: true, role });
+  }
   if (request.method === 'DELETE' && memberMatch) {
     if (!['super_admin', 'admin'].includes(user.role)) return json({ error: 'Admin access required.' }, 403);
     const result = await env.DB.prepare('DELETE FROM project_members WHERE id = ?').bind(memberMatch[1]).run();
     return result.meta.changes ? json({ ok: true }) : json({ error: 'Invite not found.' }, 404);
+  }
+  if (request.method === 'GET' && path === '/api/metadata') {
+    const result = await env.DB.prepare('SELECT id, project_id AS projectId, type, name, parent_id AS parentId, color FROM project_metadata ORDER BY type, name').all();
+    return json({ metadata: result.results });
+  }
+  if (request.method === 'POST' && path === '/api/metadata') {
+    if (!['super_admin', 'admin'].includes(user.role)) return json({ error: 'Admin access required.' }, 403);
+    const body = await readBody(request); if (!body || !['epic', 'feature', 'label'].includes(body.type)) return json({ error: 'Invalid metadata type.' }, 400);
+    const item = { id: id(), projectId: safeText(body.projectId, 80) || 'default', type: body.type, name: safeText(body.name, 100), parentId: safeText(body.parentId, 80) || null, color: /^#[0-9a-fA-F]{6}$/.test(body.color || '') ? body.color : '#111b30' };
+    if (!item.name) return json({ error: 'Name is required.' }, 400);
+    try { await env.DB.prepare('INSERT INTO project_metadata (id, project_id, type, name, parent_id, color) VALUES (?, ?, ?, ?, ?, ?)').bind(item.id, item.projectId, item.type, item.name, item.parentId, item.color).run(); return json(item, 201); } catch { return json({ error: 'That item already exists in this project.' }, 409); }
+  }
+  const metadataMatch = path.match(/^\/api\/metadata\/([a-zA-Z0-9-]+)$/);
+  if (request.method === 'PATCH' && metadataMatch) {
+    if (!['super_admin', 'admin'].includes(user.role)) return json({ error: 'Admin access required.' }, 403);
+    const body = await readBody(request); if (!body) return json({ error: 'Invalid JSON.' }, 400);
+    const fields = {}; if ('name' in body) fields.name = safeText(body.name, 100); if ('parentId' in body) fields.parent_id = safeText(body.parentId, 80) || null; if ('color' in body && /^#[0-9a-fA-F]{6}$/.test(body.color)) fields.color = body.color;
+    if (!Object.keys(fields).length || ('name' in fields && !fields.name)) return json({ error: 'Valid changes are required.' }, 400);
+    const result = await env.DB.prepare(`UPDATE project_metadata SET ${Object.keys(fields).map(key => `${key} = ?`).join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(...Object.values(fields), metadataMatch[1]).run();
+    return result.meta.changes ? json({ ok: true }) : json({ error: 'Metadata not found.' }, 404);
+  }
+  if (request.method === 'DELETE' && metadataMatch) {
+    if (!['super_admin', 'admin'].includes(user.role)) return json({ error: 'Admin access required.' }, 403);
+    const result = await env.DB.prepare('DELETE FROM project_metadata WHERE id = ?').bind(metadataMatch[1]).run();
+    return result.meta.changes ? json({ ok: true }) : json({ error: 'Metadata not found.' }, 404);
   }
   if (request.method === 'POST' && path === '/api/admin/users') {
     if (user.role !== 'super_admin') return json({ error: 'Super admin access required.' }, 403);

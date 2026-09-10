@@ -1,7 +1,7 @@
 import { CalendarPlus, ChatCircle, Gear, House, Kanban, MagnifyingGlass, Plus, ShieldCheck, Archive, Folder } from '@phosphor-icons/react';
 import { statusFor } from '../../lib/status';
 
-const navigation = [['Overview', House], ['All Reviews', ChatCircle], ['Kanban Board', Kanban], ['Archive', Archive], ['Settings', Gear], ['Admin Management', ShieldCheck]];
+const navigation = [['Overview', House], ['All Reviews', ChatCircle], ['Board', Kanban], ['Archive', Archive], ['Settings', Gear], ['Admin Management', ShieldCheck]];
 
 export function CommandPalette({ query, setQuery, reviews, projects, activeProjectId, onClose, onNavigate, onNewMeeting, onNewReview, onOpenReview, onSelectProject }) {
   const term = query.trim().toLowerCase();
