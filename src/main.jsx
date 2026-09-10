@@ -64,6 +64,7 @@ async function api(path, options = {}) {
 function App() {
   const [data, setData] = useState(loadData);
   const [cloudReady, setCloudReady] = useState(false);
+  const [user, setUser] = useState(undefined);
   const [page, setPage] = useState('Dashboard');
   const [menuOpen, setMenuOpen] = useState(false);
   const [projectOpen, setProjectOpen] = useState(false);
@@ -73,7 +74,10 @@ function App() {
 
   useEffect(() => localStorage.setItem(STORAGE_KEY, JSON.stringify(data)), [data]);
   useEffect(() => {
-    api('/api/bootstrap').then(remote => { setData(remote); setCloudReady(true); }).catch(() => setCloudReady(false));
+    api('/api/auth/me').then(({ user: signedInUser }) => {
+      setUser(signedInUser);
+      return api('/api/bootstrap');
+    }).then(remote => { setData(remote); setCloudReady(true); }).catch(() => { setUser(null); setCloudReady(false); });
   }, []);
   useEffect(() => {
     if (!toast) return undefined;
@@ -105,9 +109,13 @@ function App() {
     setToast('Project data exported');
   };
   const resetData = () => { setData(seed); setToast('Demo data restored'); };
+  const signOut = async () => { try { await api('/api/auth/logout', { method: 'POST' }); } finally { setUser(null); setCloudReady(false); setData(seed); } };
+
+  if (user === undefined) return <AuthLoading/>;
+  if (!user) return <AuthScreen onAuthenticated={signedInUser => { setUser(signedInUser); api('/api/bootstrap').then(remote => { setData(remote); setCloudReady(true); }).catch(() => setCloudReady(false)); }}/>;
 
   return <div className="app-shell">
-    <Sidebar page={page} setPage={setPage} menuOpen={menuOpen} setMenuOpen={setMenuOpen} />
+    <Sidebar page={page} setPage={setPage} menuOpen={menuOpen} setMenuOpen={setMenuOpen} user={user} onSignOut={signOut} />
     <main className="workspace">
       <header className="topbar">
         <button className="icon-button mobile-menu" onClick={() => setMenuOpen(!menuOpen)} aria-label="Toggle menu"><Menu size={20}/></button>
@@ -125,6 +133,7 @@ function App() {
       {page === 'Kanban' && <Kanban reviews={activeReviews} updateReview={updateReview} archiveReview={archiveReview} setModal={setModal} />}
       {page === 'Archive' && <ArchivePage reviews={data.reviews.filter(r => r.archived)} restoreReview={restoreReview} />}
       {page === 'Settings' && <SettingsPage project={data.project} setToast={setToast} />}
+      {page === 'Admin' && <AdminPage user={user}/>} 
     </main>
     {toast && <div className="toast"><CheckCircle2 size={17}/>{toast}</div>}
     {modal === 'review' && <ReviewModal onClose={() => setModal(null)} onSave={(review) => { addReview(review); setModal(null); setToast('Review created'); }} />}
@@ -133,12 +142,20 @@ function App() {
   </div>;
 }
 
-function Sidebar({ page, setPage, menuOpen, setMenuOpen }) {
+function Sidebar({ page, setPage, menuOpen, setMenuOpen, user, onSignOut }) {
   const items = [["Dashboard", Home], ["All Reviews", ListChecks], ["Meetings", CalendarDays], ["Kanban", LayoutGrid], ["Archive", Archive]];
   return <aside className={`sidebar ${menuOpen ? 'open' : ''}`}>
     <nav>{items.map(([name, Icon]) => <button key={name} className={page === name ? 'active' : ''} onClick={() => { setPage(name); setMenuOpen(false); }}><Icon size={18}/><span>{name}</span></button>)}</nav>
-    <div className="sidebar-bottom"><button className={page === 'Settings' ? 'active settings' : 'settings'} onClick={() => setPage('Settings')}><Settings2 size={18}/><span>Settings</span></button><button className="settings"><ShieldCheck size={18}/><span>Admin</span></button><div className="team-row"><div className="avatar avatar-dark">AH</div><span>Ammar Hisyam</span><MoreHorizontal size={16}/></div></div>
+    <div className="sidebar-bottom"><button className={page === 'Settings' ? 'active settings' : 'settings'} onClick={() => setPage('Settings')}><Settings2 size={18}/><span>Settings</span></button>{['super_admin','admin'].includes(user.role) && <button className={page === 'Admin' ? 'active settings' : 'settings'} onClick={() => setPage('Admin')}><ShieldCheck size={18}/><span>Admin</span></button>}<button className="team-row" onClick={onSignOut} title="Sign out"><div className="avatar avatar-dark">{user.name.slice(0,2).toUpperCase()}</div><span>{user.name}</span><MoreHorizontal size={16}/></button></div>
   </aside>;
+}
+
+function AuthLoading() { return <div className="auth-shell"><div className="auth-card auth-loading"><span className="brand-symbol"><span/></span><strong>Checking your session…</strong></div></div>; }
+function AuthScreen({ onAuthenticated }) {
+  const [mode, setMode] = useState('login'); const [form, setForm] = useState({ name:'', email:'', password:'' }); const [error, setError] = useState(''); const [pending, setPending] = useState(false);
+  const update = (key, value) => setForm(prev => ({ ...prev, [key]: value }));
+  const submit = async event => { event.preventDefault(); setPending(true); setError(''); try { const result = await api(`/api/auth/${mode === 'login' ? 'login' : 'register'}`, { method:'POST', body:JSON.stringify(form) }); onAuthenticated(result.user); } catch (err) { setError(err.message); } finally { setPending(false); } };
+  return <div className="auth-shell"><section className="auth-card"><div className="auth-brand"><span className="brand-symbol"><span/></span><div><strong>Synqra</strong><small>Powered by MULIA</small></div></div><h1>{mode === 'login' ? 'Welcome back' : 'Create your workspace'}</h1><p>{mode === 'login' ? 'Sign in to continue to your project reviews.' : 'Your first account becomes the workspace super admin.'}</p><form onSubmit={submit}>{mode === 'register' && <label>Name<input value={form.name} onChange={e=>update('name',e.target.value)} autoComplete="name" required/></label>}<label>Email<input type="email" value={form.email} onChange={e=>update('email',e.target.value)} autoComplete="email" required/></label><label>Password<input type="password" value={form.password} onChange={e=>update('password',e.target.value)} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} minLength="10" required/><small>At least 10 characters.</small></label>{error && <div className="auth-error">{error}</div>}<button className="primary-button" disabled={pending}>{pending ? 'Please wait…' : mode === 'login' ? 'Sign in' : 'Create account'} <ArrowRight size={16}/></button></form><button className="auth-toggle" onClick={()=>{setMode(mode === 'login' ? 'register' : 'login');setError('');}}>{mode === 'login' ? 'New to Synqra? Create an account' : 'Already have an account? Sign in'}</button></section></div>;
 }
 
 function ProjectSwitcher({ project, onClose }) {
@@ -216,6 +233,14 @@ function SettingsPage({ project, setToast }) {
   const [name, setName] = useState(project.name);
   const [access, setAccess] = useState('link');
   return <section className="page settings-page"><PageHeading title="Settings"/><div className="settings-card"><section><div className="settings-section-head"><span><Settings2 size={20}/></span><div><h2>General</h2><p>Manage your project details.</p></div></div><label>Project name<input value={name} onChange={e=>setName(e.target.value)}/></label><label>Description<textarea placeholder="Optional project description" rows="4"/></label></section><section><div className="settings-section-head"><span><Users size={20}/></span><div><h2>Sharing & access</h2><p>Control who can view this project.</p></div></div><button className={access === 'invite' ? 'access-option selected' : 'access-option'} onClick={()=>setAccess('invite')}><ShieldCheck size={20}/><span><strong>Invite only</strong><small>Only people you invite by email can access this project.</small></span></button><button className={access === 'link' ? 'access-option selected' : 'access-option'} onClick={()=>setAccess('link')}><Users size={20}/><span><strong>Anyone with the link</strong><small>Anyone who has the link can view this project in read-only mode.</small></span></button>{access === 'link' && <div className="share-link"><input readOnly value="https://synqra-dashboard.ammarhisyam151.workers.dev"/><button onClick={()=>{navigator.clipboard?.writeText('https://synqra-dashboard.ammarhisyam151.workers.dev');setToast('Project link copied');}}>Copy</button></div>}<button className="primary-button settings-save" onClick={()=>setToast('Settings saved')}>Save</button></section><section className="danger-section"><div className="settings-section-head"><span><Archive size={20}/></span><div><h2>Danger zone</h2><p>Permanently delete this project and all associated feedback.</p></div></div><button>Delete project</button></section></div></section>;
+}
+
+function AdminPage({ user }) {
+  const [admins, setAdmins] = useState([]); const [error, setError] = useState('');
+  useEffect(() => { api('/api/admin/users').then(data => setAdmins(data.users)).catch(err => setError(err.message)); }, []);
+  const superAdmins = admins.filter(person => person.role === 'super_admin').length;
+  const regularAdmins = admins.filter(person => person.role === 'admin').length;
+  return <section className="page admin-page"><PageHeading title="Admin Management" action={<button className="primary-button" onClick={()=>alert('Invite links require an email provider connection. Add Cloudflare Email or Resend before enabling invitations.')}><Users size={16}/> Invite Admin</button>}/><div className="admin-kpis"><MetricCard label="Total Admins" value={admins.length}/><MetricCard label="Super Admins" value={superAdmins}/><MetricCard label="Regular Admins" value={regularAdmins}/></div>{error ? <Empty text={error}/> : <div className="table-wrap"><table><thead><tr><th>Email</th><th>Name</th><th>Role</th><th>Actions</th></tr></thead><tbody>{admins.map(person => <tr key={person.id}><td><strong>{person.email}{person.id === user.id && <small className="you">(You)</small>}</strong></td><td>{person.name}</td><td><StatusPill value={person.role === 'super_admin' ? 'Super admin' : person.role === 'admin' ? 'Admin' : 'Member'}/></td><td>{person.id !== user.id && <button className="row-action"><MoreHorizontal size={17}/></button>}</td></tr>)}</tbody></table></div>}</section>;
 }
 
 function ReviewModal({ onClose, onSave }) { const [form, setForm] = useState({title:'',area:'Design',priority:'Major',stage:'Planning',assignee:'Aria',due:'2026-09-18'}); const edit = (key,val)=>setForm(x=>({...x,[key]:val})); return <Modal title="New review item" subtitle="Create an actionable item for your team." onClose={onClose}><form onSubmit={e=>{e.preventDefault(); if(form.title.trim())onSave(form)}}><label>Review item<input autoFocus value={form.title} onChange={e=>edit('title',e.target.value)} placeholder="What needs to happen?" required/></label><div className="form-grid"><SelectField label="Area" value={form.area} values={AREAS} onChange={v=>edit('area',v)}/><SelectField label="Priority" value={form.priority} values={PRIORITIES} onChange={v=>edit('priority',v)}/><SelectField label="Stage" value={form.stage} values={STAGES} onChange={v=>edit('stage',v)}/><SelectField label="Assignee" value={form.assignee} values={['Aria','Leo','Mia']} onChange={v=>edit('assignee',v)}/></div><label>Due date<input type="date" value={form.due} onChange={e=>edit('due',e.target.value)}/></label><div className="modal-actions"><button type="button" className="text-button" onClick={onClose}>Cancel</button><button className="primary-button">Create review <ArrowRight size={16}/></button></div></form></Modal>; }
