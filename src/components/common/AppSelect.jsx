@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { CaretDown as ChevronDown, Check } from '@phosphor-icons/react';
 
-export function AppSelect({ value, options = [], onChange, ariaLabel, placeholder = 'Select…', className = '', icon: Icon }) {
+export function AppSelect({ value, options = [], onChange, ariaLabel, placeholder = 'Select…', className = '', icon: Icon, badge, prefix }) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef(null);
 
@@ -40,8 +40,10 @@ export function AppSelect({ value, options = [], onChange, ariaLabel, placeholde
         aria-expanded={open}
         onClick={() => setOpen(prev => !prev)}
       >
+        {prefix}
         {Icon && <Icon size={15} className="app-select-icon" />}
         <span className="app-select-label">{current?.label || placeholder}</span>
+        {badge !== undefined && badge !== null && <span className="app-select-badge">{badge}</span>}
         <ChevronDown size={14} className={`app-select-chevron ${open ? 'rotated' : ''}`} />
       </button>
       {open && (

@@ -97,7 +97,7 @@ function Timeline({ tasks, onOpen }) {
   return <section className="timeline-board"><div className="timeline-scroll"><div className="timeline-head"><strong>Task</strong><div>{dates.map(date => <span key={date}>{toDate(date).getDate()}</span>)}</div></div>{Object.entries(grouped).map(([epic, items]) => <div className="timeline-group" key={epic}><strong className="timeline-group-label"><i/>{epic}</strong>{items.map(task => { const taskStart = task.startDate || task.due || dates[0]; const taskEnd = task.due || task.startDate || taskStart; const offset = Math.max(0, Math.min(13, daysBetween(dates[0], taskStart))); const span = Math.max(1, Math.min(14 - offset, daysBetween(taskStart, taskEnd) + 1)); return <div className="timeline-row" key={task.id}><button onClick={() => onOpen(task)}><span>{task.key || 'TASK'}</span><strong>{task.title}</strong><small>{task.assignee || 'Unassigned'}</small></button><div className="timeline-track">{dates.map(date => <i key={date}/>) }<button className="timeline-bar" style={{ gridColumn: `${offset + 1} / span ${span}` }} onClick={() => onOpen(task)} title={`${task.title} · ${labelDate(taskStart)} – ${labelDate(taskEnd)}`}>{span > 2 && task.title}</button></div></div>; })}</div>)}</div></section>;
 }
 
-export function KanbanWorkspace({ reviews, sprints, metadata = [], projectId, updateReview, createSprint, updateSprint, refreshMetadata, setModal, onOpen }) {
+export function KanbanWorkspace({ project, reviews, sprints = [], metadata = [], projectId, updateReview, createSprint, updateSprint, refreshMetadata, setModal, onOpen }) {
   const [view, setView] = useState('board');
   const [search, setSearch] = useState('');
   const [assignee, setAssignee] = useState('');
@@ -108,14 +108,17 @@ export function KanbanWorkspace({ reviews, sprints, metadata = [], projectId, up
   const [label, setLabel] = useState('');
   const [dragId, setDragId] = useState(null);
   const [metadataOpen, setMetadataOpen] = useState(false);
+
   const owners = useMemo(() => [...new Set(reviews.map(task => task.assignee).filter(Boolean))], [reviews]);
   const epics = useMemo(() => [...new Set([...metadata.filter(item => item.type === 'epic').map(item => item.name), ...reviews.map(task => task.epic).filter(Boolean)])], [metadata, reviews]);
   const features = useMemo(() => [...new Set([...metadata.filter(item => item.type === 'feature').map(item => item.name), ...reviews.map(task => task.feature).filter(Boolean)])], [metadata, reviews]);
   const labels = useMemo(() => [...new Set([...metadata.filter(item => item.type === 'label').map(item => item.name), ...reviews.flatMap(task => Array.isArray(task.labels) ? task.labels : [])])], [metadata, reviews]);
+  
   const filtered = useMemo(() => reviews.filter(task => {
     const text = `${task.title} ${task.key || ''} ${task.description || ''}`.toLowerCase();
     return (!search || text.includes(search.toLowerCase())) && (!assignee || task.assignee === assignee) && (!status || statusFor(task) === status) && (!priority || task.priority === priority) && (!epic || task.epic === epic) && (!feature || task.feature === feature) && (!label || (task.labels || []).includes(label));
   }), [reviews, search, assignee, status, priority, epic, feature, label]);
+  
   const hasFilters = search || assignee || status || priority || epic || feature || label;
   const drop = stage => ({ onDragOver: event => event.preventDefault(), onDrop: event => { event.preventDefault(); if (dragId) updateReview(dragId, { stage }); setDragId(null); } });
   const clear = () => { setSearch(''); setAssignee(''); setStatus(''); setPriority(''); setEpic(''); setFeature(''); setLabel(''); };
@@ -127,33 +130,123 @@ export function KanbanWorkspace({ reviews, sprints, metadata = [], projectId, up
   const labelOptions = [{ value: '', label: 'Labels' }, ...labels.map(v => ({ value: v, label: v }))];
   const priorityOptions = [{ value: '', label: 'All priorities' }, ...PRIORITIES.map(v => ({ value: v, label: v }))];
 
+  const activeSprint = sprints.find(s => s.status === 'active') || sprints[0];
+
   return <section className="page kanban-workspace">
-    <div className="kanban-toolbar">
-      <div className="kanban-view-tabs">
-        <button className={view === 'list' ? 'active' : ''} onClick={() => setView('list')}><ListBullets size={17}/> List</button>
-        <button className={view === 'board' ? 'active' : ''} onClick={() => setView('board')}><Kanban size={17}/> Board</button>
-        <button className={view === 'planning' ? 'active' : ''} onClick={() => setView('planning')}><Rows size={17}/> Sprint planning</button>
-        <button className={view === 'timeline' ? 'active' : ''} onClick={() => setView('timeline')}><CalendarBlank size={17}/> Gantt / Timeline</button>
+    {/* Row 1: Header with Breadcrumbs & Action Toolbar */}
+    <div className="kanban-header-bar">
+      <div className="kanban-breadcrumbs">
+        <span className="breadcrumb-muted">MIT</span>
+        <CaretRight size={12} className="breadcrumb-sep" />
+        <span className="breadcrumb-muted">{project?.team || 'MIT'}</span>
+        <CaretRight size={12} className="breadcrumb-sep" />
+        <strong className="breadcrumb-title">{project?.name || 'OMNIX WABA'}</strong>
+        <CaretRight size={12} className="breadcrumb-sep" />
+        <span className="sprint-status-pill">
+          <i className="sprint-status-dot" />
+          {activeSprint?.name || 'Sprint 5'}
+        </span>
       </div>
+
       <div className="kanban-toolbar-actions">
         <label className="kanban-search">
-          <MagnifyingGlass size={16}/>
-          <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Filter tasks…"/>
+          <MagnifyingGlass size={16} />
+          <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Filter tasks…" />
         </label>
-        <AppSelect icon={Users} value={assignee} options={teamOptions} onChange={setAssignee} placeholder="Team" ariaLabel="Team filter" className="toolbar-select"/>
-        <AppSelect icon={Funnel} value={status} options={statusOptions} onChange={setStatus} placeholder="Filter" ariaLabel="Status filter" className="toolbar-select"/>
-        <AppSelect icon={Target} value={epic} options={epicOptions} onChange={setEpic} placeholder="Epics" ariaLabel="Epics filter" className="toolbar-select compact"/>
-        <AppSelect icon={SquaresFour} value={feature} options={featureOptions} onChange={setFeature} placeholder="Features" ariaLabel="Features filter" className="toolbar-select compact"/>
-        <AppSelect icon={Tag} value={label} options={labelOptions} onChange={setLabel} placeholder="Labels" ariaLabel="Labels filter" className="toolbar-select compact"/>
-        <button className="secondary-button" onClick={() => setMetadataOpen(true)}><Tag size={15}/> Manage</button>
-        <button className="primary-button" onClick={() => setModal('review')}><Plus size={16}/> Create task</button>
+        <AppSelect
+          prefix={
+            owners.length > 0 ? (
+              <span className="team-avatar-stack">
+                {owners.slice(0, 3).map((o, idx) => (
+                  <span key={o} className={`mini-avatar avatar-bg-${idx % 3}`}>
+                    {o.slice(0, 2).toUpperCase()}
+                  </span>
+                ))}
+              </span>
+            ) : null
+          }
+          icon={owners.length === 0 ? Users : undefined}
+          value={assignee}
+          options={teamOptions}
+          onChange={setAssignee}
+          placeholder="Team"
+          ariaLabel="Team filter"
+          className="toolbar-select"
+        />
+        <AppSelect
+          icon={Funnel}
+          value={status}
+          options={statusOptions}
+          onChange={setStatus}
+          placeholder="Filter"
+          ariaLabel="Status filter"
+          className="toolbar-select"
+        />
+        <AppSelect
+          icon={Target}
+          value={epic}
+          options={epicOptions}
+          onChange={setEpic}
+          placeholder="Epics"
+          badge={epics.length > 0 ? epics.length : undefined}
+          ariaLabel="Epics filter"
+          className="toolbar-select compact"
+        />
+        <AppSelect
+          icon={SquaresFour}
+          value={feature}
+          options={featureOptions}
+          onChange={setFeature}
+          placeholder="Features"
+          ariaLabel="Features filter"
+          className="toolbar-select compact"
+        />
+        <AppSelect
+          icon={Tag}
+          value={label}
+          options={labelOptions}
+          onChange={setLabel}
+          placeholder="Labels"
+          badge={labels.length > 0 ? labels.length : undefined}
+          ariaLabel="Labels filter"
+          className="toolbar-select compact"
+        />
+        <button className="secondary-button" onClick={() => setMetadataOpen(true)} title="Manage epics, features, and labels">
+          <Tag size={15}/> Manage
+        </button>
+        <button className="primary-button create-task-cta" onClick={() => setModal('review')}>
+          <Plus size={16} /> Create Task
+        </button>
       </div>
     </div>
-    <div className="kanban-filter-row">
-      <div className="kanban-filter-group"><span>Priority</span><AppSelect value={priority} options={priorityOptions} onChange={setPriority} placeholder="All priorities" ariaLabel="Priority filter"/></div>
-      {hasFilters && <button onClick={clear}>Clear filters</button>}
-      <span>{filtered.length} task{filtered.length === 1 ? '' : 's'} shown</span>
+
+    {/* Row 2: Navigation View Tabs */}
+    <div className="kanban-nav-tabs-bar">
+      <div className="kanban-view-tabs">
+        <button className={`view-tab ${view === 'list' ? 'active' : ''}`} onClick={() => setView('list')}>
+          <ListBullets size={17}/> List
+        </button>
+        <button className={`view-tab ${view === 'board' ? 'active' : ''}`} onClick={() => setView('board')}>
+          <Kanban size={17}/> Board
+        </button>
+        <button className={`view-tab ${view === 'planning' ? 'active' : ''}`} onClick={() => setView('planning')}>
+          <Rows size={17}/> Sprint Planning
+        </button>
+        <button className={`view-tab ${view === 'timeline' ? 'active' : ''}`} onClick={() => setView('timeline')}>
+          <CalendarBlank size={17}/> Gantt / Timeline
+        </button>
+      </div>
+
+      <div className="kanban-filter-row">
+        <div className="kanban-filter-group">
+          <span>Priority</span>
+          <AppSelect value={priority} options={priorityOptions} onChange={setPriority} placeholder="All priorities" ariaLabel="Priority filter"/>
+        </div>
+        {hasFilters && <button className="clear-filters-btn" onClick={clear}>Clear filters</button>}
+        <span className="task-count-label">{filtered.length} task{filtered.length === 1 ? '' : 's'} shown</span>
+      </div>
     </div>
+
     {view === 'board' && <div className="kanban-board-grid">{STAGES.map(stage => <section className="kanban-stage" key={stage} {...drop(stage)}><header><strong>{stage}</strong><span>{filtered.filter(task => task.stage === stage).length}</span></header>{filtered.filter(task => task.stage === stage).map(task => <article className="kanban-work-card" key={task.id} draggable onDragStart={() => setDragId(task.id)} onDragEnd={() => setDragId(null)} onClick={() => onOpen(task)}><div><strong>{task.title}</strong><small>{task.key || 'TASK'} · {task.area}</small></div><TaskMeta task={task}/><footer><span className="task-priority-dot"/><small>{task.priority}</small><span className="task-avatar">{task.assignee ? task.assignee.slice(0, 1).toUpperCase() : 'U'}</span></footer></article>)}<button className="kanban-add-card" onClick={() => setModal('review')}><Plus size={15}/> Add task</button></section>)}</div>}
     {view === 'list' && <div className="kanban-list-view">{STAGES.map(stage => <section key={stage}><header><strong>{stage}</strong><span>{filtered.filter(task => task.stage === stage).length}</span></header>{filtered.filter(task => task.stage === stage).map(task => <TaskRow key={task.id} task={task} onOpen={onOpen}/>)}</section>)}</div>}
     {view === 'planning' && <SprintPlanning tasks={filtered} sprints={sprints} onOpen={onOpen} onUpdateTask={updateReview} onUpdateSprint={updateSprint} onCreateSprint={createSprint}/>}
