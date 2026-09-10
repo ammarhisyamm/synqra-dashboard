@@ -1,6 +1,7 @@
 const stages = new Set(['Planning', 'Review', 'In Progress', 'Final', 'Completed']);
 const areas = new Set(['Design', 'Engineering', 'Marketing']);
 const priorities = new Set(['Blocker', 'Major', 'Minor']);
+const statuses = new Set(['Open', 'In Progress', 'Review', 'Resolved', 'Rejected']);
 
 const json = (body, status = 200) => Response.json(body, { status, headers: { 'cache-control': 'no-store' } });
 const safeText = (value, max = 200) => typeof value === 'string' ? value.trim().slice(0, max) : '';
@@ -56,16 +57,24 @@ function normalizeReview(input, partial = false) {
   if (!partial || 'stage' in input) { if (!stages.has(input.stage)) throw new Error('Invalid stage.'); review.stage = input.stage; }
   if (!partial || 'assignee' in input) review.assignee = safeText(input.assignee, 80);
   if (!partial || 'due' in input) review.due = /^\d{4}-\d{2}-\d{2}$/.test(input.due || '') ? input.due : null;
+  if (!partial || 'description' in input) review.description = safeText(input.description, 4000);
+  if (!partial || 'status' in input) { if (!statuses.has(input.status || 'Open')) throw new Error('Invalid review status.'); review.status = input.status || 'Open'; }
+  if (!partial || 'submittedBy' in input) review.submitted_by = safeText(input.submittedBy, 120);
+  if (!partial || 'meetingId' in input) review.meeting_id = safeText(input.meetingId, 80) || null;
   if ('archived' in input) review.archived = input.archived ? 1 : 0;
   return review;
 }
 
 async function bootstrap(env) {
   const [reviews, meetings] = await env.DB.batch([
-    env.DB.prepare('SELECT id, title, area, priority, stage, assignee, due, created_at AS createdAt, archived FROM reviews ORDER BY created_at DESC'),
+    env.DB.prepare('SELECT id, title, area, priority, stage, assignee, due, description, status, submitted_by AS submittedBy, meeting_id AS meetingId, created_at AS createdAt, updated_at AS updatedAt, archived FROM reviews ORDER BY created_at DESC'),
     env.DB.prepare('SELECT id, title, date, ai, notes, item_count AS itemCount FROM meetings ORDER BY date DESC')
   ]);
   return { project: { name: 'Acme Redesign', initials: 'A' }, reviews: reviews.results, meetings: meetings.results.map(m => ({ ...m, ai: Boolean(m.ai) })) };
+}
+
+async function recordActivity(env, reviewId, userId, action, metadata = {}) {
+  await env.DB.prepare('INSERT INTO review_activity (id, review_id, user_id, action, metadata) VALUES (?, ?, ?, ?, ?)').bind(id(), reviewId, userId, action, JSON.stringify(metadata)).run();
 }
 
 async function routeApi(request, env) {
@@ -104,18 +113,60 @@ async function routeApi(request, env) {
     const result = await env.DB.prepare('SELECT id, email, name, role, created_at AS createdAt FROM users ORDER BY CASE role WHEN \'super_admin\' THEN 0 WHEN \'admin\' THEN 1 ELSE 2 END, name').all();
     return json({ users: result.results });
   }
+  if (request.method === 'POST' && path === '/api/admin/users') {
+    if (user.role !== 'super_admin') return json({ error: 'Super admin access required.' }, 403);
+    const body = await readBody(request); if (!body) return json({ error: 'Invalid JSON.' }, 400);
+    const email = safeText(body.email, 254).toLowerCase(); const name = safeText(body.name, 80); const password = typeof body.password === 'string' ? body.password : '';
+    if (!/^\S+@\S+\.\S+$/.test(email) || !name || password.length < 10) return json({ error: 'Name, valid email, and a password of at least 10 characters are required.' }, 400);
+    if (await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email).first()) return json({ error: 'An account with that email already exists.' }, 409);
+    const admin = { id: id(), email, name, role: 'admin' };
+    await env.DB.prepare('INSERT INTO users (id, email, name, password_hash, role) VALUES (?, ?, ?, ?, ?)').bind(admin.id, email, name, await passwordHash(password), admin.role).run();
+    return json(admin, 201);
+  }
+  const adminMatch = path.match(/^\/api\/admin\/users\/([a-zA-Z0-9-]+)$/);
+  if (request.method === 'PATCH' && adminMatch) {
+    if (user.role !== 'super_admin') return json({ error: 'Super admin access required.' }, 403);
+    const body = await readBody(request); const role = body?.role;
+    if (!['admin', 'member', 'super_admin'].includes(role)) return json({ error: 'Invalid role.' }, 400);
+    if (adminMatch[1] === user.id && role !== 'super_admin') return json({ error: 'You cannot remove your own super admin access.' }, 400);
+    const result = await env.DB.prepare('UPDATE users SET role = ? WHERE id = ?').bind(role, adminMatch[1]).run();
+    return result.meta.changes ? json({ ok: true }) : json({ error: 'User not found.' }, 404);
+  }
   if (request.method === 'GET' && path === '/api/bootstrap') return json(await bootstrap(env));
 
   if (request.method === 'POST' && path === '/api/reviews') {
     const body = await readBody(request); if (!body) return json({ error: 'Invalid JSON.' }, 400);
     try {
       const review = normalizeReview(body);
-      const newReview = { id: body.id && /^[a-zA-Z0-9-]{8,80}$/.test(body.id) ? body.id : id(), ...review, archived: 0 };
-      await env.DB.prepare('INSERT INTO reviews (id, title, area, priority, stage, assignee, due, archived) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').bind(newReview.id, newReview.title, newReview.area, newReview.priority, newReview.stage, newReview.assignee, newReview.due, newReview.archived).run();
+      const newReview = { id: body.id && /^[a-zA-Z0-9-]{8,80}$/.test(body.id) ? body.id : id(), ...review, submitted_by: review.submitted_by || user.name, archived: 0 };
+      await env.DB.prepare('INSERT INTO reviews (id, title, area, priority, stage, assignee, due, description, status, submitted_by, meeting_id, archived) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(newReview.id, newReview.title, newReview.area, newReview.priority, newReview.stage, newReview.assignee, newReview.due, newReview.description, newReview.status, newReview.submitted_by, newReview.meeting_id, newReview.archived).run();
+      await recordActivity(env, newReview.id, user.id, 'created', { title: newReview.title });
       return json(newReview, 201);
     } catch (error) { return json({ error: error.message }, 400); }
   }
 
+  const detailsMatch = path.match(/^\/api\/reviews\/([a-zA-Z0-9-]+)\/details$/);
+  if (request.method === 'GET' && detailsMatch) {
+    const review = await env.DB.prepare('SELECT id, title, area, priority, stage, assignee, due, description, status, submitted_by AS submittedBy, meeting_id AS meetingId, created_at AS createdAt, updated_at AS updatedAt, archived FROM reviews WHERE id = ?').bind(detailsMatch[1]).first();
+    if (!review) return json({ error: 'Review not found.' }, 404);
+    const [comments, activity, meeting] = await env.DB.batch([
+      env.DB.prepare('SELECT c.id, c.body, c.created_at AS createdAt, u.name, u.email FROM review_comments c JOIN users u ON u.id = c.user_id WHERE c.review_id = ? ORDER BY c.created_at ASC').bind(detailsMatch[1]),
+      env.DB.prepare('SELECT a.id, a.action, a.metadata, a.created_at AS createdAt, u.name, u.email FROM review_activity a LEFT JOIN users u ON u.id = a.user_id WHERE a.review_id = ? ORDER BY a.created_at DESC').bind(detailsMatch[1]),
+      env.DB.prepare('SELECT id, title, date, notes, item_count AS itemCount FROM meetings WHERE id = (SELECT meeting_id FROM reviews WHERE id = ?)').bind(detailsMatch[1])
+    ]);
+    return json({ review, meeting: meeting.results[0] || null, comments: comments.results, activity: activity.results.map(item => ({ ...item, metadata: JSON.parse(item.metadata || '{}') })) });
+  }
+  const commentMatch = path.match(/^\/api\/reviews\/([a-zA-Z0-9-]+)\/comments$/);
+  if (request.method === 'POST' && commentMatch) {
+    const body = await readBody(request); const text = safeText(body?.body, 2000);
+    if (!text) return json({ error: 'Comment cannot be empty.' }, 400);
+    const comment = { id: id(), body: text, createdAt: new Date().toISOString() };
+    const exists = await env.DB.prepare('SELECT id FROM reviews WHERE id = ?').bind(commentMatch[1]).first();
+    if (!exists) return json({ error: 'Review not found.' }, 404);
+    await env.DB.prepare('INSERT INTO review_comments (id, review_id, user_id, body) VALUES (?, ?, ?, ?)').bind(comment.id, commentMatch[1], user.id, text).run();
+    await recordActivity(env, commentMatch[1], user.id, 'commented', {});
+    return json({ ...comment, name: user.name, email: user.email }, 201);
+  }
   const reviewMatch = path.match(/^\/api\/reviews\/([a-zA-Z0-9-]+)$/);
   if (request.method === 'PATCH' && reviewMatch) {
     const body = await readBody(request); if (!body) return json({ error: 'Invalid JSON.' }, 400);
@@ -125,9 +176,15 @@ async function routeApi(request, env) {
       const values = keys.map(key => patch[key]);
       const result = await env.DB.prepare(`UPDATE reviews SET ${keys.map(key => `${key} = ?`).join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(...values, reviewMatch[1]).run();
       if (!result.meta.changes) return json({ error: 'Review not found.' }, 404);
-      const saved = await env.DB.prepare('SELECT id, title, area, priority, stage, assignee, due, created_at AS createdAt, archived FROM reviews WHERE id = ?').bind(reviewMatch[1]).first();
+      await recordActivity(env, reviewMatch[1], user.id, 'updated', { fields: keys });
+      const saved = await env.DB.prepare('SELECT id, title, area, priority, stage, assignee, due, description, status, submitted_by AS submittedBy, meeting_id AS meetingId, created_at AS createdAt, updated_at AS updatedAt, archived FROM reviews WHERE id = ?').bind(reviewMatch[1]).first();
       return json(saved);
     } catch (error) { return json({ error: error.message }, 400); }
+  }
+
+  if (request.method === 'DELETE' && reviewMatch) {
+    const result = await env.DB.prepare('DELETE FROM reviews WHERE id = ?').bind(reviewMatch[1]).run();
+    return result.meta.changes ? json({ ok: true }) : json({ error: 'Review not found.' }, 404);
   }
 
   if (request.method === 'POST' && path === '/api/meetings') {

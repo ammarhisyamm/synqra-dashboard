@@ -4,7 +4,7 @@ import {
   Archive, ArrowRight, Bell, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronsUpDown, CircleDot,
   ClipboardList, Download, FileText, Folder, Home, Info, KanbanSquare, LayoutGrid, ListChecks,
   Menu, MessageCircle, MoreHorizontal, MoreVertical, Plus, Search, Settings, Settings2, ShieldCheck, SlidersHorizontal, Sparkles,
-  Table2, Target, Users, Video, X
+  Table2, Target, Users, Video, X, Clock3, Trash2, ExternalLink
 } from 'lucide-react';
 import './styles.css';
 
@@ -49,6 +49,7 @@ function relativeDate(date) {
 }
 function toKey(title) { return title.toLowerCase().replace(/[^a-z0-9]+/g, '-'); }
 function statusFor(review) {
+  if (review.status) return review.status;
   if (review.stage === 'Completed') return 'Resolved';
   if (review.stage === 'Final') return 'Review';
   if (review.stage === 'In Progress') return 'In Progress';
@@ -71,6 +72,7 @@ function App() {
   const [modal, setModal] = useState(null);
   const [toast, setToast] = useState('');
   const [query, setQuery] = useState('');
+  const [selectedReview, setSelectedReview] = useState(null);
 
   useEffect(() => localStorage.setItem(STORAGE_KEY, JSON.stringify(data)), [data]);
   useEffect(() => {
@@ -127,7 +129,7 @@ function App() {
       </header>
       {projectOpen && <ProjectSwitcher project={data.project} onClose={() => setProjectOpen(false)} />}
       {page === 'Overview' && <Dashboard reviews={activeReviews} meetings={data.meetings} goTo={setPage} onSubmitReview={() => setModal('review')} onNewMeeting={() => setModal('meeting')} />}
-      {page === 'All Reviews' && <Reviews reviews={activeReviews} query={query} setQuery={setQuery} updateReview={updateReview} archiveReview={archiveReview} setModal={setModal} />}
+      {page === 'All Reviews' && <Reviews reviews={activeReviews} query={query} setQuery={setQuery} updateReview={updateReview} archiveReview={archiveReview} setModal={setModal} onOpen={setSelectedReview} />}
       {page === 'Meetings' && <Meetings meetings={data.meetings} addMeeting={addMeeting} addReview={addReview} setToast={setToast} setModal={setModal} />}
       {page === 'Kanban Board' && <Kanban reviews={activeReviews} updateReview={updateReview} archiveReview={archiveReview} setModal={setModal} />}
       {page === 'Archive' && <ArchivePage reviews={data.reviews.filter(r => r.archived)} restoreReview={restoreReview} />}
@@ -137,6 +139,7 @@ function App() {
     {toast && <div className="toast"><CheckCircle2 size={17}/>{toast}</div>}
     {modal === 'review' && <ReviewModal onClose={() => setModal(null)} onSave={(review) => { addReview(review); setModal(null); setToast('Review created'); }} />}
     {modal === 'meeting' && <MeetingModal onClose={() => setModal(null)} onSave={(meeting) => { addMeeting(meeting); setModal(null); setToast('Meeting saved'); }} />}
+    {selectedReview && <ReviewDetail review={selectedReview} meetings={data.meetings} user={user} onClose={() => setSelectedReview(null)} onUpdated={saved => { updateReview(saved.id, saved); setSelectedReview(saved); }} onDeleted={id => { setData(prev => ({...prev, reviews: prev.reviews.filter(r => r.id !== id)})); setSelectedReview(null); setToast('Task deleted'); }} onToast={setToast} />}
     <footer className="app-footer"><button onClick={resetData}>Restore demo data</button><span>{cloudReady ? 'Synced with Cloudflare D1' : 'Local draft — reconnecting to Cloudflare'}</span></footer>
   </div>;
 }
@@ -221,7 +224,7 @@ function MeetingRail({ meetings, goTo, onNew }) { return <aside className="rail-
 function Summary({ reviews, completed, blockers, overdue }) { return <aside className="rail-card summary"><h2>Summary</h2><p>Project overview</p><div className="summary-list"><Metric label="Total reviews" value={reviews.length}/><Metric label="Resolved" value={completed}/><Metric label="Blockers" value={blockers}/><Metric label="Open items" value={reviews.length - completed}/><Metric label="Areas" value={new Set(reviews.map(r => r.area)).size}/></div><div className="summary-alert"><Info size={15}/><span>{blockers ? `${blockers} blocker · ` : ''}{overdue} overdue need attention.</span></div></aside>; }
 function Metric({ label, value }) { return <div><span>{label}</span><strong>{value}</strong></div>; }
 
-function Reviews({ reviews, query, setQuery, updateReview, archiveReview, setModal }) {
+function Reviews({ reviews, query, setQuery, updateReview, archiveReview, setModal, onOpen }) {
   const [area, setArea] = useState('All teams');
   const filtered = reviews.filter(r => (area === 'All teams' || r.area === area) && r.title.toLowerCase().includes(query.toLowerCase()));
   const open = reviews.filter(r => statusFor(r) === 'Open').length;
@@ -230,9 +233,18 @@ function Reviews({ reviews, query, setQuery, updateReview, archiveReview, setMod
   return <section className="page reviews-page"><PageHeading title="All Reviews" action={<button className="primary-button" onClick={() => setModal('review')}><Plus size={17}/> Submit Review</button>}/>
     <div className="review-kpis"><MetricCard label="Total Tasks" value={reviews.length}/><MetricCard label="Open" value={open}/><MetricCard label="Assigned to me" value={reviews.filter(r=>r.assignee==='Aria').length}/><MetricCard label="Due today" value={dueToday}/><MetricCard label="Overdue" value={overdue}/></div>
     <div className="toolbar"><label className="search"><Search size={17}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search title, description, assignee…"/></label><select value={area} onChange={e => setArea(e.target.value)}><option>All teams</option>{AREAS.map(a=><option key={a}>{a}</option>)}</select><select><option>All statuses</option><option>Open</option><option>In Progress</option><option>Resolved</option></select><select><option>All priorities</option>{PRIORITIES.map(p=><option key={p}>{p}</option>)}</select><button className="filter-more"><SlidersHorizontal size={15}/> More</button><div className="view-switch"><Table2 size={16}/><LayoutGrid size={16}/><MoreHorizontal size={18}/></div></div>
-    <div className="table-wrap"><table><thead><tr><th><input type="checkbox" aria-label="Select all"/></th><th>Title</th><th>Team</th><th>Phase</th><th>Priority</th><th>Assignee</th><th>Status</th><th>Due Date</th><th/></tr></thead><tbody>{filtered.map(r => <tr key={r.id}><td><input type="checkbox" aria-label={`Select ${r.title}`}/></td><td><strong>{r.title}</strong></td><td>{r.area}</td><td><select className="inline-select" value={r.stage} onChange={e=>updateReview(r.id,{stage:e.target.value})}>{STAGES.map(s=><option key={s}>{s}</option>)}</select></td><td><Priority value={r.priority}/></td><td><span className="assignee"><i>{r.assignee[0]}</i>{r.assignee}</span></td><td><StatusPill value={statusFor(r)}/></td><td>{dateLabel(r.due)}</td><td><button className="row-action" onClick={()=>archiveReview(r.id)} aria-label="Archive review"><MoreHorizontal size={17}/></button></td></tr>)}</tbody></table><div className="table-pagination"><span>Rows per page <b>10 <ChevronDown size={13}/></b></span><span>1–{Math.min(10, filtered.length)} of {filtered.length}</span><span className="pagination-arrows">‹　1 / {Math.max(1, Math.ceil(filtered.length / 10))}　›</span></div></div>
+    <div className="table-wrap"><table><thead><tr><th><input type="checkbox" aria-label="Select all"/></th><th>Title</th><th>Team</th><th>Phase</th><th>Priority</th><th>Assignee</th><th>Status</th><th>Due Date</th><th/></tr></thead><tbody>{filtered.map(r => <tr key={r.id} className="review-row" onClick={() => onOpen(r)}><td><input type="checkbox" aria-label={`Select ${r.title}`} onClick={e=>e.stopPropagation()}/></td><td><strong>{r.title}</strong>{r.description && <small className="row-description">{r.description}</small>}</td><td>{r.area}</td><td><select className="inline-select" value={r.stage} onClick={e=>e.stopPropagation()} onChange={e=>updateReview(r.id,{stage:e.target.value})}>{STAGES.map(s=><option key={s}>{s}</option>)}</select></td><td><Priority value={r.priority}/></td><td><span className="assignee"><i>{(r.assignee || '?')[0]}</i>{r.assignee || 'Unassigned'}</span></td><td><StatusPill value={statusFor(r)}/></td><td>{r.due ? dateLabel(r.due) : '—'}</td><td><button className="row-action" onClick={e=>{e.stopPropagation(); archiveReview(r.id)}} aria-label="Archive review"><Archive size={16}/></button></td></tr>)}</tbody></table><div className="table-pagination"><span>Rows per page <b>10 <ChevronDown size={13}/></b></span><span>1–{Math.min(10, filtered.length)} of {filtered.length}</span><span className="pagination-arrows">‹　1 / {Math.max(1, Math.ceil(filtered.length / 10))}　›</span></div></div>
   </section>;
 }
+function ReviewDetail({ review, meetings, user, onClose, onUpdated, onDeleted, onToast }) {
+  const [detail,setDetail]=useState(null); const [comment,setComment]=useState(''); const [draft,setDraft]=useState(review);
+  useEffect(()=>{api(`/api/reviews/${review.id}/details`).then(d=>{setDetail(d);setDraft(d.review)}).catch(e=>onToast(e.message))},[review.id]);
+  const save=async patch=>{try{const saved=await api(`/api/reviews/${review.id}`,{method:'PATCH',body:JSON.stringify(patch)});setDraft(saved);setDetail(d=>({...d,review:saved}));onUpdated(saved);onToast('Task updated')}catch(e){onToast(e.message)}};
+  const submitComment=async e=>{e.preventDefault();if(!comment.trim())return;try{const c=await api(`/api/reviews/${review.id}/comments`,{method:'POST',body:JSON.stringify({body:comment})});setDetail(d=>({...d,comments:[...(d.comments||[]),c]}));setComment('');onToast('Comment added')}catch(e){onToast(e.message)}};
+  const remove=async()=>{if(!confirm('Delete this task permanently?'))return;try{await api(`/api/reviews/${review.id}`,{method:'DELETE'});onDeleted(review.id)}catch(e){onToast(e.message)}};
+  return <div className="detail-backdrop" onMouseDown={onClose}><aside className="detail-panel" onMouseDown={e=>e.stopPropagation()}><button className="detail-close" onClick={onClose}><X size={19}/></button><div className="detail-head"><h2>{draft.title}</h2><div className="detail-badges"><StatusPill value={statusFor(draft)}/><Priority value={draft.priority}/><span>{draft.due||'No due date'}</span></div></div><div className="detail-scroll"><DetailSection title="Description"><textarea className="detail-description" value={draft.description||''} onChange={e=>setDraft({...draft,description:e.target.value})} onBlur={e=>save({description:e.target.value})} placeholder="Add a description…"/></DetailSection><DetailSection title="Related meeting">{detail?.meeting?<div className="related-meeting"><Video size={17}/><div><strong>{detail.meeting.title}</strong><small>{dateLabel(detail.meeting.date)}</small></div><ExternalLink size={15}/></div>:<select value={draft.meetingId||''} onChange={e=>save({meetingId:e.target.value})}><option value="">No related meeting</option>{meetings.map(m=><option key={m.id} value={m.id}>{m.title}</option>)}</select>}</DetailSection><DetailSection title="Properties"><div className="detail-grid"><SelectField label="Phase" value={draft.stage} values={STAGES} onChange={v=>save({stage:v})}/><SelectField label="Team" value={draft.area} values={AREAS} onChange={v=>save({area:v})}/><SelectField label="Status" value={statusFor(draft)} values={['Open','In Progress','Review','Resolved','Rejected']} onChange={v=>save({status:v})}/><SelectField label="Priority" value={draft.priority} values={PRIORITIES} onChange={v=>save({priority:v})}/></div></DetailSection><DetailSection title="Ownership"><div className="detail-grid"><label>Assignee<input value={draft.assignee||''} onChange={e=>setDraft({...draft,assignee:e.target.value})} onBlur={e=>save({assignee:e.target.value})}/></label><label>Submitted by<input readOnly value={draft.submittedBy||user.name}/></label></div></DetailSection><DetailSection title="Planning"><label>Due date<input type="date" value={draft.due||''} onChange={e=>save({due:e.target.value})}/></label></DetailSection><DetailSection title="Discussion"><form className="comment-form" onSubmit={submitComment}><MessageCircle size={17}/><input value={comment} onChange={e=>setComment(e.target.value)} placeholder="Add a comment…"/><button className="primary-button" disabled={!comment.trim()}>Comment</button></form>{detail?.comments?.map(c=><div className="comment-list" key={c.id}><div><strong>{c.name}</strong><p>{c.body}</p><small>{relativeDate(c.createdAt)}</small></div></div>)}</DetailSection><DetailSection title="Activity"><div className="detail-activity">{detail?.activity?.map(a=><div key={a.id}><Clock3 size={14}/><p><strong>{a.name||'System'}</strong> {a.action==='created'?'created this task':a.action==='commented'?'commented':`updated ${a.metadata?.fields?.join(', ')||'this task'}`}<small>{relativeDate(a.createdAt)}</small></p></div>)}</div></DetailSection></div><div className="detail-footer"><button onClick={()=>save({archived:1})}><Archive size={15}/> Archive</button><button className="danger-button" onClick={remove}><Trash2 size={15}/> Delete</button></div></aside></div>;
+}
+function DetailSection({title,children}){return <section className="detail-section"><h3>{title}</h3>{children}</section>}
 function MetricCard({ label, value }) { return <article><span>{label}</span><strong>{value}</strong></article>; }
 function Priority({ value }) { return <span className={`priority ${value.toLowerCase()}`}><i/>{value}</span>; }
 function PageHeading({ eyebrow, title, description, action }) { return <div className="page-heading"><div>{eyebrow && <small>{eyebrow}</small>}<h1>{title}</h1>{description && <p>{description}</p>}</div>{action}</div>; }
