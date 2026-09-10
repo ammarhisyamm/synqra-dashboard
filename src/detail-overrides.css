@@ -1,0 +1,8 @@
+.detail-panel{width:min(730px,100%)}
+.detail-head h2{font-weight:500;font-size:20px}
+.detail-section h3{font-weight:500}
+.detail-badges span{font-weight:400}
+.detail-grid select,.detail-section input,.detail-section select,.detail-description{font-size:13px}
+.detail-section{padding-top:22px;padding-bottom:22px}
+input[type=checkbox]:checked{background:#172238;border-color:#172238;box-shadow:inset 0 0 0 4px #fff}
+.detail-footer{position:sticky;bottom:0;background:#fff}
