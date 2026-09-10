@@ -15,7 +15,7 @@ import { reviewsApi } from '../../api/reviews';
 import { AppSelect } from '../common/AppSelect';
 import { Wave } from '../Wave.jsx';
 import { dateLabel, relativeDate } from '../../lib/dates';
-import { elapsedLabel, statusFor, makeHistoryModel } from '../../lib/helpers';
+import { elapsedLabel, historyDateLabel, statusFor, makeHistoryModel } from '../../lib/helpers';
 import { DetailSection, SelectField, StatusPill, Priority } from '../common/ui';
 import { AREAS, STAGES, PRIORITIES } from '../../constants/workflow';
 

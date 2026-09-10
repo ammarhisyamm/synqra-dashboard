@@ -22,7 +22,6 @@ export class ErrorPanel extends Component {
           <p>We couldn&apos;t load this section. Your saved data is safe.</p>
           <div className="section-error-actions"><button className="secondary-button" onClick={this.retry}>Try again</button><button className="text-button" onClick={this.goBack}>Go back</button></div>
           {this.state.errorId && <small>Error ID: {this.state.errorId}</small>}
-          {this.state.error && <code className="error-runtime-message">{String(this.state.error.message || this.state.error)}</code>}
           {this.state.error && <details className="error-details"><summary>Details</summary><code>{String(this.state.error.message || this.state.error)}</code></details>}
         </div>
       );
