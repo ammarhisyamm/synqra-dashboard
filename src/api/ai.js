@@ -74,6 +74,6 @@ export async function generateActionItemsWithOrvix({ notes }) {
 export function hashNotes(notes) {
   const text = String(notes || '');
   let hash = 0;
-  for (let i = 0; i < text.length; i++) hash = ((hash << 5) - hash + text.charCodeAt(0) + i) & 0xffffffff;
+  for (let i = 0; i < text.length; i++) hash = ((hash << 5) - hash + text.charCodeAt(i) + i) & 0xffffffff;
   return `${text.length}:${(hash >>> 0).toString(36)}`;
 }

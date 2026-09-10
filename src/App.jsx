@@ -254,6 +254,9 @@ export function App() {
     let active = true;
     const sync = async () => {
       if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+      let skip = false;
+      setPendingOps(count => { if (count > 0) skip = true; return count; });
+      if (skip) return;
       setSyncing(true);
       try {
         const [remote, notificationResult] = await Promise.all([api('/api/bootstrap'), notificationsApi.list()]);
@@ -294,6 +297,8 @@ export function App() {
       const results = await Promise.allSettled(items.map(item => addReview({ title: item.title, description: item.description, area: item.area, priority: item.priority, stage: 'Planning', status: 'Open', assignee: item.assignee, due: item.due, meetingId: created.id })));
       const createdCount = results.filter(result => result.status === 'fulfilled').length;
       const failedCount = results.length - createdCount;
+      // itemCount is derived server-side (COUNT subquery); just reflect the true count locally.
+      setData(prev => ({ ...prev, meetings: prev.meetings.map(m => m.id === created.id ? { ...m, itemCount: createdCount } : m) }));
       setPage('Meetings');
       if (failedCount) setToast(`${failedCount} task could not be created. Please try again.`);
       showSuccess(`${createdCount} task${createdCount === 1 ? '' : 's'} created`, failedCount ? 'The meeting was saved, but some selected tasks need to be retried.' : 'The meeting and its selected action items are now synced to the project.', 'View board', () => setPage('Board'));

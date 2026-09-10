@@ -303,15 +303,29 @@ async function routeApi(request, env) {
     const body = await readBody(request); if (!body) return json({ error: 'Invalid JSON.' }, 400);
     try {
       const review = normalizeReview(body);
-      const maxKey = await env.DB.prepare("SELECT MAX(CAST(SUBSTR(key, INSTR(key, '-') + 1) AS INTEGER)) AS maxKey FROM reviews WHERE key LIKE 'AR-%'").first('maxKey');
-      const newReview = { id: body.id && /^[a-zA-Z0-9-]{8,80}$/.test(body.id) ? body.id : id(), key: `AR-${(maxKey || 0) + 1}`, ...review, submitted_by: review.submitted_by || user.name, archived: 0 };
-      if (!await env.DB.prepare('SELECT id FROM projects WHERE id = ?').bind(newReview.project_id || 'default').first()) return json({ error: 'Project not found.' }, 400);
-      if (newReview.meeting_id && !await env.DB.prepare('SELECT id FROM meetings WHERE id = ?').bind(newReview.meeting_id).first()) return json({ error: 'Related meeting not found.' }, 400);
-      if (newReview.parent_id && !await env.DB.prepare('SELECT id FROM reviews WHERE id = ?').bind(newReview.parent_id).first()) return json({ error: 'Parent item not found.' }, 400);
-      await env.DB.prepare('INSERT INTO reviews (id, key, title, area, priority, stage, assignee, due, start_date, description, status, submitted_by, meeting_id, reporter, estimate_hours, epic, feature, sprint, labels, project_id, parent_id, item_type, sprint_id, archived) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(newReview.id, newReview.key, newReview.title, newReview.area, newReview.priority, newReview.stage, newReview.assignee, newReview.due, newReview.start_date ?? null, newReview.description, newReview.status, newReview.submitted_by, newReview.meeting_id, newReview.reporter || user.name, newReview.estimate_hours ?? null, newReview.epic || '', newReview.feature || '', newReview.sprint || '', newReview.labels || '[]', newReview.project_id || 'default', newReview.parent_id || null, newReview.item_type || 'task', newReview.sprint_id || null, newReview.archived).run();
-      await env.DB.prepare('INSERT INTO review_status_history (id, review_id, from_status, to_status, user_id) VALUES (?, ?, ?, ?, ?)').bind(id(), newReview.id, null, newReview.status, user.id).run();
-      await recordActivity(env, newReview.id, user.id, 'created', { title: newReview.title });
-      const saved = await reviewSnapshot(env, newReview.id);
+      const reviewId = body.id && /^[a-zA-Z0-9-]{8,80}$/.test(body.id) ? body.id : id();
+      if (!await env.DB.prepare('SELECT id FROM projects WHERE id = ?').bind(review.project_id || 'default').first()) return json({ error: 'Project not found.' }, 400);
+      if (review.meeting_id && !await env.DB.prepare('SELECT id FROM meetings WHERE id = ?').bind(review.meeting_id).first()) return json({ error: 'Related meeting not found.' }, 400);
+      if (review.parent_id && !await env.DB.prepare('SELECT id FROM reviews WHERE id = ?').bind(review.parent_id).first()) return json({ error: 'Parent item not found.' }, 400);
+      const base = { id: reviewId, ...review, submitted_by: review.submitted_by || user.name, archived: 0 };
+      const insertRow = key => env.DB.prepare('INSERT INTO reviews (id, key, title, area, priority, stage, assignee, due, start_date, description, status, submitted_by, meeting_id, reporter, estimate_hours, epic, feature, sprint, labels, project_id, parent_id, item_type, sprint_id, archived) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(base.id, key, base.title, base.area, base.priority, base.stage, base.assignee, base.due, base.start_date ?? null, base.description, base.status, base.submitted_by, base.meeting_id, base.reporter || user.name, base.estimate_hours ?? null, base.epic || '', base.feature || '', base.sprint || '', base.labels || '[]', base.project_id || 'default', base.parent_id || null, base.item_type || 'task', base.sprint_id || null, base.archived).run();
+      // Retry on key collision: MAX()+1 races under concurrency, key is UNIQUE.
+      let lastError = null;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const maxKey = await env.DB.prepare("SELECT MAX(CAST(SUBSTR(key, INSTR(key, '-') + 1) AS INTEGER)) AS maxKey FROM reviews WHERE key LIKE 'AR-%'").first('maxKey');
+        try {
+          await insertRow(`AR-${(maxKey || 0) + 1 + attempt}`);
+          lastError = null;
+          break;
+        } catch (error) {
+          if (!String(error?.message || '').toLowerCase().includes('unique')) throw error;
+          lastError = error;
+        }
+      }
+      if (lastError) return json({ error: 'Could not assign a task key, please retry.' }, 409);
+      await env.DB.prepare('INSERT INTO review_status_history (id, review_id, from_status, to_status, user_id) VALUES (?, ?, ?, ?, ?)').bind(id(), base.id, null, base.status, user.id).run();
+      await recordActivity(env, base.id, user.id, 'created', { title: base.title });
+      const saved = await reviewSnapshot(env, base.id);
       return json({ ...saved, labels: parseJson(saved.labels, []) }, 201);
     } catch (error) { return json({ error: error.message }, 400); }
   }
