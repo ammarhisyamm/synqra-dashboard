@@ -8,5 +8,13 @@
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
     "run_worker_first": true
-  }
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "synqra-dashboard-data",
+      "database_id": "2afea996-8dce-4829-9460-7fc447c54c65",
+      "migrations_dir": "migrations"
+    }
+  ]
 }

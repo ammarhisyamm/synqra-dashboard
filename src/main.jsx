@@ -41,13 +41,21 @@ function dateLabel(date) {
   return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(`${date}T12:00:00`));
 }
 function relativeDate(date) {
-  const d = Math.max(0, Math.floor((Date.now() - new Date(`${date}T12:00:00`).getTime()) / 86400000));
+  const dateValue = new Date(date.length === 10 ? `${date}T12:00:00` : date);
+  const d = Math.max(0, Math.floor((Date.now() - dateValue.getTime()) / 86400000));
   return d === 0 ? 'today' : `${d} day${d === 1 ? '' : 's'} ago`;
 }
 function toKey(title) { return title.toLowerCase().replace(/[^a-z0-9]+/g, '-'); }
+async function api(path, options = {}) {
+  const response = await fetch(path, { ...options, headers: { 'content-type': 'application/json', ...(options.headers || {}) } });
+  const body = await response.json();
+  if (!response.ok) throw new Error(body.error || 'Could not save your changes.');
+  return body;
+}
 
 function App() {
   const [data, setData] = useState(loadData);
+  const [cloudReady, setCloudReady] = useState(false);
   const [page, setPage] = useState('Dashboard');
   const [menuOpen, setMenuOpen] = useState(false);
   const [modal, setModal] = useState(null);
@@ -56,17 +64,31 @@ function App() {
 
   useEffect(() => localStorage.setItem(STORAGE_KEY, JSON.stringify(data)), [data]);
   useEffect(() => {
+    api('/api/bootstrap').then(remote => { setData(remote); setCloudReady(true); }).catch(() => setCloudReady(false));
+  }, []);
+  useEffect(() => {
     if (!toast) return undefined;
     const id = setTimeout(() => setToast(''), 2600);
     return () => clearTimeout(id);
   }, [toast]);
 
   const activeReviews = useMemo(() => data.reviews.filter(r => !r.archived), [data.reviews]);
-  const updateReview = (id, patch) => setData(prev => ({ ...prev, reviews: prev.reviews.map(r => r.id === id ? { ...r, ...patch } : r) }));
-  const addReview = (review) => setData(prev => ({ ...prev, reviews: [{ id: `${toKey(review.title)}-${Date.now()}`, createdAt: new Date().toISOString().slice(0, 10), archived: false, ...review }, ...prev.reviews] }));
+  const updateReview = (id, patch) => {
+    setData(prev => ({ ...prev, reviews: prev.reviews.map(r => r.id === id ? { ...r, ...patch } : r) }));
+    api(`/api/reviews/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }).catch(error => setToast(error.message));
+  };
+  const addReview = (review) => {
+    const saved = { id: crypto.randomUUID(), createdAt: new Date().toISOString().slice(0, 10), archived: false, ...review };
+    setData(prev => ({ ...prev, reviews: [saved, ...prev.reviews] }));
+    api('/api/reviews', { method: 'POST', body: JSON.stringify(saved) }).catch(error => setToast(error.message));
+  };
   const archiveReview = (id) => { updateReview(id, { archived: true }); setToast('Review archived'); };
   const restoreReview = (id) => { updateReview(id, { archived: false }); setToast('Review restored'); };
-  const addMeeting = (meeting) => setData(prev => ({ ...prev, meetings: [{ id: `m-${Date.now()}`, itemCount: 0, ...meeting }, ...prev.meetings] }));
+  const addMeeting = (meeting) => {
+    const saved = { id: crypto.randomUUID(), itemCount: 0, ...meeting };
+    setData(prev => ({ ...prev, meetings: [saved, ...prev.meetings] }));
+    api('/api/meetings', { method: 'POST', body: JSON.stringify(saved) }).catch(error => setToast(error.message));
+  };
   const exportData = () => {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob); const a = document.createElement('a');
@@ -94,7 +116,7 @@ function App() {
     {toast && <div className="toast"><CheckCircle2 size={17}/>{toast}</div>}
     {modal === 'review' && <ReviewModal onClose={() => setModal(null)} onSave={(review) => { addReview(review); setModal(null); setToast('Review created'); }} />}
     {modal === 'meeting' && <MeetingModal onClose={() => setModal(null)} onSave={(meeting) => { addMeeting(meeting); setModal(null); setToast('Meeting saved'); }} />}
-    <footer className="app-footer"><button onClick={resetData}>Demo data</button><span>Stored privately in this browser</span></footer>
+    <footer className="app-footer"><button onClick={resetData}>Restore demo data</button><span>{cloudReady ? 'Synced with Cloudflare D1' : 'Local draft — reconnecting to Cloudflare'}</span></footer>
   </div>;
 }
 
