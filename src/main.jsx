@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
-  Archive, ArrowRight, CalendarDays, Check, CheckCircle2, ChevronDown, CircleDot,
-  ClipboardList, Download, FileText, KanbanSquare, ListChecks, Menu, MoreHorizontal,
-  Plus, Search, Settings2, Sparkles, Target, Trash2, Users, Video, X
+  Archive, ArrowRight, Bell, CalendarDays, Check, CheckCircle2, ChevronDown, CircleDot,
+  ClipboardList, Download, FileText, Folder, Home, KanbanSquare, LayoutGrid, ListChecks,
+  Menu, MoreHorizontal, Plus, Search, Settings2, ShieldCheck, SlidersHorizontal, Sparkles,
+  Table2, Target, Users, Video, X
 } from 'lucide-react';
 import './styles.css';
 
@@ -12,6 +13,7 @@ const AREAS = ['Design', 'Engineering', 'Marketing'];
 const STAGES = ['Planning', 'Review', 'In Progress', 'Final', 'Completed'];
 const PRIORITIES = ['Blocker', 'Major', 'Minor'];
 const STAGE_ICONS = [ClipboardList, CircleDot, Target, CheckCircle2, Check];
+const PROJECTS = ['Omnichannel', 'Kaizen Project', 'Billing Portal', 'Onboarding Revamp', 'Test ER'];
 
 const seed = {
   project: { name: 'Acme Redesign', initials: 'A' },
@@ -46,6 +48,12 @@ function relativeDate(date) {
   return d === 0 ? 'today' : `${d} day${d === 1 ? '' : 's'} ago`;
 }
 function toKey(title) { return title.toLowerCase().replace(/[^a-z0-9]+/g, '-'); }
+function statusFor(review) {
+  if (review.stage === 'Completed') return 'Resolved';
+  if (review.stage === 'Final') return 'Review';
+  if (review.stage === 'In Progress') return 'In Progress';
+  return 'Open';
+}
 async function api(path, options = {}) {
   const response = await fetch(path, { ...options, headers: { 'content-type': 'application/json', ...(options.headers || {}) } });
   const body = await response.json();
@@ -58,6 +66,7 @@ function App() {
   const [cloudReady, setCloudReady] = useState(false);
   const [page, setPage] = useState('Dashboard');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [projectOpen, setProjectOpen] = useState(false);
   const [modal, setModal] = useState(null);
   const [toast, setToast] = useState('');
   const [query, setQuery] = useState('');
@@ -98,20 +107,24 @@ function App() {
   const resetData = () => { setData(seed); setToast('Demo data restored'); };
 
   return <div className="app-shell">
-    <Sidebar page={page} setPage={setPage} project={data.project} menuOpen={menuOpen} setMenuOpen={setMenuOpen} />
+    <Sidebar page={page} setPage={setPage} menuOpen={menuOpen} setMenuOpen={setMenuOpen} />
     <main className="workspace">
       <header className="topbar">
         <button className="icon-button mobile-menu" onClick={() => setMenuOpen(!menuOpen)} aria-label="Toggle menu"><Menu size={20}/></button>
+        <button className="top-brand" onClick={() => setProjectOpen(!projectOpen)}><span className="brand-symbol"><span/></span><strong>Synqra</strong><small>Powered by MULIA</small><ChevronDown size={15}/></button>
+        <label className="global-search"><Search size={17}/><input placeholder="Search…"/><kbd>⌘K</kbd></label>
         <div className="topbar-actions">
-          <button className="text-button" onClick={exportData}><Download size={16}/> Export</button>
-          <button className="primary-button" onClick={() => setModal('review')}><Plus size={17}/> New review</button>
+          <button className="collaborator"><Users size={16}/> Collaborator</button>
+          <button className="notification" aria-label="Notifications"><Bell size={17}/><i/></button>
         </div>
       </header>
+      {projectOpen && <ProjectSwitcher project={data.project} onClose={() => setProjectOpen(false)} />}
       {page === 'Dashboard' && <Dashboard reviews={activeReviews} meetings={data.meetings} goTo={setPage} />}
       {page === 'All Reviews' && <Reviews reviews={activeReviews} query={query} setQuery={setQuery} updateReview={updateReview} archiveReview={archiveReview} setModal={setModal} />}
       {page === 'Meetings' && <Meetings meetings={data.meetings} addMeeting={addMeeting} addReview={addReview} setToast={setToast} setModal={setModal} />}
       {page === 'Kanban' && <Kanban reviews={activeReviews} updateReview={updateReview} archiveReview={archiveReview} setModal={setModal} />}
       {page === 'Archive' && <ArchivePage reviews={data.reviews.filter(r => r.archived)} restoreReview={restoreReview} />}
+      {page === 'Settings' && <SettingsPage project={data.project} setToast={setToast} />}
     </main>
     {toast && <div className="toast"><CheckCircle2 size={17}/>{toast}</div>}
     {modal === 'review' && <ReviewModal onClose={() => setModal(null)} onSave={(review) => { addReview(review); setModal(null); setToast('Review created'); }} />}
@@ -120,13 +133,16 @@ function App() {
   </div>;
 }
 
-function Sidebar({ page, setPage, project, menuOpen, setMenuOpen }) {
-  const items = [["Dashboard", ClipboardList], ["All Reviews", ListChecks], ["Meetings", CalendarDays], ["Kanban", KanbanSquare], ["Archive", Archive]];
+function Sidebar({ page, setPage, menuOpen, setMenuOpen }) {
+  const items = [["Dashboard", Home], ["All Reviews", ListChecks], ["Meetings", CalendarDays], ["Kanban", LayoutGrid], ["Archive", Archive]];
   return <aside className={`sidebar ${menuOpen ? 'open' : ''}`}>
-    <div className="brand"><span className="brand-mark">🎯</span><strong>{project.name}</strong><ChevronDown size={15}/></div>
-    <nav>{items.map(([name, Icon]) => <button key={name} className={page === name ? 'active' : ''} onClick={() => { setPage(name); setMenuOpen(false); }}><Icon size={17}/>{name}</button>)}</nav>
-    <div className="sidebar-bottom"><div className="team-row"><div className="avatar avatar-dark">A</div><span>Aria Nilsson</span><MoreHorizontal size={16}/></div><button className="settings"><Settings2 size={16}/> Settings</button></div>
+    <nav>{items.map(([name, Icon]) => <button key={name} className={page === name ? 'active' : ''} onClick={() => { setPage(name); setMenuOpen(false); }}><Icon size={18}/><span>{name}</span></button>)}</nav>
+    <div className="sidebar-bottom"><button className={page === 'Settings' ? 'active settings' : 'settings'} onClick={() => setPage('Settings')}><Settings2 size={18}/><span>Settings</span></button><button className="settings"><ShieldCheck size={18}/><span>Admin</span></button><div className="team-row"><div className="avatar avatar-dark">AH</div><span>Ammar Hisyam</span><MoreHorizontal size={16}/></div></div>
   </aside>;
+}
+
+function ProjectSwitcher({ project, onClose }) {
+  return <div className="project-switcher"><div className="switcher-title">PROJECT</div><button className="current-project"><Folder size={22}/><span>{project.name}</span><ChevronDown size={17}/></button><label className="project-search"><Search size={19}/><input placeholder="Search projects"/></label><div className="project-list">{PROJECTS.map((name, index) => <button key={name} className={index === 0 ? 'selected' : ''}><Folder size={19}/><span>{name}</span>{index === 0 && <Check size={20}/>}</button>)}</div><button className="new-project"><Plus size={21}/> New project</button><button className="switcher-close" onClick={onClose}><X size={17}/></button></div>;
 }
 
 function Dashboard({ reviews, meetings, goTo }) {
@@ -164,13 +180,18 @@ function Summary({ reviews, completed, blockers }) { return <aside className="ra
 function Metric({ label, value }) { return <div><span>{label}</span><strong>{value}</strong></div>; }
 
 function Reviews({ reviews, query, setQuery, updateReview, archiveReview, setModal }) {
-  const [area, setArea] = useState('All areas');
-  const filtered = reviews.filter(r => (area === 'All areas' || r.area === area) && r.title.toLowerCase().includes(query.toLowerCase()));
-  return <section className="page"><PageHeading eyebrow="PROJECT TRACKER" title="All reviews" description="Every item raised in your project, in one place." action={<button className="primary-button" onClick={() => setModal('review')}><Plus size={17}/> New review</button>}/>
-    <div className="toolbar"><label className="search"><Search size={17}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search reviews"/></label><select value={area} onChange={e => setArea(e.target.value)}><option>All areas</option>{AREAS.map(a=><option key={a}>{a}</option>)}</select><span>{filtered.length} reviews</span></div>
-    <div className="table-wrap"><table><thead><tr><th>Review item</th><th>Area</th><th>Priority</th><th>Stage</th><th>Assignee</th><th>Due</th><th/></tr></thead><tbody>{filtered.map(r => <tr key={r.id}><td><strong>{r.title}</strong></td><td><span className="area-tag">{r.area}</span></td><td><Priority value={r.priority}/></td><td><select className="inline-select" value={r.stage} onChange={e=>updateReview(r.id,{stage:e.target.value})}>{STAGES.map(s=><option key={s}>{s}</option>)}</select></td><td><span className="assignee"><i>{r.assignee[0]}</i>{r.assignee}</span></td><td>{dateLabel(r.due)}</td><td><button className="row-action" onClick={()=>archiveReview(r.id)} aria-label="Archive review"><Archive size={16}/></button></td></tr>)}</tbody></table></div>
+  const [area, setArea] = useState('All teams');
+  const filtered = reviews.filter(r => (area === 'All teams' || r.area === area) && r.title.toLowerCase().includes(query.toLowerCase()));
+  const open = reviews.filter(r => statusFor(r) === 'Open').length;
+  const dueToday = reviews.filter(r => r.due === new Date().toISOString().slice(0, 10)).length;
+  const overdue = reviews.filter(r => r.due < new Date().toISOString().slice(0, 10) && statusFor(r) !== 'Resolved').length;
+  return <section className="page reviews-page"><PageHeading title="All Reviews" action={<button className="primary-button" onClick={() => setModal('review')}><Plus size={17}/> Submit Review</button>}/>
+    <div className="review-kpis"><MetricCard label="Total Tasks" value={reviews.length}/><MetricCard label="Open" value={open}/><MetricCard label="Assigned to me" value={reviews.filter(r=>r.assignee==='Aria').length}/><MetricCard label="Due today" value={dueToday}/><MetricCard label="Overdue" value={overdue}/></div>
+    <div className="toolbar"><label className="search"><Search size={17}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search title, description, assignee…"/></label><select value={area} onChange={e => setArea(e.target.value)}><option>All teams</option>{AREAS.map(a=><option key={a}>{a}</option>)}</select><select><option>All statuses</option><option>Open</option><option>In Progress</option><option>Resolved</option></select><select><option>All priorities</option>{PRIORITIES.map(p=><option key={p}>{p}</option>)}</select><button className="filter-more"><SlidersHorizontal size={15}/> More</button><div className="view-switch"><Table2 size={16}/><LayoutGrid size={16}/><MoreHorizontal size={18}/></div></div>
+    <div className="table-wrap"><table><thead><tr><th><input type="checkbox" aria-label="Select all"/></th><th>Title</th><th>Team</th><th>Phase</th><th>Priority</th><th>Assignee</th><th>Status</th><th>Due Date</th><th/></tr></thead><tbody>{filtered.map(r => <tr key={r.id}><td><input type="checkbox" aria-label={`Select ${r.title}`}/></td><td><strong>{r.title}</strong></td><td>{r.area}</td><td><select className="inline-select" value={r.stage} onChange={e=>updateReview(r.id,{stage:e.target.value})}>{STAGES.map(s=><option key={s}>{s}</option>)}</select></td><td><Priority value={r.priority}/></td><td><span className="assignee"><i>{r.assignee[0]}</i>{r.assignee}</span></td><td><StatusPill value={statusFor(r)}/></td><td>{dateLabel(r.due)}</td><td><button className="row-action" onClick={()=>archiveReview(r.id)} aria-label="Archive review"><MoreHorizontal size={17}/></button></td></tr>)}</tbody></table><div className="table-pagination"><span>Rows per page <b>10 <ChevronDown size={13}/></b></span><span>1–{Math.min(10, filtered.length)} of {filtered.length}</span><span className="pagination-arrows">‹　1 / {Math.max(1, Math.ceil(filtered.length / 10))}　›</span></div></div>
   </section>;
 }
+function MetricCard({ label, value }) { return <article><span>{label}</span><strong>{value}</strong></article>; }
 function Priority({ value }) { return <span className={`priority ${value.toLowerCase()}`}><i/>{value}</span>; }
 function PageHeading({ eyebrow, title, description, action }) { return <div className="page-heading"><div>{eyebrow && <small>{eyebrow}</small>}<h1>{title}</h1>{description && <p>{description}</p>}</div>{action}</div>; }
 
@@ -190,6 +211,12 @@ function extractNotes(notes) { return notes.split(/[\n.]+/).map(s=>s.replace(/^\
 function Kanban({ reviews, updateReview, archiveReview, setModal }) { return <section className="page"><PageHeading eyebrow="PROJECT FLOW" title="Kanban" description="Move work through the stages and keep progress visible." action={<button className="primary-button" onClick={() => setModal('review')}><Plus size={17}/> New review</button>}/><div className="board">{STAGES.map(stage => <div className="board-column" key={stage}><div className="board-column-head"><h3>{stage}</h3><span>{reviews.filter(r=>r.stage===stage).length}</span></div>{reviews.filter(r=>r.stage===stage).map(r=><article className="kanban-card" key={r.id}><div className="kanban-card-head"><Priority value={r.priority}/><button onClick={()=>archiveReview(r.id)}><Archive size={14}/></button></div><h4>{r.title}</h4><p>{r.area}</p><div className="kanban-footer"><span className="assignee"><i>{r.assignee[0]}</i>{r.assignee}</span><select value={r.stage} onChange={e=>updateReview(r.id,{stage:e.target.value})} aria-label="Move card">{STAGES.map(s=><option key={s}>{s}</option>)}</select></div></article>)}<button className="add-card" onClick={()=>setModal('review')}><Plus size={15}/> Add item</button></div>)}</div></section>; }
 
 function ArchivePage({ reviews, restoreReview }) { return <section className="page"><PageHeading eyebrow="PROJECT TRACKER" title="Archive" description="Resolved or paused items stay here without disappearing."/>{reviews.length ? <div className="archive-list">{reviews.map(r=><article key={r.id}><div><Priority value={r.priority}/><h3>{r.title}</h3><p>{r.area} · Archived item</p></div><button className="text-button" onClick={()=>restoreReview(r.id)}>Restore <ArrowRight size={15}/></button></article>)}</div> : <Empty text="Your archive is empty."/>}</section>; }
+
+function SettingsPage({ project, setToast }) {
+  const [name, setName] = useState(project.name);
+  const [access, setAccess] = useState('link');
+  return <section className="page settings-page"><PageHeading title="Settings"/><div className="settings-card"><section><div className="settings-section-head"><span><Settings2 size={20}/></span><div><h2>General</h2><p>Manage your project details.</p></div></div><label>Project name<input value={name} onChange={e=>setName(e.target.value)}/></label><label>Description<textarea placeholder="Optional project description" rows="4"/></label></section><section><div className="settings-section-head"><span><Users size={20}/></span><div><h2>Sharing & access</h2><p>Control who can view this project.</p></div></div><button className={access === 'invite' ? 'access-option selected' : 'access-option'} onClick={()=>setAccess('invite')}><ShieldCheck size={20}/><span><strong>Invite only</strong><small>Only people you invite by email can access this project.</small></span></button><button className={access === 'link' ? 'access-option selected' : 'access-option'} onClick={()=>setAccess('link')}><Users size={20}/><span><strong>Anyone with the link</strong><small>Anyone who has the link can view this project in read-only mode.</small></span></button>{access === 'link' && <div className="share-link"><input readOnly value="https://synqra-dashboard.ammarhisyam151.workers.dev"/><button onClick={()=>{navigator.clipboard?.writeText('https://synqra-dashboard.ammarhisyam151.workers.dev');setToast('Project link copied');}}>Copy</button></div>}<button className="primary-button settings-save" onClick={()=>setToast('Settings saved')}>Save</button></section><section className="danger-section"><div className="settings-section-head"><span><Archive size={20}/></span><div><h2>Danger zone</h2><p>Permanently delete this project and all associated feedback.</p></div></div><button>Delete project</button></section></div></section>;
+}
 
 function ReviewModal({ onClose, onSave }) { const [form, setForm] = useState({title:'',area:'Design',priority:'Major',stage:'Planning',assignee:'Aria',due:'2026-09-18'}); const edit = (key,val)=>setForm(x=>({...x,[key]:val})); return <Modal title="New review item" subtitle="Create an actionable item for your team." onClose={onClose}><form onSubmit={e=>{e.preventDefault(); if(form.title.trim())onSave(form)}}><label>Review item<input autoFocus value={form.title} onChange={e=>edit('title',e.target.value)} placeholder="What needs to happen?" required/></label><div className="form-grid"><SelectField label="Area" value={form.area} values={AREAS} onChange={v=>edit('area',v)}/><SelectField label="Priority" value={form.priority} values={PRIORITIES} onChange={v=>edit('priority',v)}/><SelectField label="Stage" value={form.stage} values={STAGES} onChange={v=>edit('stage',v)}/><SelectField label="Assignee" value={form.assignee} values={['Aria','Leo','Mia']} onChange={v=>edit('assignee',v)}/></div><label>Due date<input type="date" value={form.due} onChange={e=>edit('due',e.target.value)}/></label><div className="modal-actions"><button type="button" className="text-button" onClick={onClose}>Cancel</button><button className="primary-button">Create review <ArrowRight size={16}/></button></div></form></Modal>; }
 function MeetingModal({ onClose, onSave }) { const [form,setForm]=useState({title:'',date:'2026-09-10',notes:'',ai:true}); const edit=(k,v)=>setForm(x=>({...x,[k]:v})); return <Modal title="New meeting" subtitle="Notes are saved to this project and can generate review items." onClose={onClose}><form onSubmit={e=>{e.preventDefault();if(form.title.trim())onSave(form)}}><label>Meeting title<input autoFocus value={form.title} onChange={e=>edit('title',e.target.value)} placeholder="e.g. Design review" required/></label><label>Date<input type="date" value={form.date} onChange={e=>edit('date',e.target.value)}/></label><label>Notes<textarea value={form.notes} onChange={e=>edit('notes',e.target.value)} placeholder="One decision or action per line" rows="6"/></label><label className="switch-label"><input type="checkbox" checked={form.ai} onChange={e=>edit('ai',e.target.checked)}/><span>Prepare AI review suggestions</span></label><div className="modal-actions"><button type="button" className="text-button" onClick={onClose}>Cancel</button><button className="primary-button">Save meeting <ArrowRight size={16}/></button></div></form></Modal>; }
