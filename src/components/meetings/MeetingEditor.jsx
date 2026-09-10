@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
-import { ArrowLeft, CalendarBlank, Check, FileText, Lightbulb, MagicWand, Sparkle, Target, User, Users, X } from '@phosphor-icons/react';
+import { ArrowLeft, CalendarBlank, Check, FileText, Lightbulb, MagicWand, ArrowCounterClockwise as RotateCcw, Sparkle, Target, User, Users, X } from '@phosphor-icons/react';
 import { MeetingAiReview } from './MeetingAiReview';
-import { generateActionItemsWithOrvix } from '../../api/ai';
+import { extractItemsLocally, generateActionItemsWithOrvix, hashNotes } from '../../api/ai';
 import { Wave } from '../Wave.jsx';
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -16,6 +16,9 @@ export function MeetingEditor({ user, onClose, onCreate, onToast }) {
   const [phase, setPhase] = useState('writing');
   const [form, setForm] = useState({ title: '', date: today(), notes: '' });
   const [items, setItems] = useState([]);
+  const [brief, setBrief] = useState(null);
+  const [generatedHash, setGeneratedHash] = useState('');
+  const [aiError, setAiError] = useState('');
   const [saved, setSaved] = useState(false);
   const [generating, setGenerating] = useState(false);
 
@@ -34,20 +37,42 @@ export function MeetingEditor({ user, onClose, onCreate, onToast }) {
       onToast('Write some meeting notes first');
       return;
     }
+    if (generating) return;
+    if (generatedHash && generatedHash === hashNotes(form.notes) && items.length) {
+      onToast('These notes were already analyzed — review the suggestions');
+      setPhase('ai');
+      return;
+    }
     setGenerating(true);
+    setAiError('');
     try {
-      const extracted = await generateActionItemsWithOrvix({ notes: form.notes, user });
-      if (!extracted || !extracted.length) {
+      const result = await generateActionItemsWithOrvix({ notes: form.notes, user });
+      const extracted = result?.items || [];
+      if (!extracted.length) {
         onToast('No action items could be extracted. Try adding bullet points.');
         return;
       }
       setItems(extracted);
+      setBrief(result?.brief || null);
+      setGeneratedHash(hashNotes(form.notes));
       setPhase('ai');
     } catch (err) {
-      onToast(err.message || 'Failed to generate AI action items');
+      setAiError(err.message || 'Failed to generate AI action items');
     } finally {
       setGenerating(false);
     }
+  };
+  const useLocalExtraction = () => {
+    const extracted = extractItemsLocally(form.notes);
+    if (!extracted.length) {
+      onToast('No action items could be extracted. Try adding bullet points.');
+      return;
+    }
+    setItems(extracted);
+    setBrief({ generatedAt: new Date().toISOString(), sourceExcerpt: form.notes.trim().slice(0, 220), model: 'local', source: 'local' });
+    setGeneratedHash(hashNotes(form.notes));
+    setAiError('');
+    setPhase('ai');
   };
 
   const preview = useMemo(() => items.filter(item => item.keep).length, [items]);
@@ -58,6 +83,7 @@ export function MeetingEditor({ user, onClose, onCreate, onToast }) {
         user={user}
         meeting={form}
         items={items}
+        brief={brief}
         setItems={setItems}
         selectedCount={preview}
         onBack={() => setPhase('writing')}
@@ -194,6 +220,15 @@ export function MeetingEditor({ user, onClose, onCreate, onToast }) {
           </button>
         </div>
 
+        {aiError && (
+          <div className="ai-error" role="alert">
+            <div><strong>AI generation failed</strong><p>{aiError}</p></div>
+            <div className="ai-error-actions">
+              <button className="secondary-button" onClick={generate} disabled={generating}><RotateCcw size={14}/> Retry</button>
+              <button className="text-button" onClick={useLocalExtraction}>Continue without AI</button>
+            </div>
+          </div>
+        )}
         <div className="ai-tips">
           <span>
             <Lightbulb size={14} /> AI tips

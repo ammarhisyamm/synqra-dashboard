@@ -2,7 +2,7 @@ import { ArrowLeft, CheckSquare, Trash, User, CalendarBlank, Flag, Users, MagicW
 import { AREAS, PRIORITIES } from '../../constants/workflow';
 import { AppSelect } from '../common/AppSelect';
 
-export function MeetingAiReview({ user, meeting, items, setItems, selectedCount, onBack, onCreate }) {
+export function MeetingAiReview({ user, meeting, items, brief, setItems, selectedCount, onBack, onCreate }) {
   const update = (id, key, value) => {
     setItems(previous => previous.map(item => (item.id === id ? { ...item, [key]: value } : item)));
   };
@@ -56,8 +56,9 @@ export function MeetingAiReview({ user, meeting, items, setItems, selectedCount,
             <div>
               <h1>AI Review</h1>
               <p>
-                {items.length} items extracted by Orvix AI — review, refine, and select items to convert to board tasks
+                {items.length} items extracted by {brief?.source === 'local' ? 'local heuristics' : 'Orvix AI'} — review, refine, and select items to convert to board tasks
               </p>
+              {brief?.generatedAt && <small className="ai-generated-at">Generated {new Date(brief.generatedAt).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}{brief?.model ? ` · ${brief.model}` : ''}</small>}
             </div>
           </div>
         </div>
@@ -72,6 +73,15 @@ export function MeetingAiReview({ user, meeting, items, setItems, selectedCount,
       </div>
 
       <div className="ai-review-content">
+        {brief && (brief.summary || brief.keyPoints?.length || brief.decisions?.length || brief.risks?.length || brief.openQuestions?.length) ? (
+          <section className="ai-brief" aria-label="Meeting brief">
+            {brief.summary && <div className="ai-brief-block"><h3>Summary</h3><p>{brief.summary}</p></div>}
+            {brief.keyPoints?.length > 0 && <div className="ai-brief-block"><h3>Key points</h3><ul>{brief.keyPoints.map((point, index) => <li key={index}>{point}</li>)}</ul></div>}
+            {brief.decisions?.length > 0 && <div className="ai-brief-block"><h3>Decisions</h3><ul>{brief.decisions.map((point, index) => <li key={index}>{point}</li>)}</ul></div>}
+            {brief.risks?.length > 0 && <div className="ai-brief-block"><h3>Risks &amp; blockers</h3><ul>{brief.risks.map((point, index) => <li key={index}>{point}</li>)}</ul></div>}
+            {brief.openQuestions?.length > 0 && <div className="ai-brief-block"><h3>Open questions</h3><ul>{brief.openQuestions.map((point, index) => <li key={index}>{point}</li>)}</ul></div>}
+          </section>
+        ) : null}
         <div className="ai-section-label">
           <span>
             ⌄ <CheckSquare size={15} /> Action Items
@@ -99,7 +109,7 @@ export function MeetingAiReview({ user, meeting, items, setItems, selectedCount,
                     />
                     <strong>{item.keep ? 'Keep for board' : 'Discarded'}</strong>
                   </label>
-                  <span>Item #{String(index + 1).padStart(2, '0')}</span>
+                  <span className="ai-item-badges"><em className="ai-badge">{brief?.source === 'local' ? 'Needs confirmation' : 'AI suggestion'}</em><span>Item #{String(index + 1).padStart(2, '0')}</span></span>
                 </div>
                 <div className="ai-item-fields">
                   <input
@@ -107,6 +117,7 @@ export function MeetingAiReview({ user, meeting, items, setItems, selectedCount,
                     value={item.title}
                     onChange={event => update(item.id, 'title', event.target.value)}
                     placeholder="Action item title"
+                    aria-label={`Action item ${index + 1} title`}
                   />
                   <button
                     className="ai-delete"
