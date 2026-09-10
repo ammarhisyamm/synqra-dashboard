@@ -17,6 +17,9 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .sidebar-brand svg{width:30px;height:30px;flex:none}
 .sidebar-brand strong{display:block;font-size:20px;font-weight:700;letter-spacing:-.5px;line-height:1;color:#10182b}
 .sidebar-brand small{display:block;font-size:7px;font-weight:700;letter-spacing:.3px;color:#7e8898;margin-top:3px}
+.sidebar-brand small b{color:#3d4a61}
+.brand-sub{font-size:5px!important;letter-spacing:.6px;margin-top:1px!important}
+.auth-brand small.brand-sub{font-size:6px!important}
 .sidebar-scroll{flex:1;padding:18px 16px;display:flex;flex-direction:column;gap:22px;overflow-y:auto}
 .side-label{font-size:12px;font-weight:600;color:#9aa3b2;letter-spacing:1.8px;margin:0 0 10px 4px}
 .project-select{width:100%;display:flex;align-items:center;gap:10px;border:1px solid #dfe6ef;border-radius:12px;padding:13px 12px;font-size:15px;font-weight:600;color:#16213a;background:#fff}
