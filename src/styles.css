@@ -278,18 +278,23 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .toast{position:fixed;z-index:80;bottom:48px;right:20px;background:#172238;color:#fff;border-radius:8px;padding:10px 13px;display:flex;align-items:center;gap:7px;font-size:12px;box-shadow:0 10px 24px #17223833}
 .app-footer{position:fixed;z-index:15;bottom:0;left:264px;right:0;height:30px;padding:0 15px;background:#fff;border-top:1px solid #edf0f4;display:flex;align-items:center;justify-content:space-between;color:#a4adba;font-size:10px}
 @media(min-width:651px){
-.app-shell.collapsed{padding-left:64px}
-.sidebar.collapsed{width:64px}
-.sidebar.collapsed .sidebar-head{justify-content:center;padding:16px 0 14px}
-.sidebar.collapsed .sidebar-brand div,.sidebar.collapsed .side-label,.sidebar.collapsed .project-select span,.sidebar.collapsed .project-select>svg:last-child,.sidebar.collapsed .side-nav button span,.sidebar.collapsed .user-card>div,.sidebar.collapsed .user-card>svg{display:none}
-.sidebar.collapsed .sidebar-brand{margin:0}
-.sidebar.collapsed .sidebar-scroll{padding:18px 10px}
-.sidebar.collapsed .project-select{justify-content:center;padding:11px 0}
-.sidebar.collapsed .side-nav button{justify-content:center;padding:11px 0}
-.sidebar.collapsed .sidebar-foot{padding:18px 10px 14px}
+.app-shell.collapsed{padding-left:72px}
+.sidebar.collapsed{width:72px}
+.sidebar.collapsed .sidebar-head{justify-content:center;padding:14px 0}
+.sidebar.collapsed .sidebar-brand{display:none}
+.sidebar.collapsed .sidebar-scroll{padding:14px 0;overflow-x:hidden}
+.sidebar.collapsed .sidebar-scroll section{display:flex;justify-content:center}
+.sidebar.collapsed .side-label{display:none}
+.sidebar.collapsed .project-select{width:44px;height:44px;padding:0;justify-content:center;margin:0 auto}
+.sidebar.collapsed .project-select span,.sidebar.collapsed .project-select>svg:last-child{display:none}
+.sidebar.collapsed .side-nav{justify-items:center}
+.sidebar.collapsed .side-nav button{width:44px;height:44px;padding:0;justify-content:center;margin:0 auto}
+.sidebar.collapsed .side-nav button span{display:none}
+.sidebar.collapsed .sidebar-foot{padding:14px 0;display:flex;flex-direction:column;align-items:center}
 .sidebar.collapsed .user-card{justify-content:center}
+.sidebar.collapsed .user-card>div,.sidebar.collapsed .user-card>svg{display:none}
 .app-footer{left:264px}
-.app-shell.collapsed .app-footer{left:64px}
+.app-shell.collapsed .app-footer{left:72px}
 }
 .app-footer button{border:1px solid #f3e6bf;background:#fff8e8;color:#ac8737;border-radius:10px;padding:3px 7px;font-size:9px}
 .project-switcher{position:fixed;z-index:50;left:280px;top:80px;width:370px;background:#fff;border:1px solid #e8edf3;border-radius:18px;box-shadow:0 18px 42px #25334c20;padding:17px}
