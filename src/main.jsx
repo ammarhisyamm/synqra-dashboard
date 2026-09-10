@@ -1,21 +1,27 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
-  Archive, ArrowRight, Bell, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronsUpDown, CircleDot,
-  ClipboardList, Download, FileText, Folder, Home, Info, KanbanSquare, LayoutGrid, ListChecks,
-  Menu, MessageCircle, MoreHorizontal, MoreVertical, Plus, Search, Settings, Settings2, ShieldCheck, SlidersHorizontal, Sparkles,
-  Table2, Target, Users, Video, X, Clock3, Trash2, ExternalLink
+  Archive, ArrowRight, Bell, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronsUpDown, CircleDot,
+  ClipboardList, Download, Eye, FileText, Folder, Home, Info, KanbanSquare, LayoutGrid, ListChecks,
+  Menu, MessageCircle, MoreHorizontal, MoreVertical, MousePointer2, Flag, Pencil, CalendarPlus, Plus, Search, Settings, Settings2, ShieldCheck, SlidersHorizontal, Sparkles, Pin, List, Lock, Link2, Copy,
+  Table2, Target, Trash2, TriangleAlert, User, Users, Video, Clock, Clock3, ExternalLink, X
 } from 'lucide-react';
 import './styles.css';
 import './detail.css';
 import './detail-overrides.css';
-import './detail.css';
 
 const STORAGE_KEY = 'synqra-dashboard-v1';
 const AREAS = ['Design', 'Engineering', 'Marketing'];
 const STAGES = ['Planning', 'Review', 'In Progress', 'Final', 'Completed'];
 const PRIORITIES = ['Blocker', 'Major', 'Minor'];
 const STAGE_ICONS = [ClipboardList, CircleDot, Target, CheckCircle2, Check];
+const STAGE_META = [
+  { name: 'Planning', Icon: ListChecks, color: '#8b5cf6' },
+  { name: 'Review', Icon: MessageCircle, color: '#3b82f6' },
+  { name: 'In Progress', Icon: MousePointer2, color: '#a855f7' },
+  { name: 'Final', Icon: Flag, color: '#3b82f6' },
+  { name: 'Completed', Icon: CheckCircle2, color: '#22c55e' }
+];
 const PROJECTS = ['Omnichannel', 'Kaizen Project', 'Billing Portal', 'Onboarding Revamp', 'Test ER'];
 
 const seed = {
@@ -45,6 +51,23 @@ function loadData() {
 function dateLabel(date) {
   return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(`${date}T12:00:00`));
 }
+function slashDate(date) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) return '—';
+  const [y, m, d] = date.split('-');
+  return `${m}/${d}/${y}`;
+}
+function shortDate(date) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) return '—';
+  return new Intl.DateTimeFormat('en-US', { day: 'numeric', month: 'short' }).format(new Date(`${date}T12:00:00`));
+}
+function ageLabel(createdAt) {
+  const then = new Date(createdAt.length === 10 ? `${createdAt}T12:00:00` : createdAt).getTime();
+  const d = Math.max(0, Math.floor((Date.now() - then) / 86400000));
+  return `${d}d`;
+}
+function groupDateLabel(date) {
+  return new Intl.DateTimeFormat('en-US', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(`${date}T12:00:00`));
+}
 function relativeDate(date) {
   const dateValue = new Date(date.length === 10 ? `${date}T12:00:00` : date);
   const d = Math.max(0, Math.floor((Date.now() - dateValue.getTime()) / 86400000));
@@ -71,6 +94,11 @@ function App() {
   const [user, setUser] = useState(undefined);
   const [page, setPage] = useState('Overview');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => { try { return localStorage.getItem('synqra-sidebar-collapsed') === '1'; } catch { return false; } });
+  const toggleSidebar = () => {
+    if (window.matchMedia('(max-width: 650px)').matches) setMenuOpen(open => !open);
+    else setCollapsed(value => { try { localStorage.setItem('synqra-sidebar-collapsed', value ? '0' : '1'); } catch {} return !value; });
+  };
   const [projectOpen, setProjectOpen] = useState(false);
   const [modal, setModal] = useState(null);
   const [toast, setToast] = useState('');
@@ -107,6 +135,11 @@ function App() {
     setData(prev => ({ ...prev, meetings: [saved, ...prev.meetings] }));
     api('/api/meetings', { method: 'POST', body: JSON.stringify(saved) }).catch(error => setToast(error.message));
   };
+  const deleteMeeting = (id) => {
+    setData(prev => ({ ...prev, meetings: prev.meetings.filter(m => m.id !== id) }));
+    api(`/api/meetings/${id}`, { method: 'DELETE' }).catch(error => setToast(error.message));
+    setToast('Meeting deleted');
+  };
   const exportData = () => {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob); const a = document.createElement('a');
@@ -119,11 +152,11 @@ function App() {
   if (user === undefined) return <AuthLoading/>;
   if (!user) return <AuthScreen onAuthenticated={signedInUser => { setUser(signedInUser); api('/api/bootstrap').then(remote => { setData(remote); setCloudReady(true); }).catch(() => setCloudReady(false)); }}/>;
 
-  return <div className="app-shell">
-    <Sidebar page={page} setPage={setPage} menuOpen={menuOpen} setMenuOpen={setMenuOpen} user={user} onSignOut={signOut} project={data.project} onProjectClick={() => setProjectOpen(!projectOpen)} />
+  return <div className={`app-shell${collapsed ? ' collapsed' : ''}`}>
+    <Sidebar page={page} setPage={setPage} menuOpen={menuOpen} setMenuOpen={setMenuOpen} collapsed={collapsed} onMenuClick={toggleSidebar} user={user} onSignOut={signOut} project={data.project} onProjectClick={() => setProjectOpen(!projectOpen)} />
     <main className="workspace">
       <header className="topbar">
-        <button className="icon-button mobile-menu" onClick={() => setMenuOpen(!menuOpen)} aria-label="Toggle menu"><Menu size={20}/></button>
+        <button className="icon-button mobile-menu" onClick={toggleSidebar} aria-label="Toggle menu"><Menu size={20}/></button>
         <label className="global-search"><Search size={17}/><input placeholder="Search…"/><kbd>⌘K</kbd></label>
         <div className="topbar-actions">
           <button className="collaborator"><Users size={16}/> Collaborator</button>
@@ -133,39 +166,39 @@ function App() {
       {projectOpen && <ProjectSwitcher project={data.project} onClose={() => setProjectOpen(false)} />}
       {page === 'Overview' && <Dashboard reviews={activeReviews} meetings={data.meetings} goTo={setPage} onSubmitReview={() => setModal('review')} onNewMeeting={() => setModal('meeting')} />}
       {page === 'All Reviews' && <Reviews reviews={activeReviews} query={query} setQuery={setQuery} updateReview={updateReview} archiveReview={archiveReview} setModal={setModal} onOpen={setSelectedReview} />}
-      {page === 'Meetings' && <Meetings meetings={data.meetings} addMeeting={addMeeting} addReview={addReview} setToast={setToast} setModal={setModal} />}
-      {page === 'Kanban Board' && <Kanban reviews={activeReviews} updateReview={updateReview} archiveReview={archiveReview} setModal={setModal} />}
+      {page === 'Meetings' && <Meetings meetings={data.meetings} addMeeting={addMeeting} addReview={addReview} onDeleteMeeting={deleteMeeting} setToast={setToast} setModal={setModal} />}
+      {page === 'Kanban Board' && <Kanban reviews={activeReviews} updateReview={updateReview} archiveReview={archiveReview} setModal={setModal} goTo={setPage} />}
       {page === 'Archive' && <ArchivePage reviews={data.reviews.filter(r => r.archived)} restoreReview={restoreReview} />}
       {page === 'Settings' && <SettingsPage project={data.project} setToast={setToast} />}
       {page === 'Admin' && <AdminPage user={user}/>} 
     </main>
     {toast && <div className="toast"><CheckCircle2 size={17}/>{toast}</div>}
-    {modal === 'review' && <ReviewModal onClose={() => setModal(null)} onSave={(review) => { addReview(review); setModal(null); setToast('Review created'); }} />}
+    {modal === 'review' && <ReviewModal meetings={data.meetings} onClose={() => setModal(null)} onSave={(review) => { addReview(review); setModal(null); setToast('Review created'); }} />}
     {modal === 'meeting' && <MeetingModal onClose={() => setModal(null)} onSave={(meeting) => { addMeeting(meeting); setModal(null); setToast('Meeting saved'); }} />}
     {selectedReview && <ReviewDetail review={selectedReview} meetings={data.meetings} user={user} onClose={() => setSelectedReview(null)} onUpdated={saved => { setData(prev => ({...prev, reviews: prev.reviews.map(r => r.id === saved.id ? {...r, ...saved} : r)})); setSelectedReview(saved); }} onDeleted={id => { setData(prev => ({...prev, reviews: prev.reviews.filter(r => r.id !== id)})); setSelectedReview(null); setToast('Task deleted'); }} onToast={setToast} />}
     <footer className="app-footer"><button onClick={resetData}>Restore demo data</button><span>{cloudReady ? 'Synced with Cloudflare D1' : 'Local draft — reconnecting to Cloudflare'}</span></footer>
   </div>;
 }
 
-function Sidebar({ page, setPage, menuOpen, setMenuOpen, user, onSignOut, project, onProjectClick }) {
+function Sidebar({ page, setPage, menuOpen, setMenuOpen, collapsed, onMenuClick, user, onSignOut, project, onProjectClick }) {
   const workspace = [["Overview", Home], ["All Reviews", MessageCircle], ["Meetings", CalendarDays], ["Kanban Board", KanbanSquare], ["Archive", Archive]];
   const go = name => { setPage(name); setMenuOpen(false); };
-  return <aside className={`sidebar ${menuOpen ? 'open' : ''}`}>
+  return <aside className={`sidebar${menuOpen ? ' open' : ''}${collapsed ? ' collapsed' : ''}`}>
     <div className="sidebar-head">
-      <button className="sidebar-menu-btn" onClick={() => setMenuOpen(!menuOpen)} aria-label="Toggle menu"><Menu size={22}/></button>
+      <button className="sidebar-menu-btn" onClick={onMenuClick} aria-label="Toggle sidebar"><Menu size={22}/></button>
       <div className="sidebar-brand"><SynqraMark/><div><strong>Synqra</strong><small>Powered by MULIA</small></div></div>
     </div>
     <div className="sidebar-scroll">
-      <section><p className="side-label">PROJECT</p><button className="project-select" onClick={onProjectClick}><Folder size={20}/><span>{project.name}</span><ChevronsUpDown size={17}/></button></section>
-      <section><p className="side-label">WORKSPACE</p><nav className="side-nav">{workspace.map(([name, Icon]) => <button key={name} className={page === name ? 'active' : ''} onClick={() => go(name)}><Icon size={20} {...(name === 'Overview' && page === name ? { fill: 'currentColor' } : {})}/><span>{name}</span></button>)}</nav></section>
+      <section><p className="side-label">PROJECT</p><button className="project-select" title={project.name} onClick={onProjectClick}><Folder size={20}/><span>{project.name}</span><ChevronsUpDown size={17}/></button></section>
+      <section><p className="side-label">WORKSPACE</p><nav className="side-nav">{workspace.map(([name, Icon]) => <button key={name} title={name} className={page === name ? 'active' : ''} onClick={() => go(name)}><Icon size={20} {...(name === 'Overview' && page === name ? { fill: 'currentColor' } : {})}/><span>{name}</span></button>)}</nav></section>
     </div>
     <div className="sidebar-foot">
       <p className="side-label">MANAGEMENT</p>
       <nav className="side-nav">
-        <button className={page === 'Settings' ? 'active' : ''} onClick={() => go('Settings')}><Settings size={20}/><span>Settings</span></button>
-        {['super_admin','admin'].includes(user.role) && <button className={page === 'Admin' ? 'active' : ''} onClick={() => go('Admin')}><ShieldCheck size={20}/><span>Admin Management</span></button>}
+        <button title="Settings" className={page === 'Settings' ? 'active' : ''} onClick={() => go('Settings')}><Settings size={20}/><span>Settings</span></button>
+        {['super_admin','admin'].includes(user.role) && <button title="Admin Management" className={page === 'Admin' ? 'active' : ''} onClick={() => go('Admin')}><ShieldCheck size={20}/><span>Admin Management</span></button>}
       </nav>
-      <button className="user-card" onClick={onSignOut} title="Sign out"><div className="avatar avatar-dark">{user.name.slice(0,2).toUpperCase()}</div><div><strong>{user.name}</strong><small>{user.email}</small></div><MoreVertical size={18}/></button>
+      <button className="user-card" title={`${user.name} — Sign out`} onClick={onSignOut}><div className="avatar avatar-dark">{user.name.slice(0,2).toUpperCase()}</div><div><strong>{user.name}</strong><small>{user.email}</small></div><MoreVertical size={18}/></button>
     </div>
   </aside>;
 }
@@ -228,17 +261,34 @@ function Summary({ reviews, completed, blockers, overdue }) { return <aside clas
 function Metric({ label, value }) { return <div><span>{label}</span><strong>{value}</strong></div>; }
 
 function Reviews({ reviews, query, setQuery, updateReview, archiveReview, setModal, onOpen }) {
-  const [area, setArea] = useState('All teams'); const [status, setStatus] = useState('All statuses'); const [priority, setPriority] = useState('All priorities'); const [selected, setSelected] = useState([]);
-  const filtered = reviews.filter(r => (area === 'All teams' || r.area === area) && (status === 'All statuses' || statusFor(r) === status) && (priority === 'All priorities' || r.priority === priority) && `${r.title} ${r.description || ''} ${r.assignee || ''}`.toLowerCase().includes(query.toLowerCase()));
+  const [status, setStatus] = useState('All statuses');
+  const [priority, setPriority] = useState('All priorities');
+  const [owner, setOwner] = useState('All owners');
+  const [phase, setPhase] = useState('All phases');
+  const [pageIdx, setPageIdx] = useState(0);
+  const [selected, setSelected] = useState([]);
+  const today = new Date().toISOString().slice(0, 10);
+  const owners = useMemo(() => [...new Set(reviews.map(r => r.assignee))], [reviews]);
+  const filtered = reviews.filter(r =>
+    (status === 'All statuses' || statusFor(r) === status) &&
+    (priority === 'All priorities' || r.priority === priority) &&
+    (owner === 'All owners' || r.assignee === owner) &&
+    (phase === 'All phases' || r.stage === phase) &&
+    `${r.title} ${r.description || ''} ${r.assignee || ''}`.toLowerCase().includes(query.toLowerCase()));
   const allSelected = filtered.length > 0 && filtered.every(r => selected.includes(r.id));
   const toggleAll = () => setSelected(allSelected ? selected.filter(id => !filtered.some(r => r.id === id)) : [...new Set([...selected, ...filtered.map(r => r.id)])]);
   const open = reviews.filter(r => statusFor(r) === 'Open').length;
-  const dueToday = reviews.filter(r => r.due === new Date().toISOString().slice(0, 10)).length;
-  const overdue = reviews.filter(r => r.due < new Date().toISOString().slice(0, 10) && statusFor(r) !== 'Resolved').length;
+  const dueToday = reviews.filter(r => r.due === today).length;
+  const overdue = reviews.filter(r => r.due < today && statusFor(r) !== 'Resolved').length;
+  const pageSize = 10;
+  const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const safePage = Math.min(pageIdx, pages - 1);
+  const rows = filtered.slice(safePage * pageSize, safePage * pageSize + pageSize);
+  const from = filtered.length ? safePage * pageSize + 1 : 0;
+  const to = Math.min(filtered.length, safePage * pageSize + pageSize);
   return <section className="page reviews-page"><PageHeading title="All Reviews" action={<button className="primary-button" onClick={() => setModal('review')}><Plus size={17}/> Submit Review</button>}/>
     <div className="review-kpis"><MetricCard label="Total Tasks" value={reviews.length}/><MetricCard label="Open" value={open}/><MetricCard label="Assigned to me" value={reviews.filter(r=>r.assignee==='Aria').length}/><MetricCard label="Due today" value={dueToday}/><MetricCard label="Overdue" value={overdue}/></div>
-    <div className="toolbar"><label className="search"><Search size={17}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search title, description, assignee…"/></label><select value={area} onChange={e => setArea(e.target.value)}><option>All teams</option>{AREAS.map(a=><option key={a}>{a}</option>)}</select><select value={status} onChange={e=>setStatus(e.target.value)}><option>All statuses</option><option>Open</option><option>In Progress</option><option>Review</option><option>Resolved</option><option>Rejected</option></select><select value={priority} onChange={e=>setPriority(e.target.value)}><option>All priorities</option>{PRIORITIES.map(p=><option key={p}>{p}</option>)}</select><button className="filter-more"><SlidersHorizontal size={15}/> More</button><div className="view-switch"><Table2 size={16}/><LayoutGrid size={16}/><MoreHorizontal size={18}/></div></div>
-    <div className="table-wrap"><table><thead><tr><th><input type="checkbox" checked={allSelected} onChange={toggleAll} aria-label="Select all"/></th><th>Title</th><th>Team</th><th>Phase</th><th>Priority</th><th>Assignee</th><th>Status</th><th>Due Date</th><th/></tr></thead><tbody>{filtered.map(r => <tr key={r.id} className="review-row" onClick={() => onOpen(r)}><td><input type="checkbox" checked={selected.includes(r.id)} aria-label={`Select ${r.title}`} onClick={e=>e.stopPropagation()} onChange={()=>setSelected(s=>s.includes(r.id)?s.filter(id=>id!==r.id):[...s,r.id])}/></td><td><strong>{r.title}</strong>{r.description && <small className="row-description">{r.description}</small>}</td><td>{r.area}</td><td><select className="inline-select" value={r.stage} onClick={e=>e.stopPropagation()} onChange={e=>updateReview(r.id,{stage:e.target.value})}>{STAGES.map(s=><option key={s}>{s}</option>)}</select></td><td><Priority value={r.priority}/></td><td><span className="assignee"><i>{(r.assignee || '?')[0]}</i>{r.assignee || 'Unassigned'}</span></td><td><StatusPill value={statusFor(r)}/></td><td>{r.due ? dateLabel(r.due) : '—'}</td><td><button className="row-action" onClick={e=>{e.stopPropagation(); archiveReview(r.id)}} aria-label="Archive review"><Archive size={16}/></button></td></tr>)}</tbody></table><div className="table-pagination"><span>{selected.length ? `${selected.length} selected` : 'Rows per page'} <b>10 <ChevronDown size={13}/></b></span><span>1–{Math.min(10, filtered.length)} of {filtered.length}</span><span className="pagination-arrows">‹　1 / {Math.max(1, Math.ceil(filtered.length / 10))}　›</span></div></div>
+    <div className="table-wrap"><table><thead><tr><th><input type="checkbox" checked={allSelected} onChange={toggleAll} aria-label="Select all"/></th><th>Title</th><th>Team</th><th>Phase</th><th>Priority</th><th>Assignee</th><th>Status</th><th>Due Date</th><th/></tr></thead><tbody>{rows.map(r => <tr key={r.id} className="review-row" onClick={() => onOpen(r)}><td><input type="checkbox" checked={selected.includes(r.id)} aria-label={`Select ${r.title}`} onClick={e=>e.stopPropagation()} onChange={()=>setSelected(s=>s.includes(r.id)?s.filter(id=>id!==r.id):[...s,r.id])}/></td><td><strong>{r.title}</strong>{r.description && <small className="row-description">{r.description}</small>}</td><td>{r.area}</td><td><select className="inline-select" value={r.stage} onClick={e=>e.stopPropagation()} onChange={e=>updateReview(r.id,{stage:e.target.value})}>{STAGES.map(s=><option key={s}>{s}</option>)}</select></td><td><Priority value={r.priority}/></td><td><span className="assignee"><User size={13}/><select className="inline-select" value={r.assignee} onClick={e=>e.stopPropagation()} onChange={e=>updateReview(r.id,{assignee:e.target.value})}>{owners.map(o=><option key={o}>{o}</option>)}</select></span></td><td><StatusPill value={statusFor(r)}/></td><td>{r.due ? slashDate(r.due) : '—'}</td><td><button className="row-action" onClick={e=>{e.stopPropagation(); archiveReview(r.id);}} aria-label="Archive review"><Archive size={16}/></button></td></tr>)}</tbody></table><div className="table-pagination"><span>{selected.length ? `${selected.length} selected` : 'Rows per page'} <b>10 <ChevronDown size={13}/></b></span><span>{from}–{to} of {filtered.length}</span><span className="pagination-arrows"><button className="page-arrow" disabled={safePage===0} onClick={()=>setPageIdx(safePage-1)} aria-label="Previous page"><ChevronLeft size={15}/></button> {safePage + 1} / {pages} <button className="page-arrow" disabled={safePage>=pages-1} onClick={()=>setPageIdx(safePage+1)} aria-label="Next page"><ChevronRight size={15}/></button></span></div></div>
   </section>;
 }
 function ReviewDetail({ review, meetings, user, onClose, onUpdated, onDeleted, onToast }) {
@@ -254,27 +304,46 @@ function MetricCard({ label, value }) { return <article><span>{label}</span><str
 function Priority({ value }) { return <span className={`priority ${value.toLowerCase()}`}><i/>{value}</span>; }
 function PageHeading({ eyebrow, title, description, action }) { return <div className="page-heading"><div>{eyebrow && <small>{eyebrow}</small>}<h1>{title}</h1>{description && <p>{description}</p>}</div>{action}</div>; }
 
-function Meetings({ meetings, addMeeting, addReview, setToast, setModal }) {
+function Meetings({ meetings, addMeeting, addReview, onDeleteMeeting, setToast, setModal }) {
   const [selected, setSelected] = useState(meetings[0]?.id);
+  const [dateFilter, setDateFilter] = useState('');
   const meeting = meetings.find(m => m.id === selected) || meetings[0];
   const [drafts, setDrafts] = useState([]);
   useEffect(() => setDrafts(meeting ? extractNotes(meeting.notes) : []), [meeting?.id]);
+  const visible = meetings.filter(m => !dateFilter || m.date === dateFilter);
+  const groups = useMemo(() => {
+    const map = new Map();
+    [...visible].sort((a, b) => b.date.localeCompare(a.date)).forEach(m => {
+      if (!map.has(m.date)) map.set(m.date, []);
+      map.get(m.date).push(m);
+    });
+    return [...map.entries()];
+  }, [visible]);
   const createDrafts = () => { drafts.forEach((title, i) => addReview({ title, area: AREAS[i % AREAS.length], priority: i === 0 ? 'Major' : 'Minor', stage: 'Planning', assignee: ['Aria','Leo','Mia'][i % 3], due: '2026-09-18' })); setToast(`${drafts.length} review items created`); };
-  return <section className="page meetings-page"><PageHeading eyebrow="MEETING INTELLIGENCE" title="Meetings" description="Capture the discussion, then turn decisions into owned work." action={<button className="primary-button" onClick={() => setModal('meeting')}><Plus size={17}/> New meeting</button>}/>
-    <div className="meetings-layout"><aside className="meeting-list"><div className="list-label">RECENT MEETINGS</div>{meetings.map(m => <button key={m.id} onClick={()=>setSelected(m.id)} className={m.id===meeting?.id?'selected':''}><span className="meeting-icon"><Video size={16}/></span><span><strong>{m.title}</strong><small>{dateLabel(m.date)} · {m.itemCount} items {m.ai && '· AI'}</small></span></button>)}</aside>
-      {meeting && <div className="meeting-detail"><div className="meeting-detail-head"><div><span className="eyebrow">{dateLabel(meeting.date)}</span><h2>{meeting.title}</h2></div><StatusPill value={meeting.ai ? 'AI ready' : 'Notes only'}/></div><div className="notes-box"><div><FileText size={17}/><strong>Meeting notes</strong></div><textarea defaultValue={meeting.notes} onChange={e => { meeting.notes=e.target.value; }} placeholder="Write notes, one action per line…"/></div><div className="extraction-head"><div><span className="sparkle"><Sparkles size={16}/></span><div><h3>Suggested review items</h3><p>Generated from the notes — edit before adding.</p></div></div><button className="primary-button" disabled={!drafts.length} onClick={createDrafts}>Add {drafts.length} to board <ArrowRight size={16}/></button></div><div className="draft-list">{drafts.length ? drafts.map((d,i)=><div key={`${d}-${i}`}><CheckCircle2 size={18}/><input value={d} onChange={e=>setDrafts(a=>a.map((x,n)=>n===i?e.target.value:x))}/><button onClick={()=>setDrafts(a=>a.filter((_,n)=>n!==i))}><X size={16}/></button></div>) : <Empty text="Add clear action items to your notes to generate drafts."/>}</div></div>}
+  const noteLines = meeting ? meeting.notes.split('\n').map(s => s.trim()).filter(Boolean) : [];
+  return <section className="page meetings-page"><PageHeading title="Meetings" action={<button className="primary-button" onClick={() => setModal('meeting')}><CalendarPlus size={16}/> New meeting</button>}/>
+    <div className="meetings-layout">
+      <div className="meetings-side">
+        <div><label className="date-filter"><CalendarDays size={15}/> Filter by date<input type="date" value={dateFilter} onChange={e=>setDateFilter(e.target.value)}/>{dateFilter && <button className="date-clear" onClick={()=>setDateFilter('')} aria-label="Clear date filter"><X size={14}/></button>}</label></div>
+        {groups.length ? groups.map(([date, items]) => <div key={date} className="meeting-group"><p className="meeting-group-label">{groupDateLabel(date)} · {items.length} meeting{items.length === 1 ? '' : 's'}</p>{items.map(m => <article key={m.id} className={`meeting-card${m.id === meeting?.id ? ' selected' : ''}`} onClick={() => setSelected(m.id)}><div><strong>{m.title}</strong><p><CalendarDays size={12}/> {dateLabel(m.date)}{m.ai && <span className="ai-badge"><Sparkles size={11}/> AI</span>}</p></div><div className="meeting-card-actions"><button onClick={e => { e.stopPropagation(); onDeleteMeeting(m.id); }} aria-label={`Delete ${m.title}`}><Trash2 size={15}/></button></div></article>)}</div>) : <Empty text="No meetings found."/>}
+      </div>
+      {meeting && <aside className="meeting-detail-card">
+        <div className="meeting-detail-body"><h2>{meeting.title}</h2><p className="meeting-detail-date"><CalendarDays size={13}/> {groupDateLabel(meeting.date)}</p><p className="detail-label">MEETING NOTES</p>{noteLines.length ? <ul className="notes-lines">{noteLines.map((line, i) => <li key={i}>{line}</li>)}</ul> : <p className="notes-empty">No notes yet.</p>}</div>
+        <div className="meeting-actions"><div className="meeting-actions-head"><h3>Action items</h3><span>{drafts.length} item{drafts.length === 1 ? '' : 's'}</span><button className="add-task-btn" disabled={!drafts.length} onClick={createDrafts}><Plus size={14}/> Add task</button></div>{drafts.length ? <div className="draft-list">{drafts.map((d, i) => <div key={`${d}-${i}`}><CheckCircle2 size={18}/><input value={d} onChange={e=>setDrafts(a=>a.map((x,n)=>n===i?e.target.value:x))}/><button onClick={()=>setDrafts(a=>a.filter((_,n)=>n!==i))}><X size={16}/></button></div>)}</div> : <div className="draft-empty"><span className="draft-empty-icon"><Sparkles size={17}/></span><strong>No action items yet</strong><p>Write clear action lines in the notes above to generate drafts.</p></div>}</div>
+      </aside>}
     </div></section>;
 }
 function extractNotes(notes) { return notes.split(/[\n.]+/).map(s=>s.replace(/^\s*(?:[-•*]\s*)?/, '').trim()).filter(s=>s.length>4).slice(0,6); }
 
-function Kanban({ reviews, updateReview, archiveReview, setModal }) { return <section className="page"><PageHeading eyebrow="PROJECT FLOW" title="Kanban" description="Move work through the stages and keep progress visible." action={<button className="primary-button" onClick={() => setModal('review')}><Plus size={17}/> New review</button>}/><div className="board">{STAGES.map(stage => <div className="board-column" key={stage}><div className="board-column-head"><h3>{stage}</h3><span>{reviews.filter(r=>r.stage===stage).length}</span></div>{reviews.filter(r=>r.stage===stage).map(r=><article className="kanban-card" key={r.id}><div className="kanban-card-head"><Priority value={r.priority}/><button onClick={()=>archiveReview(r.id)}><Archive size={14}/></button></div><h4>{r.title}</h4><p>{r.area}</p><div className="kanban-footer"><span className="assignee"><i>{r.assignee[0]}</i>{r.assignee}</span><select value={r.stage} onChange={e=>updateReview(r.id,{stage:e.target.value})} aria-label="Move card">{STAGES.map(s=><option key={s}>{s}</option>)}</select></div></article>)}<button className="add-card" onClick={()=>setModal('review')}><Plus size={15}/> Add item</button></div>)}</div></section>; }
+function Kanban({ reviews, updateReview, archiveReview, setModal, goTo }) { return <section className="page kanban-page"><PageHeading title="Kanban Board" action={<div className="kanban-actions"><div className="view-switch"><LayoutGrid size={16}/><List size={16}/></div><button className="ghost-button" onClick={() => goTo('Meetings')}><Pin size={15}/> From Meeting</button><button className="primary-button" onClick={() => setModal('review')}><Plus size={16}/> Submit Review</button></div>}/><div className="board">{STAGE_META.map(({ name: stage, Icon, color }) => <div className="board-column" key={stage}><div className="board-column-head"><h3><Icon size={15} color={color}/> {stage}</h3><span>{reviews.filter(r=>r.stage===stage).length}</span></div>{reviews.filter(r=>r.stage===stage).map(r=><article className="kanban-card" key={r.id}><div className="kanban-title-row"><h4>{r.title}</h4><span>{ageLabel(r.createdAt)}</span></div><p className="kanban-assignee"><User size={12}/> {r.assignee}</p><div className="kanban-footer"><Priority value={r.priority}/><span className="kanban-due"><Clock size={12}/> {shortDate(r.due)}</span></div><div className="kanban-tools"><select value={r.stage} onChange={e=>updateReview(r.id,{stage:e.target.value})} aria-label="Move card">{STAGES.map(s=><option key={s}>{s}</option>)}</select><button onClick={()=>archiveReview(r.id)} aria-label="Archive card"><Archive size={14}/></button></div></article>)}<button className="add-card" onClick={()=>setModal('review')}><Plus size={15}/> Add item</button></div>)}</div></section>; }
 
 function ArchivePage({ reviews, restoreReview }) { return <section className="page"><PageHeading eyebrow="PROJECT TRACKER" title="Archive" description="Resolved or paused items stay here without disappearing."/>{reviews.length ? <div className="archive-list">{reviews.map(r=><article key={r.id}><div><Priority value={r.priority}/><h3>{r.title}</h3><p>{r.area} · Archived item</p></div><button className="text-button" onClick={()=>restoreReview(r.id)}>Restore <ArrowRight size={15}/></button></article>)}</div> : <Empty text="Your archive is empty."/>}</section>; }
 
 function SettingsPage({ project, setToast }) {
   const [name, setName] = useState(project.name);
   const [access, setAccess] = useState('link');
-  return <section className="page settings-page"><PageHeading title="Settings"/><div className="settings-card"><section><div className="settings-section-head"><span><Settings2 size={20}/></span><div><h2>General</h2><p>Manage your project details.</p></div></div><label>Project name<input value={name} onChange={e=>setName(e.target.value)}/></label><label>Description<textarea placeholder="Optional project description" rows="4"/></label></section><section><div className="settings-section-head"><span><Users size={20}/></span><div><h2>Sharing & access</h2><p>Control who can view this project.</p></div></div><button className={access === 'invite' ? 'access-option selected' : 'access-option'} onClick={()=>setAccess('invite')}><ShieldCheck size={20}/><span><strong>Invite only</strong><small>Only people you invite by email can access this project.</small></span></button><button className={access === 'link' ? 'access-option selected' : 'access-option'} onClick={()=>setAccess('link')}><Users size={20}/><span><strong>Anyone with the link</strong><small>Anyone who has the link can view this project in read-only mode.</small></span></button>{access === 'link' && <div className="share-link"><input readOnly value="https://synqra-dashboard.ammarhisyam151.workers.dev"/><button onClick={()=>{navigator.clipboard?.writeText('https://synqra-dashboard.ammarhisyam151.workers.dev');setToast('Project link copied');}}>Copy</button></div>}<button className="primary-button settings-save" onClick={()=>setToast('Settings saved')}>Save</button></section><section className="danger-section"><div className="settings-section-head"><span><Archive size={20}/></span><div><h2>Danger zone</h2><p>Permanently delete this project and all associated feedback.</p></div></div><button>Delete project</button></section></div></section>;
+  const shareUrl = 'https://synqra-dashboard.ammarhisyam151.workers.dev';
+  return <section className="page settings-page"><PageHeading title="Settings"/><div className="settings-card"><section><div className="settings-section-head"><span><Settings2 size={20}/></span><div><h2>General</h2><p>Manage your project details.</p></div></div><label>Project name<input value={name} onChange={e=>setName(e.target.value)}/></label><label>Description<textarea placeholder="Optional project description" rows="4"/></label></section><section><div className="settings-section-head"><span><Users size={20}/></span><div><h2>Sharing & access</h2><p>Control who can view this project.</p></div></div><button className={access === 'invite' ? 'access-option selected' : 'access-option'} onClick={()=>setAccess('invite')}><span className="access-icon"><Lock size={18}/></span><span><strong>Invite only</strong><small>Only people you invite by email can access this project.</small></span></button><button className={access === 'link' ? 'access-option selected' : 'access-option'} onClick={()=>setAccess('link')}><span className="access-icon"><Link2 size={18}/></span><span><strong>Anyone with the link</strong><small>Anyone who has the link can view (read-only). No invite needed.</small></span></button>{access === 'link' && <div className="share-link"><Eye size={15}/><input readOnly value={shareUrl}/><button onClick={()=>{navigator.clipboard?.writeText(shareUrl);setToast('Project link copied');}}><Copy size={14}/> Copy</button></div>}<button className="primary-button settings-save" onClick={()=>setToast('Settings saved')}>Save</button></section><section className="danger-section"><div className="settings-section-head"><span><TriangleAlert size={20}/></span><div><h2 className="danger-title">Danger zone</h2><p>Permanently delete this project and all associated feedback.</p></div></div><button className="danger-button" onClick={()=>setToast('Project deletion is disabled in this workspace')}><Trash2 size={15}/> Delete project</button></section></div></section>;
 }
 
 function AdminPage({ user }) {
@@ -285,7 +354,7 @@ function AdminPage({ user }) {
   return <section className="page admin-page"><PageHeading title="Admin Management" action={<button className="primary-button" onClick={()=>alert('Invite links require an email provider connection. Add Cloudflare Email or Resend before enabling invitations.')}><Users size={16}/> Invite Admin</button>}/><div className="admin-kpis"><MetricCard label="Total Admins" value={admins.length}/><MetricCard label="Super Admins" value={superAdmins}/><MetricCard label="Regular Admins" value={regularAdmins}/></div>{error ? <Empty text={error}/> : <div className="table-wrap"><table><thead><tr><th>Email</th><th>Name</th><th>Role</th><th>Actions</th></tr></thead><tbody>{admins.map(person => <tr key={person.id}><td><strong>{person.email}{person.id === user.id && <small className="you">(You)</small>}</strong></td><td>{person.name}</td><td><StatusPill value={person.role === 'super_admin' ? 'Super admin' : person.role === 'admin' ? 'Admin' : 'Member'}/></td><td>{person.id !== user.id && <button className="row-action"><MoreHorizontal size={17}/></button>}</td></tr>)}</tbody></table></div>}</section>;
 }
 
-function ReviewModal({ onClose, onSave }) { const [form, setForm] = useState({title:'',description:'',area:'Design',priority:'Major',status:'Open',stage:'Planning',assignee:'Aria',due:'2026-09-18',meetingId:''}); const edit = (key,val)=>setForm(x=>({...x,[key]:val})); return <Modal title="Create task" subtitle="Add a new task to this project. You can fill in more details after creation." onClose={onClose}><form onSubmit={e=>{e.preventDefault(); if(form.title.trim())onSave(form)}}><label>Title<input autoFocus value={form.title} onChange={e=>edit('title',e.target.value)} placeholder="e.g. Fix pagination bug on list view" required/></label><label>Description<textarea value={form.description} onChange={e=>edit('description',e.target.value)} placeholder="Add context, links, or acceptance criteria…" rows="3"/></label><div className="form-grid"><SelectField label="Status" value={form.status} values={['Open','In Progress','Review','Resolved','Rejected']} onChange={v=>edit('status',v)}/><SelectField label="Priority" value={form.priority} values={PRIORITIES} onChange={v=>edit('priority',v)}/><SelectField label="Phase" value={form.stage} values={STAGES} onChange={v=>edit('stage',v)}/><SelectField label="Team" value={form.area} values={AREAS} onChange={v=>edit('area',v)}/><label>Assignee<input value={form.assignee} onChange={e=>edit('assignee',e.target.value)} placeholder="Unassigned"/></label><label>Related meeting<select value={form.meetingId} onChange={e=>edit('meetingId',e.target.value)}><option value="">No related meeting</option></select></label></div><label>Due date<input type="date" value={form.due} onChange={e=>edit('due',e.target.value)}/></label><div className="modal-actions"><button type="button" className="text-button" onClick={onClose}>Cancel</button><button className="primary-button">Create task <ArrowRight size={16}/></button></div></form></Modal>; }
+function ReviewModal({ onClose, onSave, meetings = [] }) { const [form, setForm] = useState({title:'',description:'',area:'Design',priority:'Major',status:'Open',stage:'Planning',assignee:'Aria',due:'2026-09-18',meetingId:''}); const edit = (key,val)=>setForm(x=>({...x,[key]:val})); return <Modal title="Create task" subtitle="Add a new task to this project. You can fill in more details after creation." onClose={onClose}><form onSubmit={e=>{e.preventDefault(); if(form.title.trim())onSave(form)}}><label>Title<input autoFocus value={form.title} onChange={e=>edit('title',e.target.value)} placeholder="e.g. Fix pagination bug on list view" required/></label><label>Description<textarea value={form.description} onChange={e=>edit('description',e.target.value)} placeholder="Add context, links, or acceptance criteria…" rows="3"/></label><div className="form-grid"><SelectField label="Status" value={form.status} values={['Open','In Progress','Review','Resolved','Rejected']} onChange={v=>edit('status',v)}/><SelectField label="Priority" value={form.priority} values={PRIORITIES} onChange={v=>edit('priority',v)}/><SelectField label="Phase" value={form.stage} values={STAGES} onChange={v=>edit('stage',v)}/><SelectField label="Team" value={form.area} values={AREAS} onChange={v=>edit('area',v)}/><label>Assignee<input value={form.assignee} onChange={e=>edit('assignee',e.target.value)} placeholder="Unassigned"/></label><label>Related meeting<select value={form.meetingId} onChange={e=>edit('meetingId',e.target.value)}><option value="">No related meeting</option>{meetings.map(m=><option key={m.id} value={m.id}>{m.title}</option>)}</select></label></div><label>Due date<input type="date" value={form.due} onChange={e=>edit('due',e.target.value)}/></label><div className="modal-actions"><button type="button" className="text-button" onClick={onClose}>Cancel</button><button className="primary-button">Create task <ArrowRight size={16}/></button></div></form></Modal>; }
 function MeetingModal({ onClose, onSave }) { const [form,setForm]=useState({title:'',date:'2026-09-10',notes:'',ai:true}); const edit=(k,v)=>setForm(x=>({...x,[k]:v})); return <Modal title="New meeting" subtitle="Notes are saved to this project and can generate review items." onClose={onClose}><form onSubmit={e=>{e.preventDefault();if(form.title.trim())onSave(form)}}><label>Meeting title<input autoFocus value={form.title} onChange={e=>edit('title',e.target.value)} placeholder="e.g. Design review" required/></label><label>Date<input type="date" value={form.date} onChange={e=>edit('date',e.target.value)}/></label><label>Notes<textarea value={form.notes} onChange={e=>edit('notes',e.target.value)} placeholder="One decision or action per line" rows="6"/></label><label className="switch-label"><input type="checkbox" checked={form.ai} onChange={e=>edit('ai',e.target.checked)}/><span>Prepare AI review suggestions</span></label><div className="modal-actions"><button type="button" className="text-button" onClick={onClose}>Cancel</button><button className="primary-button">Save meeting <ArrowRight size={16}/></button></div></form></Modal>; }
 function SelectField({ label,value,values,onChange }) { return <label>{label}<select value={value} onChange={e=>onChange(e.target.value)}>{values.map(v=><option key={v}>{v}</option>)}</select></label>; }
 function Modal({title,subtitle,onClose,children}) { return <div className="modal-backdrop" onMouseDown={onClose}><section className="modal" onMouseDown={e=>e.stopPropagation()}><button className="modal-close" onClick={onClose}><X size={19}/></button><h2>{title}</h2><p>{subtitle}</p>{children}</section></div>; }

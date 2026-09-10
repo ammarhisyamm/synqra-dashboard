@@ -196,6 +196,13 @@ async function routeApi(request, env) {
     return json({ ...meeting, ai: Boolean(meeting.ai) }, 201);
   }
 
+  const meetingMatch = path.match(/^\/api\/meetings\/([a-zA-Z0-9-]+)$/);
+  if (request.method === 'DELETE' && meetingMatch) {
+    const result = await env.DB.prepare('DELETE FROM meetings WHERE id = ?').bind(meetingMatch[1]).run();
+    if (!result.meta.changes) return json({ error: 'Meeting not found.' }, 404);
+    return json({ ok: true });
+  }
+
   return json({ error: 'Not found.' }, 404);
 }
 
