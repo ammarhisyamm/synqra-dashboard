@@ -24,13 +24,13 @@ import { CommandPalette } from './components/navigation/CommandPalette';
 import { MeetingEditor } from './components/meetings/MeetingEditor';
 
 const REPORT_COLORS = {
-  accent: '#7c86d8',
-  accentSoft: '#aeb7e8',
-  info: '#8fa6c7',
-  success: '#79b99d',
-  warning: '#d5ad72',
-  danger: '#d89198',
-  muted: '#b2bdcc'
+  accent: '#111b30',
+  accentSoft: '#64748b',
+  info: '#7b8799',
+  success: '#34445d',
+  warning: '#53627a',
+  danger: '#273650',
+  muted: '#c5ceda'
 };
 
 const seed = {
