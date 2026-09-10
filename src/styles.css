@@ -313,6 +313,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .new-project{display:flex;gap:11px;align-items:center;border-top:1px solid #e9edf3;margin:8px -17px -17px;padding:20px 28px;width:calc(100% + 34px);font-size:16px}
 .switcher-close{position:absolute;right:12px;top:12px;color:#95a1b2}
 .empty-state{border:1px dashed #dce3ec;border-radius:8px;background:#fff;padding:25px;text-align:center;color:#9aa6b5;font-size:12px}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 
 @media(max-width:900px){.page{padding:20px 18px 55px}
 .review-kpis{grid-template-columns:repeat(3,1fr)}
