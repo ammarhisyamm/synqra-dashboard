@@ -56,8 +56,12 @@ function normalizeReview(input, partial = false) {
   if (!partial || 'area' in input) { if (!areas.has(input.area)) throw new Error('Invalid review area.'); review.area = input.area; }
   if (!partial || 'priority' in input) { if (!priorities.has(input.priority)) throw new Error('Invalid priority.'); review.priority = input.priority; }
   if (!partial || 'stage' in input) { if (!stages.has(input.stage)) throw new Error('Invalid stage.'); review.stage = input.stage; }
-  if (!partial || 'assignee' in input) review.assignee = safeText(input.assignee, 80);
+  if (!partial || 'assignee' in input) review.assignee = safeText(input.assignee, 200);
   if (!partial || 'due' in input) review.due = /^\d{4}-\d{2}-\d{2}$/.test(input.due || '') ? input.due : null;
+  if (!partial || 'start_date' in input || 'startDate' in input) {
+    const start = input.start_date ?? input.startDate;
+    review.start_date = /^\d{4}-\d{2}-\d{2}$/.test(start || '') ? start : null;
+  }
   if (!partial || 'description' in input) review.description = safeText(input.description, 4000);
   if (!partial || 'status' in input) { if (!statuses.has(input.status || 'Open')) throw new Error('Invalid review status.'); review.status = input.status || 'Open'; }
   if (!partial || 'submittedBy' in input) review.submitted_by = safeText(input.submittedBy, 120);
@@ -78,7 +82,7 @@ function normalizeReview(input, partial = false) {
 
 async function bootstrap(env) {
   const [reviews, meetings, project] = await env.DB.batch([
-    env.DB.prepare("SELECT id, title, area, priority, stage, assignee, due, description, status, submitted_by AS submittedBy, reporter, meeting_id AS meetingId, estimate_hours AS estimateHours, epic, feature, sprint, labels, created_at AS createdAt, updated_at AS updatedAt, archived FROM reviews ORDER BY created_at DESC"),
+    env.DB.prepare("SELECT id, key, title, area, priority, stage, assignee, due, start_date AS startDate, description, status, submitted_by AS submittedBy, reporter, meeting_id AS meetingId, estimate_hours AS estimateHours, epic, feature, sprint, labels, created_at AS createdAt, updated_at AS updatedAt, archived FROM reviews ORDER BY created_at DESC"),
     env.DB.prepare("SELECT id, title, date, ai, notes, (SELECT COUNT(*) FROM reviews WHERE meeting_id = m.id AND archived = 0) AS itemCount, attendees FROM meetings m ORDER BY date DESC"),
     env.DB.prepare("SELECT name, description, access_mode AS accessMode FROM project_settings WHERE id = 'default'")
   ]);
@@ -86,7 +90,7 @@ async function bootstrap(env) {
   return { project: { ...settings, initials: settings.name.slice(0, 1).toUpperCase() }, reviews: reviews.results.map(r => ({ ...r, labels: parseJson(r.labels, []) })), meetings: meetings.results.map(m => ({ ...m, ai: Boolean(m.ai), attendees: parseJson(m.attendees, []) })) };
 }
 async function reviewSnapshot(env, reviewId) {
-  return env.DB.prepare("SELECT id, title, area, priority, stage, assignee, due, description, status, submitted_by AS submittedBy, reporter, meeting_id AS meetingId, estimate_hours AS estimateHours, epic, feature, sprint, labels, created_at AS createdAt, updated_at AS updatedAt, archived FROM reviews WHERE id = ?").bind(reviewId).first();
+  return env.DB.prepare("SELECT id, key, title, area, priority, stage, assignee, due, start_date AS startDate, description, status, submitted_by AS submittedBy, reporter, meeting_id AS meetingId, estimate_hours AS estimateHours, epic, feature, sprint, labels, created_at AS createdAt, updated_at AS updatedAt, archived FROM reviews WHERE id = ?").bind(reviewId).first();
 }
 
 async function recordActivity(env, reviewId, userId, action, metadata = {}) {
@@ -178,9 +182,10 @@ async function routeApi(request, env) {
     const body = await readBody(request); if (!body) return json({ error: 'Invalid JSON.' }, 400);
     try {
       const review = normalizeReview(body);
-      const newReview = { id: body.id && /^[a-zA-Z0-9-]{8,80}$/.test(body.id) ? body.id : id(), ...review, submitted_by: review.submitted_by || user.name, archived: 0 };
+      const maxKey = await env.DB.prepare("SELECT MAX(CAST(SUBSTR(key, INSTR(key, '-') + 1) AS INTEGER)) AS maxKey FROM reviews WHERE key LIKE 'AR-%'").first('maxKey');
+      const newReview = { id: body.id && /^[a-zA-Z0-9-]{8,80}$/.test(body.id) ? body.id : id(), key: `AR-${(maxKey || 0) + 1}`, ...review, submitted_by: review.submitted_by || user.name, archived: 0 };
       if (newReview.meeting_id && !await env.DB.prepare('SELECT id FROM meetings WHERE id = ?').bind(newReview.meeting_id).first()) return json({ error: 'Related meeting not found.' }, 400);
-      await env.DB.prepare('INSERT INTO reviews (id, title, area, priority, stage, assignee, due, description, status, submitted_by, meeting_id, reporter, estimate_hours, epic, feature, sprint, labels, archived) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(newReview.id, newReview.title, newReview.area, newReview.priority, newReview.stage, newReview.assignee, newReview.due, newReview.description, newReview.status, newReview.submitted_by, newReview.meeting_id, newReview.reporter || user.name, newReview.estimate_hours ?? null, newReview.epic || '', newReview.feature || '', newReview.sprint || '', newReview.labels || '[]', newReview.archived).run();
+      await env.DB.prepare('INSERT INTO reviews (id, key, title, area, priority, stage, assignee, due, start_date, description, status, submitted_by, meeting_id, reporter, estimate_hours, epic, feature, sprint, labels, archived) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(newReview.id, newReview.key, newReview.title, newReview.area, newReview.priority, newReview.stage, newReview.assignee, newReview.due, newReview.start_date ?? null, newReview.description, newReview.status, newReview.submitted_by, newReview.meeting_id, newReview.reporter || user.name, newReview.estimate_hours ?? null, newReview.epic || '', newReview.feature || '', newReview.sprint || '', newReview.labels || '[]', newReview.archived).run();
       await env.DB.prepare('INSERT INTO review_status_history (id, review_id, from_status, to_status, user_id) VALUES (?, ?, ?, ?, ?)').bind(id(), newReview.id, null, newReview.status, user.id).run();
       await recordActivity(env, newReview.id, user.id, 'created', { title: newReview.title });
       const saved = await reviewSnapshot(env, newReview.id);
