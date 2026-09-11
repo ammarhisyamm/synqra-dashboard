@@ -135,12 +135,12 @@ h1,h2,h3,h4,strong,b,button,.breadcrumb-title,.side-label,.command-group-label,.
 /* Board toolbar reference lock: compact two-row toolbar. Row 1 stays one nowrap
    flex line; every control hugs its content; only the project trigger may shrink
    (ellipsis) to protect the row. No flex:1, no width:100%, no wrap on row 1. */
-.kanban-header-bar{display:block;padding:10px;border-bottom:0}
+.kanban-header-bar{display:block;padding:8px;border-bottom:0}
 .kanban-header-bar .kanban-toolbar-actions{display:flex;align-items:center;justify-content:flex-start;flex-wrap:nowrap;gap:12px;width:100%;min-width:0;margin:0;padding:0}
 .kanban-header-bar .kanban-project-trigger{flex:0 1 300px;width:300px;max-width:320px;min-width:220px;height:50px;min-height:50px;padding:0 18px;border-radius:12px;font-size:15px}
 .kanban-header-bar .kanban-project-trigger > span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .kanban-header-bar .toolbar-select{flex:0 0 auto;width:auto;max-width:none;min-width:0}
-.kanban-header-bar .toolbar-select .app-select-trigger{width:auto;min-width:0;height:50px;min-height:50px;padding:0 18px;border-radius:12px;gap:9px;font-size:15px;white-space:nowrap}
+.kanban-header-bar .toolbar-select .app-select-trigger{width:auto;min-width:0;height:50px;min-height:50px;padding:0 18px;border-radius:12px;gap:9px;font-size:15px;white-space:nowrap;justify-content:center}
 .kanban-header-bar .toolbar-select .app-select-chevron{display:none}
 .kanban-header-bar .toolbar-meta-trigger{flex:0 0 auto;width:auto;max-width:none;min-width:0;height:50px;min-height:50px;padding:0 18px;border-radius:12px;gap:9px;font-size:15px;justify-content:center;white-space:nowrap}
 .kanban-header-bar .toolbar-divider{flex:0 0 auto;height:32px;margin:0 4px 0 auto}
@@ -151,7 +151,7 @@ h1,h2,h3,h4,strong,b,button,.breadcrumb-title,.side-label,.command-group-label,.
 .kanban-header-bar .toolbar-select:nth-of-type(1){flex:0 0 auto}
 .kanban-header-bar .toolbar-select:nth-of-type(1) .app-select-label{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* Row 2: tabs left, priority group pinned right. */
-.kanban-nav-tabs-bar{align-items:center;padding:10px}
+.kanban-nav-tabs-bar{align-items:center;padding:8px}
 .kanban-nav-tabs-bar .kanban-view-tabs{gap:10px}
 .kanban-nav-tabs-bar .view-tab{font-size:15px;padding:12px 18px;gap:8px;margin-bottom:0}
 .kanban-nav-tabs-bar .view-tab svg{width:19px;height:19px;flex:none}
