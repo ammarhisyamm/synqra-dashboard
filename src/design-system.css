@@ -154,14 +154,14 @@ h1,h2,h3,h4,strong,b,button,.breadcrumb-title,.side-label,.command-group-label,.
 .kanban-header-bar .toolbar-select:nth-of-type(1){flex:0 0 auto}
 .kanban-header-bar .toolbar-select:nth-of-type(1) .app-select-label{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* Row 2: tabs left, priority group pinned right. */
-.kanban-nav-tabs-bar{align-items:center;padding:8px}
+.kanban-nav-tabs-bar{align-items:center;padding:12px 8px 10px}
 .kanban-nav-tabs-bar .kanban-view-tabs{gap:10px}
-.kanban-nav-tabs-bar .view-tab{font-size:15px;padding:12px 18px;gap:8px;margin-bottom:0}
-.kanban-nav-tabs-bar .view-tab svg{width:19px;height:19px;flex:none}
+.kanban-nav-tabs-bar .view-tab{font-size:14px;padding:8px 16px;gap:8px;margin-bottom:0}
+.kanban-nav-tabs-bar .view-tab svg{width:18px;height:18px;flex:none}
 .kanban-nav-tabs-bar .view-tab.active{border-bottom-width:3px}
 .kanban-nav-tabs-bar .kanban-filter-row{margin-left:auto;gap:14px;padding-bottom:0}
 .kanban-nav-tabs-bar .kanban-filter-group .app-select{min-width:0}
-.kanban-nav-tabs-bar .kanban-filter-group .app-select-trigger{height:44px;min-height:44px;font-size:14px}
+.kanban-nav-tabs-bar .kanban-filter-group .app-select-trigger{height:36px;min-height:36px;font-size:13px}
 @media(max-width:1180px){
   .kanban-header-bar .kanban-toolbar-actions{flex-wrap:wrap;gap:8px}
   .kanban-header-bar .kanban-project-trigger{flex:1 1 200px;width:auto;max-width:none;min-width:180px;height:44px;min-height:44px}
