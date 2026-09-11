@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Archive, CalendarBlank, CaretDown, CaretRight, Funnel, Kanban, ListBullets,
-  MagnifyingGlass, PencilSimple as Pencil, Plus, Rows, SquaresFour, Tag, Target, Timer, Trash, User, Users, X
+  MagnifyingGlass, PencilSimple as Pencil, Plus, Rows, SquaresFour, Stack, Tag, Timer, Trash, User, Users, X
 } from '@phosphor-icons/react';
 import { PRIORITIES, STAGES } from '../../constants/workflow';
 import { metadataApi } from '../../api/metadata';
@@ -241,7 +241,7 @@ export function KanbanWorkspace({ project, team = [], reviews, sprints = [], met
           className="toolbar-select"
         />
         <button type="button" className="secondary-button toolbar-meta-trigger meta-epic" onClick={() => openMetadata('epic')} aria-haspopup="dialog" title="Manage epics">
-          <Target size={15}/> <span>Epics</span><span className="toolbar-count">{metadata.filter(item => item.type === 'epic' && !isArchivedMeta(item)).length}</span>
+          <Stack size={15}/> <span>Epics</span><span className="toolbar-count">{metadata.filter(item => item.type === 'epic' && !isArchivedMeta(item)).length}</span>
         </button>
         <button type="button" className="secondary-button toolbar-meta-trigger meta-feature" onClick={() => openMetadata('feature')} aria-haspopup="dialog" title="Manage features">
           <SquaresFour size={15}/> Features

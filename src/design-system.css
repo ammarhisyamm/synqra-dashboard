@@ -11,8 +11,8 @@ button,.primary-button,.secondary-button,.ghost-button,.text-button,.danger-butt
 .modal-close{display:grid;place-items:center;width:32px;height:32px;border:1px solid transparent;border-radius:8px;color:#718199}.modal-close:hover{background:var(--ui-subtle);border-color:var(--ui-border);color:var(--ui-text)}
 .modal form,.sprint-modal form,.metadata-modal form{display:grid;gap:14px}.modal form>label,.sprint-modal form>label{display:grid;gap:7px;min-width:0;color:#526075;font-size:12px;font-weight:500}.modal input:not([type=checkbox]),.modal textarea,.sprint-modal input,.metadata-modal input{box-sizing:border-box;width:100%;min-width:0;min-height:40px;border:1px solid var(--ui-border);border-radius:var(--ui-radius-sm);padding:9px 11px;color:var(--ui-text);background:var(--ui-surface);font:inherit}.modal textarea{min-height:96px;resize:vertical}
 .modal input:focus,.modal textarea:focus,.sprint-modal input:focus,.metadata-modal input:focus{border-color:var(--ui-focus);box-shadow:0 0 0 3px var(--ui-focus-ring);outline:0}.modal-actions{gap:10px}.field-label{font-weight:500}
-/* Kanban's first row must distribute its controls instead of hugging content. */
-.kanban-header-bar{gap:16px}.kanban-toolbar-actions{display:flex;flex:1 1 720px;min-width:0;width:100%;gap:8px;align-items:center}.kanban-search{flex:1 1 190px;min-width:180px}.kanban-search input{width:100%;min-width:0}.toolbar-select,.toolbar-meta-trigger{flex:1 1 124px;min-width:124px}.toolbar-select.compact{flex:0 1 132px}.toolbar-select .app-select-trigger{width:100%;white-space:nowrap}.toolbar-meta-trigger{justify-content:flex-start;white-space:nowrap}.create-task-cta{white-space:nowrap;flex:0 0 auto}
+/* Kanban's first row hugs its content on one nowrap line (reference layout). */
+.kanban-header-bar{gap:0}.kanban-header-bar .kanban-toolbar-actions{display:flex;flex:0 1 auto;width:100%;min-width:0;gap:12px;align-items:center;flex-wrap:nowrap;justify-content:flex-start}.kanban-header-bar .toolbar-select,.kanban-header-bar .toolbar-meta-trigger{flex:0 0 auto;width:auto;min-width:0}.kanban-header-bar .toolbar-select .app-select-trigger{width:auto;white-space:nowrap}.kanban-header-bar .toolbar-meta-trigger{justify-content:flex-start;white-space:nowrap}.kanban-header-bar .toolbar-divider{margin-left:auto}.kanban-header-bar .create-task-cta{white-space:nowrap;flex:0 0 auto;margin-left:0}
 .sprint-modal form{display:grid;gap:14px}.sprint-modal form>label,.sprint-modal .form-grid>label{display:grid;gap:7px;min-width:0;color:#526075;font-size:12px;font-weight:500}.sprint-modal .form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.sprint-modal form input{box-sizing:border-box;width:100%;min-width:0;height:40px;border:1px solid #dfe7f0;border-radius:8px;padding:0 11px;color:#172238;background:#fff;font:inherit}.sprint-modal .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:2px}.backlog-task>label{min-width:220px}.backlog-task .app-select{min-width:130px}.backlog-task .app-select-trigger{min-height:32px}
 @media(max-width:1180px){.kanban-header-bar{align-items:flex-start;flex-direction:column}.kanban-toolbar-actions{flex-basis:auto}.toolbar-select.compact{flex:1 1 124px}}
 @media(max-width:720px){.modal,.action-dialog,.metadata-modal,.sprint-modal{width:min(100% - 24px,520px);padding:20px}.modal-actions{flex-wrap:wrap}.modal-actions button{flex:1}.app-select-trigger{min-height:40px}.kanban-toolbar-actions{align-items:stretch;flex-wrap:wrap}.kanban-search{flex-basis:100%}.toolbar-select{flex:1 1 calc(50% - 4px);min-width:0}.toolbar-select.compact{display:block}.create-task-cta{flex:1}.sprint-modal .form-grid{grid-template-columns:1fr}.sprint-modal .modal-actions button{flex:1}.backlog-task>label{min-width:0;align-items:stretch;flex-direction:column}.backlog-task .app-select{width:100%}}
@@ -125,18 +125,46 @@ h1,h2,h3,h4,strong,b,button,.breadcrumb-title,.side-label,.command-group-label,.
 
 @media(max-width:650px){.modal,.action-dialog,.project-modal,.delete-project-modal,.collab-modal,.metadata-modal,.sprint-modal{width:min(100% - 24px,520px);padding:20px}.collab-invite-row{grid-template-columns:1fr}.collab-invite-row .primary-button{width:100%}.project-modal-icon,.collab-icon,.sprint-modal-icon,.delete-project-icon{margin-bottom:14px}}
 
-/* Board header: keep the project anchor centered while controls fill the row. */
-@media(min-width:1181px){
-  .kanban-header-bar{display:grid;grid-template-columns:max-content minmax(0,1fr);align-items:center;flex-wrap:nowrap}
-  .kanban-breadcrumbs{align-self:center;justify-self:start}
-  .kanban-toolbar-actions{width:100%;flex:1 1 auto;min-width:0;flex-wrap:wrap;justify-content:stretch;grid-column:1/-1}
-  .kanban-header-bar .kanban-search{width:auto;flex:1 1 190px;min-width:150px}
-  .kanban-header-bar .toolbar-select{flex:1 1 0;min-width:0;height:auto;padding:0;border:0;background:transparent}
-  .kanban-header-bar .toolbar-select.compact{flex:1 1 0;min-width:0}
-  .kanban-header-bar .toolbar-select .app-select-trigger{width:100%;min-width:0}
-}
+/* (Removed: desktop grid/wrap/stretch override — superseded by the reference lock at end of file.) */
 
 /* AppSelect owns the control chrome; its wrapper must never create a second border. */
 .kanban-header-bar .toolbar-select{height:auto;padding:0;border:0;background:transparent}
 .kanban-header-bar .toolbar-select .app-select-menu{min-width:100%;width:max-content;max-width:min(320px,calc(100vw - 32px))}
 .kanban-header-bar .toolbar-select .app-select-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* Board toolbar reference lock: compact two-row toolbar. Row 1 stays one nowrap
+   flex line; every control hugs its content; only the project trigger may shrink
+   (ellipsis) to protect the row. No flex:1, no width:100%, no wrap on row 1. */
+.kanban-header-bar{display:block;padding:20px 20px 16px}
+.kanban-header-bar .kanban-toolbar-actions{display:flex;align-items:center;justify-content:flex-start;flex-wrap:nowrap;gap:12px;width:100%;min-width:0;margin:0;padding:0}
+.kanban-header-bar .kanban-project-trigger{flex:0 1 300px;width:300px;max-width:320px;min-width:220px;height:50px;min-height:50px;padding:0 18px;border-radius:12px;font-size:15px}
+.kanban-header-bar .toolbar-select{flex:0 0 auto;width:auto;max-width:none;min-width:0}
+.kanban-header-bar .toolbar-select .app-select-trigger{width:auto;min-width:0;height:50px;min-height:50px;padding:0 18px;border-radius:12px;gap:9px;font-size:15px;white-space:nowrap}
+.kanban-header-bar .toolbar-select .app-select-chevron{display:none}
+.kanban-header-bar .toolbar-meta-trigger{flex:0 0 auto;width:auto;max-width:none;min-width:0;height:50px;min-height:50px;padding:0 18px;border-radius:12px;gap:9px;font-size:15px;justify-content:center;white-space:nowrap}
+.kanban-header-bar .toolbar-divider{flex:0 0 auto;height:32px;margin:0 4px 0 auto}
+.kanban-header-bar .create-task-cta{flex:0 0 auto;width:auto;min-width:0;height:50px;min-height:50px;margin-left:0;border-radius:12px;padding:0 20px;font-size:15px;white-space:nowrap}
+.kanban-header-bar .mini-avatar{width:24px;height:24px;font-size:9px}
+.kanban-header-bar .kanban-toolbar-actions .app-select-icon,.kanban-header-bar .kanban-toolbar-actions .toolbar-meta-trigger>svg,.kanban-header-bar .kanban-toolbar-actions .kanban-project-trigger>svg,.kanban-header-bar .kanban-toolbar-actions .create-task-cta>svg{width:18px;height:18px;flex:none}
+/* Team keeps avatars + full label: never shrink, cap only long selections. */
+.kanban-header-bar .toolbar-select:nth-of-type(1){flex:0 0 auto}
+.kanban-header-bar .toolbar-select:nth-of-type(1) .app-select-label{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Row 2: tabs left, priority group pinned right. */
+.kanban-nav-tabs-bar{align-items:center;padding:10px 20px 12px}
+.kanban-nav-tabs-bar .kanban-view-tabs{gap:10px}
+.kanban-nav-tabs-bar .view-tab{font-size:15px;padding:12px 18px;gap:8px;margin-bottom:0}
+.kanban-nav-tabs-bar .view-tab svg{width:19px;height:19px;flex:none}
+.kanban-nav-tabs-bar .view-tab.active{border-bottom-width:3px}
+.kanban-nav-tabs-bar .kanban-filter-row{margin-left:auto;gap:14px;padding-bottom:0}
+.kanban-nav-tabs-bar .kanban-filter-group .app-select{min-width:0}
+.kanban-nav-tabs-bar .kanban-filter-group .app-select-trigger{height:44px;min-height:44px;font-size:14px}
+@media(max-width:1180px){
+  .kanban-header-bar .kanban-toolbar-actions{flex-wrap:wrap;gap:8px}
+  .kanban-header-bar .kanban-project-trigger{flex:1 1 200px;width:auto;max-width:none;min-width:180px;height:44px;min-height:44px}
+  .kanban-header-bar .toolbar-select,.kanban-header-bar .toolbar-meta-trigger{flex:0 1 auto;width:auto}
+  .kanban-header-bar .toolbar-select .app-select-trigger,.kanban-header-bar .toolbar-meta-trigger,.kanban-header-bar .create-task-cta{height:44px;min-height:44px;padding-left:14px;padding-right:14px;font-size:13px}
+  .kanban-header-bar .create-task-cta{margin-left:auto}
+}
+@media(max-width:720px){
+  .kanban-header-bar .kanban-toolbar-actions .app-select-trigger,.kanban-header-bar .toolbar-meta-trigger,.kanban-header-bar .create-task-cta,.kanban-header-bar .kanban-project-trigger{height:44px;min-height:44px}
+}
