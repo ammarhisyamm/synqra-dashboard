@@ -26,8 +26,8 @@ function TaskMeta({ task }) {
 const METADATA_COLORS = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#14b8a6', '#ef4444'];
 const isArchivedMeta = item => item?.status === 'archived' || item?.archived === 1 || item?.archived === true;
 
-function MetadataManager({ projectId, projectName, metadata, taskCounts = {}, onClose, onRefresh, requestConfirm, onToast }) {
-  const [type, setType] = useState('epic');
+function MetadataManager({ projectId, projectName, metadata, taskCounts = {}, initialType = 'epic', onClose, onRefresh, requestConfirm, onToast }) {
+  const [type, setType] = useState(initialType);
   const [name, setName] = useState('');
   const [color, setColor] = useState(METADATA_COLORS[0]);
   const [parentId, setParentId] = useState('');
@@ -37,6 +37,7 @@ function MetadataManager({ projectId, projectName, metadata, taskCounts = {}, on
   const [editingName, setEditingName] = useState('');
   const [busy, setBusy] = useState(false);
   useEffect(() => { setQuery(''); setEditingId(null); setColor(METADATA_COLORS[0]); }, [type]);
+  useEffect(() => { if (initialType) setType(initialType); }, [initialType]);
   const items = metadata.filter(item => item.type === type);
   const visible = items.filter(item => {
     if (!showArchived && isArchivedMeta(item)) return false;
@@ -158,6 +159,7 @@ export function KanbanWorkspace({ project, team = [], reviews, sprints = [], met
   const [labelFilter, setLabelFilter] = useState([]);
   const [dragId, setDragId] = useState(null);
   const [metadataOpen, setMetadataOpen] = useState(false);
+  const [metadataType, setMetadataType] = useState('epic');
 
   const owners = useMemo(() => teamNames.length ? teamNames : [...new Set(reviews.map(task => task.assignee).filter(Boolean))], [teamNames, reviews]);
   const ownerEmails = useMemo(() => { const map = {}; team.forEach(member => { if (member?.name) map[member.name] = member.email || ''; }); return map; }, [team]);
@@ -191,6 +193,7 @@ export function KanbanWorkspace({ project, team = [], reviews, sprints = [], met
   const activeFilterCount = assignees.length + statuses.length + priorities.length + epicFilter.length + featureFilter.length + labelFilter.length;
   const drop = stage => ({ onDragOver: event => event.preventDefault(), onDrop: event => { event.preventDefault(); if (dragId) updateReview(dragId, { stage }); setDragId(null); } });
   const clear = () => { setSearch(''); setAssignees([]); setStatuses([]); setPriorities([]); setEpicFilter([]); setFeatureFilter([]); setLabelFilter([]); };
+  const openMetadata = type => { setMetadataType(type); setMetadataOpen(true); };
 
   const statusChoices = ['Open', 'In Progress', 'Review', 'Resolved', 'Rejected'];
   const epicColor = name => activeMetadata.find(item => item.type === 'epic' && item.name === name)?.color;
@@ -248,38 +251,14 @@ export function KanbanWorkspace({ project, team = [], reviews, sprints = [], met
           ariaLabel="Filter by status"
           className="toolbar-select"
         />
-        <MultiCheckSelect
-          icon={Target}
-          values={epicFilter}
-          options={epics.map(name => ({ value: name, label: name, color: epicColor(name), hint: taskCounts[`epic:${name}`] ? `${taskCounts[`epic:${name}`]} tasks` : '0 tasks' }))}
-          onChange={setEpicFilter}
-          placeholder="Epics"
-          ariaLabel="Filter by epic"
-          emptyLabel="No epics yet"
-          className="toolbar-select compact"
-        />
-        <MultiCheckSelect
-          icon={SquaresFour}
-          values={featureFilter}
-          options={features.map(name => ({ value: name, label: name, hint: taskCounts[`feature:${name}`] ? `${taskCounts[`feature:${name}`]} tasks` : '0 tasks' }))}
-          onChange={setFeatureFilter}
-          placeholder="Features"
-          ariaLabel="Filter by feature"
-          emptyLabel="No features yet"
-          className="toolbar-select compact"
-        />
-        <MultiCheckSelect
-          icon={Tag}
-          values={labelFilter}
-          options={labels.map(name => ({ value: name, label: name, color: labelColor(name), hint: taskCounts[`label:${name}`] ? `${taskCounts[`label:${name}`]} tasks` : '0 tasks' }))}
-          onChange={setLabelFilter}
-          placeholder="Labels"
-          ariaLabel="Filter by label"
-          emptyLabel="No labels yet"
-          className="toolbar-select compact"
-        />
-        <button className="secondary-button" onClick={() => setMetadataOpen(true)} title="Manage epics, features, and labels">
-          <Tag size={15}/> Manage
+        <button type="button" className="secondary-button toolbar-meta-trigger" onClick={() => openMetadata('epic')} aria-haspopup="dialog" title="Manage epics">
+          <Target size={15}/> Epics
+        </button>
+        <button type="button" className="secondary-button toolbar-meta-trigger" onClick={() => openMetadata('feature')} aria-haspopup="dialog" title="Manage features">
+          <SquaresFour size={15}/> Features
+        </button>
+        <button type="button" className="secondary-button toolbar-meta-trigger" onClick={() => openMetadata('label')} aria-haspopup="dialog" title="Manage labels">
+          <Tag size={15}/> Labels
         </button>
         <button className="primary-button create-task-cta" onClick={() => setModal('review')}>
           <Plus size={16} /> Create Task
@@ -318,6 +297,6 @@ export function KanbanWorkspace({ project, team = [], reviews, sprints = [], met
     {view === 'list' && <div className="kanban-list-view">{STAGES.map(stage => <section key={stage}><header><strong>{stage}</strong><span>{filtered.filter(task => task.stage === stage).length}</span></header>{filtered.filter(task => task.stage === stage).map(task => <TaskRow key={task.id} task={task} onOpen={onOpen}/>)}</section>)}</div>}
     {view === 'planning' && <SprintPlanning tasks={filtered} sprints={sprints} onOpen={onOpen} onUpdateTask={updateReview} onUpdateSprint={updateSprint} onCreateSprint={createSprint}/>}
     {view === 'timeline' && <Timeline tasks={filtered} onOpen={onOpen}/>}
-    {metadataOpen && <MetadataManager projectId={projectId} projectName={project?.name} metadata={metadata} taskCounts={taskCounts} onClose={() => setMetadataOpen(false)} onRefresh={refreshMetadata} requestConfirm={requestConfirm} onToast={onToast}/>}
+    {metadataOpen && <MetadataManager initialType={metadataType} projectId={projectId} projectName={project?.name} metadata={metadata} taskCounts={taskCounts} onClose={() => setMetadataOpen(false)} onRefresh={refreshMetadata} requestConfirm={requestConfirm} onToast={onToast}/>}
   </section>;
 }
