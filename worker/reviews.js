@@ -45,7 +45,9 @@ export async function reviewSnapshot(env, reviewId) {
 
 export async function notifyUsers(env, excludeUserId, { type, title, body, reviewId = null }) {
   try {
-    const recipients = await env.DB.prepare('SELECT id FROM users WHERE id != ?').bind(excludeUserId).all();
+    // Keep the actor in the feed too: the bell is an audit-style activity inbox,
+    // so the person who made a change should see immediate confirmation there.
+    const recipients = await env.DB.prepare('SELECT id FROM users').all();
     if (!recipients.results.length) return;
     await env.DB.batch(recipients.results.map(recipient => env.DB.prepare('INSERT INTO notifications (id, user_id, review_id, type, title, body) VALUES (?, ?, ?, ?, ?, ?)').bind(id(), recipient.id, reviewId, type, title, body)));
   } catch {
@@ -54,9 +56,17 @@ export async function notifyUsers(env, excludeUserId, { type, title, body, revie
 }
 export async function recordActivity(env, reviewId, userId, action, metadata = {}) {
   const review = await env.DB.prepare('SELECT title, assignee FROM reviews WHERE id = ?').bind(reviewId).first();
-  const recipients = await env.DB.prepare('SELECT id FROM users WHERE id != ?').bind(userId).all();
+  const actor = await env.DB.prepare('SELECT name FROM users WHERE id = ?').bind(userId).first();
+  const recipients = await env.DB.prepare('SELECT id FROM users').all();
+  const title = review?.title || 'Task update';
+  const actionLabels = { created: 'Task created', updated: 'Task updated', commented: 'New comment', subtask_added: 'Subtask added', subtask_updated: 'Subtask updated', subtask_removed: 'Subtask removed', attachment_added: 'Attachment added', attachment_removed: 'Attachment removed' };
+  const changes = Object.entries(metadata.changes || {})
+    .map(([field, change]) => `${field.replaceAll('_', ' ')}: ${change.from || 'None'} → ${change.to || 'None'}`)
+    .join(' · ');
+  const detail = action === 'created' ? '' : changes || metadata.title || metadata.filename || (action === 'commented' ? 'A new comment was added.' : '');
+  const body = `${actor?.name || 'Someone'} ${action === 'created' ? 'created' : action === 'commented' ? 'commented on' : 'updated'} “${title}”${detail ? ` · ${detail}` : ''}`;
   await env.DB.batch([
     env.DB.prepare('INSERT INTO review_activity (id, review_id, user_id, action, metadata) VALUES (?, ?, ?, ?, ?)').bind(id(), reviewId, userId, action, JSON.stringify(metadata)),
-    ...recipients.results.map(recipient => env.DB.prepare('INSERT INTO notifications (id, user_id, review_id, type, title, body) VALUES (?, ?, ?, ?, ?, ?)').bind(id(), recipient.id, reviewId, action, review?.title || 'Task update', `${action} on ${review?.title || 'task'}`))
+    ...recipients.results.map(recipient => env.DB.prepare('INSERT INTO notifications (id, user_id, review_id, type, title, body) VALUES (?, ?, ?, ?, ?, ?)').bind(id(), recipient.id, reviewId, action, actionLabels[action] || 'Task activity', body))
   ]);
 }
