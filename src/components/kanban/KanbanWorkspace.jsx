@@ -147,7 +147,7 @@ function Timeline({ tasks, onOpen }) {
   return <section className="timeline-board"><div className="timeline-scroll"><div className="timeline-head"><strong>Task</strong><div>{dates.map(date => <span key={date}>{toDate(date).getDate()}</span>)}</div></div>{Object.entries(grouped).map(([epic, items]) => <div className="timeline-group" key={epic}><strong className="timeline-group-label"><i/>{epic}</strong>{items.map(task => { const taskStart = task.startDate || task.due || dates[0]; const taskEnd = task.due || task.startDate || taskStart; const offset = Math.max(0, Math.min(13, daysBetween(dates[0], taskStart))); const span = Math.max(1, Math.min(14 - offset, daysBetween(taskStart, taskEnd) + 1)); return <div className="timeline-row" key={task.id}><button onClick={() => onOpen(task)}><span>{task.key || 'TASK'}</span><strong>{task.title}</strong><small>{task.assignee || 'Unassigned'}</small></button><div className="timeline-track">{dates.map(date => <i key={date}/>) }<button className="timeline-bar" style={{ gridColumn: `${offset + 1} / span ${span}` }} onClick={() => onOpen(task)} title={`${task.title} · ${labelDate(taskStart)} – ${labelDate(taskEnd)}`}>{span > 2 && task.title}</button></div></div>; })}</div>)}</div></section>;
 }
 
-export function KanbanWorkspace({ project, team = [], reviews, sprints = [], metadata = [], projectId, updateReview, createSprint, updateSprint, refreshMetadata, setModal, onOpen, requestConfirm, onToast }) {
+export function KanbanWorkspace({ project, team = [], reviews, sprints = [], metadata = [], projectId, updateReview, createSprint, updateSprint, refreshMetadata, setModal, onOpen, requestConfirm, onToast, onProjectClick }) {
   const teamNames = team.map(t => t.name);
   const [view, setView] = useState('board');
   const [search, setSearch] = useState('');
@@ -202,24 +202,13 @@ export function KanbanWorkspace({ project, team = [], reviews, sprints = [], met
   const activeSprint = sprints.find(s => s.status === 'active') || sprints[0];
 
   return <section className="page kanban-workspace">
-    {/* Row 1: Header with Breadcrumbs & Action Toolbar */}
+    {/* Row 1: Project and board actions */}
     <div className="kanban-header-bar">
-      <div className="kanban-breadcrumbs">
-        <strong className="breadcrumb-title">{project?.name || 'Board'}</strong>
-        {activeSprint && <>
-          <CaretRight size={12} className="breadcrumb-sep" />
-          <span className="sprint-status-pill">
-            <i className="sprint-status-dot" />
-            {activeSprint.name}
-          </span>
-        </>}
-      </div>
-
       <div className="kanban-toolbar-actions">
-        <label className="kanban-search">
-          <MagnifyingGlass size={16} />
-          <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Filter tasks…" />
-        </label>
+        <button type="button" className="secondary-button kanban-project-trigger" onClick={onProjectClick} aria-haspopup="dialog" title="Switch project">
+          <span>{project?.name || 'Board'}</span>
+          <CaretDown size={15} />
+        </button>
         <MultiCheckSelect
           prefix={
             owners.length > 0 ? (
@@ -252,7 +241,7 @@ export function KanbanWorkspace({ project, team = [], reviews, sprints = [], met
           className="toolbar-select"
         />
         <button type="button" className="secondary-button toolbar-meta-trigger" onClick={() => openMetadata('epic')} aria-haspopup="dialog" title="Manage epics">
-          <Target size={15}/> Epics
+          <Target size={15}/> <span>Epics</span><span className="toolbar-count">{metadata.filter(item => item.type === 'epic' && !isArchivedMeta(item)).length}</span>
         </button>
         <button type="button" className="secondary-button toolbar-meta-trigger" onClick={() => openMetadata('feature')} aria-haspopup="dialog" title="Manage features">
           <SquaresFour size={15}/> Features
@@ -260,6 +249,7 @@ export function KanbanWorkspace({ project, team = [], reviews, sprints = [], met
         <button type="button" className="secondary-button toolbar-meta-trigger" onClick={() => openMetadata('label')} aria-haspopup="dialog" title="Manage labels">
           <Tag size={15}/> Labels
         </button>
+        <span className="toolbar-divider" aria-hidden="true" />
         <button className="primary-button create-task-cta" onClick={() => setModal('review')}>
           <Plus size={16} /> Create Task
         </button>

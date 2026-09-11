@@ -409,6 +409,128 @@ button,
   .mini-avatar { display: none; }
 }
 
+/* Kanban header reference layout: one grouped shell with actions above the view tabs. */
+.kanban-header-bar {
+  display: block;
+  padding: 12px 16px 0;
+  border: 1px solid #e2e8f0;
+  border-bottom: 0;
+  border-radius: 12px 12px 0 0;
+  background: #fff;
+}
+
+.kanban-header-bar .kanban-toolbar-actions {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  justify-content: stretch;
+  gap: 8px;
+}
+
+.kanban-project-trigger {
+  flex: 0 1 180px;
+  min-width: 140px;
+  justify-content: space-between !important;
+  color: #1e293b !important;
+}
+
+.kanban-project-trigger > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kanban-header-bar .toolbar-select,
+.kanban-header-bar .toolbar-meta-trigger {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.kanban-header-bar .toolbar-meta-trigger {
+  justify-content: center;
+}
+
+.toolbar-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 11px;
+}
+
+.toolbar-divider {
+  width: 1px;
+  height: 28px;
+  margin: 0 4px;
+  background: #e2e8f0;
+  flex: 0 0 auto;
+}
+
+.kanban-header-bar .create-task-cta {
+  flex: 0 0 auto;
+  min-width: 154px;
+}
+
+.kanban-nav-tabs-bar {
+  margin: 0 0 14px;
+  padding: 0 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 0 0 12px 12px;
+  background: #fff;
+}
+
+@media (max-width: 1180px) {
+  .kanban-header-bar .kanban-toolbar-actions {
+    flex-wrap: wrap;
+  }
+
+  .kanban-project-trigger {
+    flex: 1 1 180px;
+  }
+
+  .kanban-header-bar .toolbar-select,
+  .kanban-header-bar .toolbar-meta-trigger {
+    flex: 1 1 140px;
+  }
+
+  .toolbar-divider {
+    display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .kanban-header-bar {
+    padding: 12px;
+  }
+
+  .kanban-header-bar .kanban-toolbar-actions {
+    align-items: stretch;
+  }
+
+  .kanban-project-trigger,
+  .kanban-header-bar .toolbar-select,
+  .kanban-header-bar .toolbar-meta-trigger,
+  .kanban-header-bar .create-task-cta {
+    flex: 1 1 calc(50% - 4px);
+    min-width: 0;
+  }
+
+  .kanban-header-bar .create-task-cta {
+    min-width: 0;
+  }
+
+  .kanban-nav-tabs-bar {
+    padding: 0 12px;
+  }
+}
+
 .kanban-toolbar-actions {
   display: flex;
   align-items: center;
