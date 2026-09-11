@@ -1,4 +1,5 @@
 import { createRoot } from 'react-dom/client';
+import './styles/globals.css';
 import './styles.css';
 import './detail.css';
 import './detail-overrides.css';
