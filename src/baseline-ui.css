@@ -1,0 +1,178 @@
+/*
+ * Baseline UI layer
+ *
+ * This file is intentionally loaded last. It is the single convergence layer
+ * for wrapping, intrinsic sizing, and responsive behavior while legacy feature
+ * styles are gradually retired. Keep visual tokens in design-system.css.
+ */
+
+:where(h1, h2, h3, h4, p, button, label, .breadcrumb-title, .view-tab) {
+  text-wrap: pretty;
+}
+
+:where(h1, h2, h3, h4) {
+  text-wrap: balance;
+}
+
+:where(p, label, .field-label, .detail-activity p, .comment-list p) {
+  overflow-wrap: anywhere;
+}
+
+:where(button, input, select, textarea) {
+  min-width: 0;
+}
+
+/* Never let a grid child force the track wider than its container. */
+:where(.form-grid, .detail-grid, .ai-item-grid, .collab-invite-row, .report-grid-2) > * {
+  min-width: 0;
+}
+
+:where(.form-grid, .detail-grid) input,
+:where(.form-grid, .detail-grid) textarea,
+:where(.form-grid, .detail-grid) select,
+:where(.form-grid, .detail-grid) .app-select,
+:where(.form-grid, .detail-grid) .app-select-trigger {
+  width: 100%;
+  max-width: 100%;
+}
+
+/* Field labels keep icons aligned without preventing long labels from wrapping. */
+.field-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  line-height: 1.35;
+}
+
+.field-label svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+/* Content-driven controls. They grow only when there is room and wrap as a group. */
+.kanban-header-bar .kanban-toolbar-actions {
+  align-items: stretch;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.kanban-header-bar .kanban-project-trigger {
+  flex: 1 1 220px;
+  width: auto;
+  min-width: 160px;
+  max-width: 280px;
+}
+
+.kanban-header-bar .kanban-search {
+  flex: 1 1 220px;
+  width: auto;
+  min-width: 160px;
+}
+
+.kanban-header-bar .kanban-search input {
+  width: 100%;
+  min-width: 0;
+}
+
+.kanban-header-bar .toolbar-select,
+.kanban-header-bar .toolbar-meta-trigger,
+.kanban-header-bar .create-task-cta {
+  flex: 0 1 auto;
+  width: auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.kanban-header-bar .toolbar-select .app-select-trigger,
+.kanban-header-bar .toolbar-meta-trigger,
+.kanban-header-bar .create-task-cta {
+  max-width: 100%;
+}
+
+.kanban-header-bar .app-select-label,
+.kanban-header-bar .toolbar-meta-trigger > span:not(.toolbar-count) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Dense tables and activity rows stay readable instead of causing page overflow. */
+.table-wrap,
+.kanban-board-grid,
+.sprint-board,
+.timeline-grid,
+.notification-menu {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.table-wrap {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+.activity-row,
+.notification-menu button,
+.linked-action-item,
+.comment-list > div,
+.detail-activity > div {
+  min-width: 0;
+}
+
+.activity-row > div,
+.notification-menu button > span:nth-child(2),
+.linked-action-item > span,
+.detail-activity p {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Fixed UI respects device safe areas. */
+.app-footer {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+@media (max-width: 1180px) {
+  .kanban-header-bar .kanban-project-trigger,
+  .kanban-header-bar .kanban-search {
+    max-width: none;
+  }
+
+  .kanban-header-bar .toolbar-select,
+  .kanban-header-bar .toolbar-meta-trigger,
+  .kanban-header-bar .create-task-cta {
+    flex: 1 1 140px;
+  }
+}
+
+@media (max-width: 720px) {
+  .kanban-header-bar .kanban-project-trigger,
+  .kanban-header-bar .kanban-search {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  .kanban-header-bar .toolbar-select,
+  .kanban-header-bar .toolbar-meta-trigger,
+  .kanban-header-bar .create-task-cta {
+    flex: 1 1 calc(50% - 4px);
+  }
+
+  .kanban-header-bar .app-select-label,
+  .kanban-header-bar .toolbar-meta-trigger > span:not(.toolbar-count) {
+    white-space: normal;
+    line-height: 1.2;
+  }
+
+  :where(.form-grid, .detail-grid, .collab-invite-row) {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+  }
+}

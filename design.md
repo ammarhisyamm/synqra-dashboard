@@ -100,6 +100,16 @@ Keep standard cards flat. Elevation is for floating controls and draggable cards
 
 ## 2. Layout and responsive rules
 
+### CSS maintenance and wrapping baseline
+
+- Keep design tokens in `design-system.css`; keep cross-feature layout convergence rules in `baseline-ui.css`.
+- Do not add another feature-specific `!important` override for sizing, wrapping, or spacing. Fix the component rule or add one documented baseline rule instead.
+- Grid children must use `min-width: 0`; controls inside a grid track must use `width: 100%` and `max-width: 100%`.
+- Toolbar controls are content-sized by default, with `flex-wrap: wrap`; search/project controls may grow, while action buttons must not stretch to fill unrelated space.
+- Long labels, descriptions, activity text, and user-generated content use `text-wrap: pretty` and `overflow-wrap: anywhere`. Truncate only compact controls where preserving one-line rhythm is intentional.
+- Mobile field groups collapse to one column at 720px. Never solve overflow by shrinking text below the typography scale.
+- New fixed elements must include `env(safe-area-inset-bottom)` where appropriate and use the shared z-index scale.
+
 ### Grid
 
 - Use CSS grid for page layouts and field groups; use flexbox for one-dimensional alignment.
