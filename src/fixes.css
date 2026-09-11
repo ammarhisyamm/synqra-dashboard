@@ -461,6 +461,96 @@ button,
   }
 }
 
+/* Match the reference proportions on wide screens while keeping every control content-sized. */
+@media (min-width: 1181px) {
+  .kanban-header-bar {
+    padding: 12px 24px 0;
+  }
+
+  .kanban-header-bar .kanban-toolbar-actions {
+    gap: 12px;
+  }
+
+  .kanban-header-bar .kanban-project-trigger {
+    flex: 0 0 304px;
+    width: 304px;
+  }
+
+  .kanban-header-bar .toolbar-select:nth-of-type(1) {
+    flex: 0 0 210px;
+    width: 210px;
+  }
+
+  .kanban-header-bar .toolbar-select:nth-of-type(2) {
+    flex: 0 0 146px;
+    width: 146px;
+  }
+
+  .kanban-header-bar .toolbar-meta-trigger.meta-epic {
+    flex: 0 0 196px;
+    width: 196px;
+  }
+
+  .kanban-header-bar .toolbar-meta-trigger.meta-feature {
+    flex: 0 0 180px;
+    width: 180px;
+  }
+
+  .kanban-header-bar .toolbar-meta-trigger.meta-label {
+    flex: 0 0 160px;
+    width: 160px;
+  }
+
+  .kanban-header-bar .create-task-cta {
+    flex: 0 0 244px;
+    width: 244px;
+  }
+}
+
+@media (max-width: 1180px) {
+  .kanban-header-bar {
+    padding: 12px 16px 0;
+  }
+
+  .kanban-header-bar .kanban-toolbar-actions {
+    gap: 8px;
+  }
+
+  .kanban-header-bar .kanban-project-trigger {
+    flex: 1 1 220px;
+    width: auto;
+  }
+
+  .kanban-header-bar .toolbar-select:nth-of-type(1),
+  .kanban-header-bar .toolbar-select:nth-of-type(2),
+  .kanban-header-bar .toolbar-meta-trigger {
+    flex: 0 1 auto;
+    width: auto;
+  }
+
+  .kanban-header-bar .create-task-cta {
+    flex: 0 1 auto;
+    width: auto;
+  }
+}
+
+@media (max-width: 720px) {
+  .kanban-header-bar .kanban-toolbar-actions {
+    gap: 8px;
+  }
+
+  .kanban-header-bar .kanban-project-trigger {
+    flex: 1 1 100%;
+  }
+
+  .kanban-header-bar .toolbar-select:nth-of-type(1),
+  .kanban-header-bar .toolbar-select:nth-of-type(2),
+  .kanban-header-bar .toolbar-meta-trigger,
+  .kanban-header-bar .create-task-cta {
+    flex: 1 1 calc(50% - 4px);
+  }
+}
+
 /* Kanban header reference layout: one grouped shell with actions above the view tabs. */
 .kanban-header-bar {
   display: block;

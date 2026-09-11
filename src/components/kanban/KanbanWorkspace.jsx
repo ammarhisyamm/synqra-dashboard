@@ -240,13 +240,13 @@ export function KanbanWorkspace({ project, team = [], reviews, sprints = [], met
           ariaLabel="Filter by status"
           className="toolbar-select"
         />
-        <button type="button" className="secondary-button toolbar-meta-trigger" onClick={() => openMetadata('epic')} aria-haspopup="dialog" title="Manage epics">
+        <button type="button" className="secondary-button toolbar-meta-trigger meta-epic" onClick={() => openMetadata('epic')} aria-haspopup="dialog" title="Manage epics">
           <Target size={15}/> <span>Epics</span><span className="toolbar-count">{metadata.filter(item => item.type === 'epic' && !isArchivedMeta(item)).length}</span>
         </button>
-        <button type="button" className="secondary-button toolbar-meta-trigger" onClick={() => openMetadata('feature')} aria-haspopup="dialog" title="Manage features">
+        <button type="button" className="secondary-button toolbar-meta-trigger meta-feature" onClick={() => openMetadata('feature')} aria-haspopup="dialog" title="Manage features">
           <SquaresFour size={15}/> Features
         </button>
-        <button type="button" className="secondary-button toolbar-meta-trigger" onClick={() => openMetadata('label')} aria-haspopup="dialog" title="Manage labels">
+        <button type="button" className="secondary-button toolbar-meta-trigger meta-label" onClick={() => openMetadata('label')} aria-haspopup="dialog" title="Manage labels">
           <Tag size={15}/> Labels
         </button>
         <span className="toolbar-divider" aria-hidden="true" />
