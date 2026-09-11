@@ -273,7 +273,13 @@ export function App() {
       setToast('Settings saved');
     } catch (error) { setToast(error.message); }
   };
-  const refreshNotifications = async () => { try { const result = await notificationsApi.list(); setNotifications(prev => deduplicateNotifications(prev, result.notifications)); } catch (error) { setToast(error.message); } };
+  const refreshNotifications = async () => {
+    try {
+      const result = await notificationsApi.list();
+      setNotifications(prev => deduplicateNotifications(prev, result.notifications));
+      setData(prev => ({ ...prev, unreadNotifications: result.notifications.filter(item => !item.read).length }));
+    } catch (error) { setToast(error.message); }
+  };
   useEffect(() => {
     if (!user) return undefined;
     let active = true;
@@ -292,6 +298,7 @@ export function App() {
           return { ...remote, project: selectedProject || remote.project };
         });
         setNotifications(prev => deduplicateNotifications(prev, notificationResult.notifications));
+        setData(previous => ({ ...previous, unreadNotifications: notificationResult.notifications.filter(item => !item.read).length }));
         setLastSync(Date.now());
       } catch { /* keep the current optimistic view and retry on the next tick */ }
       finally { if (active) setSyncing(false); }

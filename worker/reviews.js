@@ -44,9 +44,13 @@ export async function reviewSnapshot(env, reviewId) {
 }
 
 export async function notifyUsers(env, excludeUserId, { type, title, body, reviewId = null }) {
-  const recipients = await env.DB.prepare('SELECT id FROM users WHERE id != ?').bind(excludeUserId).all();
-  if (!recipients.results.length) return;
-  await env.DB.batch(recipients.results.map(recipient => env.DB.prepare('INSERT INTO notifications (id, user_id, review_id, type, title, body) VALUES (?, ?, ?, ?, ?, ?)').bind(id(), recipient.id, reviewId, type, title, body)));
+  try {
+    const recipients = await env.DB.prepare('SELECT id FROM users WHERE id != ?').bind(excludeUserId).all();
+    if (!recipients.results.length) return;
+    await env.DB.batch(recipients.results.map(recipient => env.DB.prepare('INSERT INTO notifications (id, user_id, review_id, type, title, body) VALUES (?, ?, ?, ?, ?, ?)').bind(id(), recipient.id, reviewId, type, title, body)));
+  } catch {
+    // Notifications are non-blocking: an action must still succeed if delivery fails.
+  }
 }
 export async function recordActivity(env, reviewId, userId, action, metadata = {}) {
   const review = await env.DB.prepare('SELECT title, assignee FROM reviews WHERE id = ?').bind(reviewId).first();
@@ -56,4 +60,3 @@ export async function recordActivity(env, reviewId, userId, action, metadata = {
     ...recipients.results.map(recipient => env.DB.prepare('INSERT INTO notifications (id, user_id, review_id, type, title, body) VALUES (?, ?, ?, ?, ?, ?)').bind(id(), recipient.id, reviewId, action, review?.title || 'Task update', `${action} on ${review?.title || 'task'}`))
   ]);
 }
-
