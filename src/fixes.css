@@ -409,6 +409,58 @@ button,
   .mini-avatar { display: none; }
 }
 
+/* Final sizing pass: header controls hug their content instead of stretching. */
+.kanban-header-bar .kanban-toolbar-actions {
+  justify-content: flex-start;
+}
+
+.kanban-header-bar .kanban-project-trigger {
+  flex: 0 0 300px;
+  width: 300px;
+}
+
+.kanban-header-bar .toolbar-select,
+.kanban-header-bar .toolbar-meta-trigger {
+  flex: 0 0 auto;
+  width: auto;
+}
+
+.kanban-header-bar .toolbar-select .app-select-trigger {
+  width: auto;
+}
+
+.kanban-header-bar .toolbar-select:first-of-type .app-select-trigger {
+  min-width: 128px;
+}
+
+.kanban-header-bar .toolbar-select:nth-of-type(2) .app-select-trigger {
+  min-width: 128px;
+}
+
+.kanban-header-bar .toolbar-meta-trigger {
+  padding-left: 16px;
+  padding-right: 16px;
+}
+
+@media (max-width: 1180px) {
+  .kanban-header-bar .kanban-project-trigger,
+  .kanban-header-bar .toolbar-select,
+  .kanban-header-bar .toolbar-meta-trigger {
+    flex: 0 1 auto;
+    width: auto;
+  }
+}
+
+@media (max-width: 720px) {
+  .kanban-header-bar .kanban-project-trigger,
+  .kanban-header-bar .toolbar-select,
+  .kanban-header-bar .toolbar-meta-trigger,
+  .kanban-header-bar .create-task-cta {
+    flex: 1 1 calc(50% - 4px);
+    width: auto;
+  }
+}
+
 /* Kanban header reference layout: one grouped shell with actions above the view tabs. */
 .kanban-header-bar {
   display: block;
