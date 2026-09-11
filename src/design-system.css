@@ -129,7 +129,7 @@ h1,h2,h3,h4,strong,b,button,.breadcrumb-title,.side-label,.command-group-label,.
 @media(min-width:1181px){
   .kanban-header-bar{display:grid;grid-template-columns:max-content minmax(0,1fr);align-items:center;flex-wrap:nowrap}
   .kanban-breadcrumbs{align-self:center;justify-self:start}
-  .kanban-toolbar-actions{width:100%;flex:1 1 auto;min-width:0;flex-wrap:nowrap;justify-content:stretch}
+  .kanban-toolbar-actions{width:100%;flex:1 1 auto;min-width:0;flex-wrap:wrap;justify-content:stretch;grid-column:1/-1}
   .kanban-header-bar .kanban-search{width:auto;flex:1 1 190px;min-width:150px}
   .kanban-header-bar .toolbar-select{flex:1 1 0;min-width:0;height:auto;padding:0;border:0;background:transparent}
   .kanban-header-bar .toolbar-select.compact{flex:1 1 0;min-width:0}

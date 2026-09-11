@@ -472,38 +472,51 @@ button,
   }
 
   .kanban-header-bar .kanban-project-trigger {
-    flex: 0 0 304px;
-    width: 304px;
+    flex: 1 1 170px;
+    width: auto;
+    max-width: 250px;
+    min-width: 140px;
+  }
+
+  .kanban-header-bar .kanban-project-trigger > span:first-child {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .kanban-header-bar .toolbar-select:nth-of-type(1) {
-    flex: 0 0 210px;
-    width: 210px;
+    flex: 1 1 120px;
+    width: auto;
+    min-width: 120px;
   }
 
   .kanban-header-bar .toolbar-select:nth-of-type(2) {
-    flex: 0 0 146px;
-    width: 146px;
+    flex: 1 1 110px;
+    width: auto;
+    min-width: 110px;
   }
 
-  .kanban-header-bar .toolbar-meta-trigger.meta-epic {
-    flex: 0 0 196px;
-    width: 196px;
-  }
-
-  .kanban-header-bar .toolbar-meta-trigger.meta-feature {
-    flex: 0 0 180px;
-    width: 180px;
-  }
-
+  .kanban-header-bar .toolbar-meta-trigger.meta-epic,
+  .kanban-header-bar .toolbar-meta-trigger.meta-feature,
   .kanban-header-bar .toolbar-meta-trigger.meta-label {
-    flex: 0 0 160px;
-    width: 160px;
+    flex: 1 1 0;
+    width: auto;
+    min-width: 104px;
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .kanban-header-bar .toolbar-meta-trigger > span:not(.toolbar-count) {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .kanban-header-bar .create-task-cta {
-    flex: 0 0 244px;
-    width: 244px;
+    flex: 0 0 auto;
+    width: auto;
   }
 }
 
