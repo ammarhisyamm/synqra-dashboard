@@ -165,6 +165,7 @@
 
 @media (max-width: 1180px) {
   /* Row-1 wrap behavior lives in the reference lock — see note above. */
+}
 
 @media (max-width: 720px) {
   .kanban-header-bar .kanban-project-trigger,
