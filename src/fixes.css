@@ -483,64 +483,7 @@ button,
   }
 }
 
-/* Match the reference proportions on wide screens while keeping every control content-sized. */
-@media (min-width: 1181px) {
-  .kanban-header-bar {
-    padding: 12px 24px 0;
-  }
-
-  .kanban-header-bar .kanban-toolbar-actions {
-    gap: 12px;
-  }
-
-  .kanban-header-bar .kanban-project-trigger {
-    flex: 1 1 170px;
-    width: auto;
-    max-width: 250px;
-    min-width: 140px;
-  }
-
-  .kanban-header-bar .kanban-project-trigger > span:first-child {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .kanban-header-bar .toolbar-select:nth-of-type(1) {
-    flex: 1 1 120px;
-    width: auto;
-    min-width: 120px;
-  }
-
-  .kanban-header-bar .toolbar-select:nth-of-type(2) {
-    flex: 1 1 110px;
-    width: auto;
-    min-width: 110px;
-  }
-
-  .kanban-header-bar .toolbar-meta-trigger.meta-epic,
-  .kanban-header-bar .toolbar-meta-trigger.meta-feature,
-  .kanban-header-bar .toolbar-meta-trigger.meta-label {
-    flex: 1 1 0;
-    width: auto;
-    min-width: 104px;
-    padding-left: 12px;
-    padding-right: 12px;
-  }
-
-  .kanban-header-bar .toolbar-meta-trigger > span:not(.toolbar-count) {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .kanban-header-bar .create-task-cta {
-    flex: 0 0 auto;
-    width: auto;
-  }
-}
+/* (Removed: desktop grow/stretch proportions — superseded by the reference lock in design-system.css.) */
 
 @media (max-width: 1180px) {
   .kanban-header-bar {
