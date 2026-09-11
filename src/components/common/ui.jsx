@@ -22,7 +22,7 @@ export function InlineSync({ rowId, field, sync, onRetry }) {
   if (sync.saved && sync.saved.id === rowId && sync.saved.field === field) return <span className="inline-sync saved" role="status">Saved</span>;
   return null;
 }
-export function DetailSection({title,children}){return <section className="detail-section"><h3>{title}</h3>{children}</section>}
+export function DetailSection({title,children,icon:Icon}){return <section className="detail-section"><h3>{Icon && <Icon size={17} aria-hidden="true"/>}<span>{title}</span></h3>{children}</section>}
 export function MetricCard({ label, value }) { return <article><span>{label}</span><strong>{value}</strong></article>; }
 export function Priority({ value }) { return <span className={`priority ${value.toLowerCase()}`}><i/>{value}</span>; }
 export function PageHeading({ eyebrow, title, description, action }) { return <div className="page-heading"><div>{eyebrow && <small>{eyebrow}</small>}<h1>{title}</h1>{description && <p>{description}</p>}</div>{action}</div>; }
