@@ -1,0 +1,327 @@
+/* Kanban convergence layer. Loaded last so legacy view patches cannot collapse
+   the board, list, planning, or metadata modal into unstyled content. */
+
+.kanban-board-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(220px, 1fr));
+  gap: 16px;
+  align-items: start;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 2px 2px 12px;
+}
+
+.kanban-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  min-height: 440px;
+  padding: 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-lg);
+  background: var(--ui-subtle);
+}
+
+.kanban-stage > header,
+.kanban-list-view section > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  padding: 2px 2px 8px;
+  color: var(--ui-text);
+}
+
+.kanban-stage > header strong,
+.kanban-list-view section > header strong {
+  min-width: 0;
+  color: var(--ui-text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.kanban-stage > header span,
+.kanban-list-view section > header span {
+  flex: 0 0 auto;
+  min-width: 24px;
+  color: var(--ui-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.kanban-work-card {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-md);
+  background: var(--ui-surface);
+  box-shadow: var(--ui-shadow-sm);
+  cursor: grab;
+}
+
+.kanban-work-card:hover {
+  border-color: var(--ui-border-strong);
+  box-shadow: 0 5px 18px #111b3012;
+}
+
+.kanban-work-card > div,
+.kanban-work-card footer {
+  min-width: 0;
+}
+
+.kanban-work-card strong,
+.sprint-task-main strong {
+  min-width: 0;
+  color: var(--ui-text);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.kanban-work-card small {
+  display: block;
+  margin-top: 4px;
+  color: var(--ui-muted);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.kanban-work-card footer {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.kanban-work-card footer small { margin: 0; }
+.task-avatar { margin-left: auto; }
+
+.kanban-task-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+}
+
+.kanban-task-meta em {
+  max-width: 150px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 1px solid var(--ui-border);
+  border-radius: 999px;
+  padding: 3px 7px;
+  background: var(--ui-primary-soft);
+  color: var(--ui-text-secondary);
+  font-size: 10px;
+  font-style: normal;
+}
+
+.kanban-add-card {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 7px;
+  width: 100%;
+  min-height: 38px;
+  margin-top: auto;
+  padding: 0 8px;
+  border: 1px dashed var(--ui-border-strong);
+  border-radius: var(--ui-radius-sm);
+  color: var(--ui-muted);
+  font-size: 12px;
+}
+
+.kanban-add-card:hover { background: var(--ui-surface); color: var(--ui-primary); }
+
+.kanban-list-view {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  margin-top: 16px;
+}
+
+.kanban-list-view > section {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-lg);
+  background: var(--ui-surface);
+  box-shadow: var(--ui-shadow-sm);
+}
+
+.kanban-list-view section > header { padding: 14px 16px; background: var(--ui-subtle); }
+
+.sprint-task-row {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  border-top: 1px solid #edf1f5;
+  background: var(--ui-surface);
+}
+
+.sprint-task-main {
+  display: grid;
+  grid-template-columns: 8px 72px minmax(0, 1.4fr) minmax(0, 1fr) 26px;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+  padding: 12px 16px;
+  text-align: left;
+}
+
+.sprint-task-main > strong { overflow-wrap: anywhere; }
+.sprint-task-main .kanban-task-meta { align-self: center; }
+.task-key { color: var(--ui-muted); font-size: 11px; }
+.sprint-task-action { flex: 0 0 auto; align-self: center; margin: 0 12px 0 0; }
+
+.sprint-planning {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  margin-top: 16px;
+}
+
+.sprint-planning-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 0;
+  margin: 0;
+}
+
+.sprint-planning-head > div { min-width: 0; }
+.sprint-planning-head h2 { margin: 0; color: var(--ui-text); font-size: 20px; }
+.sprint-planning-head p { margin: 4px 0 0; color: var(--ui-muted); font-size: 13px; }
+
+.sprint-plan-card,
+.backlog-card {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-lg);
+  background: var(--ui-surface);
+  box-shadow: var(--ui-shadow-sm);
+}
+
+.sprint-plan-card > header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(120px, 180px) auto auto;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px 16px;
+  background: var(--ui-subtle);
+}
+
+.sprint-collapse { display: grid; place-items: center; width: 28px; height: 28px; color: var(--ui-muted); }
+.sprint-plan-title { display: grid; grid-template-columns: minmax(0, auto) auto; align-items: center; gap: 5px 9px; min-width: 0; }
+.sprint-plan-title strong { min-width: 0; color: var(--ui-text); overflow-wrap: anywhere; }
+.sprint-plan-title small { grid-column: 1 / -1; color: var(--ui-muted); font-size: 11px; }
+.sprint-state { justify-self: start; }
+.sprint-plan-progress { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.sprint-plan-progress > span { flex: 1; min-width: 56px; }
+.sprint-plan-body { display: grid; min-width: 0; }
+.sprint-empty { margin: 0; padding: 20px 16px; color: var(--ui-muted); }
+.sprint-add-backlog { min-width: 0; padding: 12px 16px 16px; background: var(--ui-subtle); }
+.backlog-card > header { padding: 14px 16px; background: var(--ui-subtle); }
+.backlog-task { display: flex; align-items: stretch; min-width: 0; border-top: 1px solid #edf1f5; }
+.backlog-task > .sprint-task-row { flex: 1; border-top: 0; }
+.backlog-task > label { flex: 0 1 220px; min-width: 160px; }
+
+.metadata-modal {
+  display: flex;
+  flex-direction: column;
+  width: min(680px, calc(100vw - 32px));
+  max-height: min(780px, calc(100dvh - 32px));
+  min-width: 0;
+  padding: 28px;
+  overflow: auto;
+}
+
+.metadata-modal h2 { margin: 0; color: var(--ui-text); font-size: 22px; }
+.metadata-modal > p { max-width: 60ch; margin: 7px 0 20px; color: var(--ui-muted); line-height: 1.55; }
+.metadata-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; border-bottom: 1px solid var(--ui-border); padding-bottom: 10px; }
+.metadata-tabs button { min-height: 34px; }
+
+.metadata-modal form.metadata-create {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 16px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-md);
+  background: var(--ui-subtle);
+}
+
+.metadata-create > input { min-width: 0; }
+.metadata-color-row { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; grid-column: 1 / -1; }
+.metadata-color {
+  display: block;
+  flex: 0 0 28px;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  margin: 0;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}
+.metadata-color.selected { border-color: var(--ui-surface); outline-color: var(--ui-primary); }
+.metadata-create > .app-select { grid-column: 1 / -1; width: 100%; }
+.metadata-create > .primary-button { justify-self: end; }
+
+.metadata-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 10px; }
+.metadata-search { flex: 1 1 240px; min-width: 0; }
+.metadata-list { min-width: 0; border-top: 1px solid var(--ui-border); }
+.metadata-list > div { min-width: 0; padding: 12px 2px; }
+.metadata-row-main { min-width: 0; }
+.metadata-row-main > i { flex: 0 0 12px; width: 12px; height: 12px; border-radius: 50%; }
+.metadata-row-main strong { min-width: 0; overflow-wrap: anywhere; white-space: normal; }
+.metadata-row-main small { min-width: 0; overflow-wrap: anywhere; white-space: normal; }
+.metadata-row-actions { flex: 0 0 auto; }
+
+@media (max-width: 900px) {
+  .kanban-board-grid { grid-template-columns: repeat(5, minmax(230px, 1fr)); }
+  .sprint-plan-card > header { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .sprint-plan-progress { grid-column: 2 / -1; }
+  .sprint-status { grid-column: 2; justify-self: start; }
+}
+
+@media (max-width: 720px) {
+  .kanban-board-grid { grid-template-columns: repeat(5, minmax(250px, 1fr)); gap: 12px; }
+  .kanban-list-view { margin-top: 12px; }
+  .sprint-planning-head { flex-direction: column; }
+  .sprint-planning-head .primary-button { width: 100%; }
+  .sprint-plan-card > header { grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; padding: 12px; }
+  .sprint-plan-title { grid-template-columns: 1fr; gap: 3px; }
+  .sprint-state { grid-column: 1; }
+  .sprint-plan-progress { grid-column: 2 / -1; }
+  .sprint-status { grid-column: 2; }
+  .sprint-task-main { grid-template-columns: 8px minmax(0, 1fr) 26px; gap: 8px; padding: 11px 12px; }
+  .sprint-task-main .task-key,
+  .sprint-task-main .kanban-task-meta { display: none; }
+  .sprint-task-action { margin-right: 8px; }
+  .backlog-task { flex-direction: column; }
+  .backlog-task > label { flex: none; min-width: 0; padding: 0 12px 12px; }
+  .metadata-modal { width: min(100% - 24px, 680px); max-height: calc(100dvh - 24px); padding: 20px; }
+  .metadata-modal form.metadata-create { grid-template-columns: 1fr; }
+  .metadata-create > .primary-button { justify-self: stretch; width: 100%; }
+  .metadata-row-main { align-items: flex-start; }
+  .metadata-list > div { align-items: flex-start; }
+}

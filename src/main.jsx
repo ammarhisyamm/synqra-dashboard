@@ -6,6 +6,7 @@ import './fixes.css';
 import './workflow.css';
 import './design-system.css';
 import './baseline-ui.css';
+import './kanban-convergence.css';
 import { App } from './App';
 import { ErrorPanel } from './components/common/ErrorPanel';
 
