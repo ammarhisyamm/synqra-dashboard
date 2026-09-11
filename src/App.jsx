@@ -61,6 +61,7 @@ export function App() {
   const [savedField, setSavedField] = useState(null);
   const [failedField, setFailedField] = useState(null);
   const [bootFailed, setBootFailed] = useState(false);
+  const [bootError, setBootError] = useState('');
   const [dialog, setDialog] = useState(null);
   const [query, setQuery] = useState('');
   const [selectedReview, setSelectedReview] = useState(null);
@@ -73,15 +74,39 @@ export function App() {
   useEffect(() => localStorage.setItem(STORAGE_KEY, JSON.stringify(data)), [data]);
   useEffect(() => {
     const requestedProjectId = new URLSearchParams(window.location.search).get('project');
-    api('/api/auth/me').then(({ user: signedInUser }) => {
-      setUser(signedInUser);
-      refreshTeam();
-      return api('/api/bootstrap');
-    }).then(remote => {
-      const requestedProject = requestedProjectId && requestedProjectId !== 'default' ? remote.projects.find(item => item.id === requestedProjectId) : null;
-      setData({ ...remote, project: requestedProject || remote.project });
-      setCloudReady(true);
-    }).catch(() => { setUser(null); setCloudReady(false); });
+    let cancelled = false;
+    const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+    const boot = async () => {
+      // Only 401 means "not logged in". Any other failure (network blip,
+      // D1 lag, 5xx) must NOT throw the user to the login screen.
+      let lastError = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (cancelled) return;
+        if (attempt > 0) await sleep(800 * attempt);
+        try {
+          const { user: signedInUser } = await api('/api/auth/me');
+          if (cancelled) return;
+          setUser(signedInUser);
+          refreshTeam();
+          const remote = await api('/api/bootstrap');
+          if (cancelled) return;
+          const requestedProject = requestedProjectId && requestedProjectId !== 'default' ? remote.projects.find(item => item.id === requestedProjectId) : null;
+          setData({ ...remote, project: requestedProject || remote.project });
+          setCloudReady(true);
+          return;
+        } catch (error) {
+          lastError = error;
+          if (error?.status === 401) {
+            if (!cancelled) { setUser(null); setCloudReady(false); }
+            return;
+          }
+          // otherwise retry
+        }
+      }
+      if (!cancelled) { setBootError(lastError?.message || 'Could not load workspace.'); setCloudReady(false); }
+    };
+    boot();
+    return () => { cancelled = true; };
   }, []);
   useEffect(() => {
     if (!toast) return undefined;
@@ -306,8 +331,8 @@ export function App() {
   };
 
   if (user === undefined) {
-    if (bootFailed) {
-      return <div className="auth-shell"><section className="auth-card" style={{ maxWidth: 480, textAlign: 'left' }}><div className="auth-brand" style={{ justifyContent: 'flex-start' }}><img className="synqra-logo auth-logo" src="/logo-synqra.png" alt="Synqra" /></div><h1 style={{ fontSize: 22, marginTop: 16 }}>Something went wrong</h1><p style={{ color: '#687a92', fontSize: 13, lineHeight: 1.5 }}>We couldn&apos;t load this workspace. Your saved data is safe. Try again or return to the previous page.</p><div style={{ display: 'flex', gap: 10 }}><button className="primary-button" onClick={() => window.location.reload()}><RotateCcw size={15}/> Try again</button><button className="secondary-button" onClick={() => { if (window.history.length > 1) window.history.back(); }}>Go back</button></div></section></div>;
+    if (bootError || bootFailed) {
+      return <div className="auth-shell"><section className="auth-card" style={{ maxWidth: 480, textAlign: 'left' }}><div className="auth-brand" style={{ justifyContent: 'flex-start' }}><img className="synqra-logo auth-logo" src="/logo-synqra.png" alt="Synqra" /></div><h1 style={{ fontSize: 22, marginTop: 16 }}>Something went wrong</h1><p style={{ color: '#687a92', fontSize: 13, lineHeight: 1.5 }}>We couldn&apos;t load this workspace. Your saved data is safe and you are still signed in. Try again or return to the previous page.</p>{bootError && <p style={{ color: '#9aa6b5', fontSize: 12 }}>{bootError}</p>}<div style={{ display: 'flex', gap: 10 }}><button className="primary-button" onClick={() => window.location.reload()}><RotateCcw size={15}/> Try again</button><button className="secondary-button" onClick={() => { if (window.history.length > 1) window.history.back(); }}>Go back</button></div></section></div>;
     }
     return <AuthLoading/>;
   }

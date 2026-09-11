@@ -17,7 +17,9 @@ export async function sessionUser(request, env) {
 }
 export async function createSession(user, env) {
   const token = bytesToBase64(crypto.getRandomValues(new Uint8Array(32))).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
-  const expiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  // SQLite-friendly UTC ('YYYY-MM-DD HH:MM:SS') so string comparison with
+  // CURRENT_TIMESTAMP is correct (ISO 'T' separator would miscompare).
+  const expiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
   await env.DB.batch([
     env.DB.prepare('DELETE FROM sessions WHERE expires_at <= CURRENT_TIMESTAMP'),
     env.DB.prepare('INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)').bind(token, user.id, expiry)

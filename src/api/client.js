@@ -16,7 +16,9 @@ export async function api(path, options = {}) {
     body = text ? { message: text } : null;
   }
   if (!response.ok) {
-    throw new Error(body?.error || body?.message || `Request failed with status ${response.status}`);
+    const error = new Error(body?.error || body?.message || `Request failed with status ${response.status}`);
+    error.status = response.status;
+    throw error;
   }
   return body || {};
 }
