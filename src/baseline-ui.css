@@ -50,45 +50,11 @@
   margin-top: 2px;
 }
 
-/* Content-driven controls. They grow only when there is room and wrap as a group. */
-.kanban-header-bar .kanban-toolbar-actions {
-  align-items: stretch;
-  flex-wrap: wrap;
-  min-width: 0;
-}
+/* Board toolbar row 1 is owned by the reference lock in design-system.css
+   (single nowrap hug-content line). Baseline must not set wrap, grow, or
+   shrink on it — those break the reference layout. */
 
-.kanban-header-bar .kanban-project-trigger {
-  flex: 1 1 220px;
-  width: auto;
-  min-width: 160px;
-  max-width: 280px;
-}
-
-.kanban-header-bar .kanban-search {
-  flex: 1 1 220px;
-  width: auto;
-  min-width: 160px;
-}
-
-.kanban-header-bar .kanban-search input {
-  width: 100%;
-  min-width: 0;
-}
-
-.kanban-header-bar .toolbar-select,
-.kanban-header-bar .toolbar-meta-trigger,
-.kanban-header-bar .create-task-cta {
-  flex: 0 1 auto;
-  width: auto;
-  min-width: 0;
-  max-width: 100%;
-}
-
-.kanban-header-bar .toolbar-select .app-select-trigger,
-.kanban-header-bar .toolbar-meta-trigger,
-.kanban-header-bar .create-task-cta {
-  max-width: 100%;
-}
+/* (Row-1 control sizing lives in the reference lock — see note above.) */
 
 .kanban-header-bar .app-select-label,
 .kanban-header-bar .toolbar-meta-trigger > span:not(.toolbar-count) {
@@ -198,17 +164,7 @@
 }
 
 @media (max-width: 1180px) {
-  .kanban-header-bar .kanban-project-trigger,
-  .kanban-header-bar .kanban-search {
-    max-width: none;
-  }
-
-  .kanban-header-bar .toolbar-select,
-  .kanban-header-bar .toolbar-meta-trigger,
-  .kanban-header-bar .create-task-cta {
-    flex: 1 1 140px;
-  }
-}
+  /* Row-1 wrap behavior lives in the reference lock — see note above. */
 
 @media (max-width: 720px) {
   .kanban-header-bar .kanban-project-trigger,
