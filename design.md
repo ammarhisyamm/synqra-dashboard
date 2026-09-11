@@ -146,6 +146,8 @@ Default height is 36px. Use 13px UI text at weight 500. Include a 7–8px icon g
 
 ### Inputs, search, and select
 
+- **Master component (required):** every labeled form field uses `Field`, `TextField`, or `TextAreaField` from `src/components/common/Field.jsx`. They render the `.field` / `.field-label` / `.field-input` anatomy, so typography, spacing, focus ring, and placeholders are identical everywhere by construction. Do not write raw `<label><input></label>` patterns in new code; migrate them when touching a form.
+- `SelectField` (shared select-with-label) is built on `Field` + `AppSelect` and is the only way to render a labeled select.
 - Standard inputs/selects: 40px high, `radius-md`, 1px border, 11–12px horizontal padding.
 - Compact search/filter controls: 36px high.
 - Label sits above the field with a 7px gap. Each field takes the full width of its grid track.
@@ -225,6 +227,7 @@ The visual system is implemented in `src/design-system.css`. New feature CSS mus
 | --- | --- |
 | Menu or select | `AppSelect` with an accessible listbox; no new native `<select>` UI in product flows |
 | Dialog, confirm, or popup | `Modal` / `ActionDialog` anatomy: backdrop, labelled title, close action, Escape handling, and shared footer |
+| Labeled text field, textarea, date, password | `TextField` / `TextAreaField` / `Field` from `components/common/Field.jsx` — never a raw `<label><input>` pair |
 | Text field, textarea, date, number | 40px field contract with label above, full grid-track width, and shared focus ring |
 | Board / dashboard toolbar | Search grows, controls use a minimum width, and wrapping happens before overlap |
 | New component | Start from the nearest existing primitive, then update this guide if a reusable pattern changes |

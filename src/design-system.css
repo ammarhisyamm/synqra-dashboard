@@ -185,6 +185,17 @@ h1,h2,h3,h4,strong,b,button,.breadcrumb-title,.side-label,.command-group-label,.
    inherit from the label; placeholders use the muted token at weight 400.
    Display-size title inputs are the only 500-weight exception. */
 .modal label,.modal form>label,.sprint-modal form>label,.metadata-modal form label,.metadata-search,.settings-card label,.project-modal label,.delete-project-modal label,.collab-modal label,.auth-card label,.detail-section label,.field-label{font-size:12px;font-weight:500;color:var(--ui-text-secondary)}
-.modal input:not([type=checkbox]),.modal textarea,.modal select,.sprint-modal input,.metadata-modal input,.project-modal input,.delete-project-modal input,.collab-modal input,.settings-card input,.settings-card textarea,.auth-card input,.detail-section input,.detail-section select,.detail-section textarea,.detail-description{font-size:13px;font-weight:400}
+
+/* Master field component contract (Field.jsx): every labeled field renders
+   .field > .field-label + .field-input so typography never depends on
+   where the field is mounted. */
+.field{display:grid;gap:7px;min-width:0}
+.field .field-label{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;color:var(--ui-text-secondary)}
+.field .field-label svg{flex:none}
+.field-hint{color:var(--ui-muted);font-size:11px;font-weight:400}
+.field-input{display:block;width:100%;min-width:0;min-height:40px;box-sizing:border-box;border:1px solid var(--ui-border);border-radius:var(--ui-radius-sm);padding:9px 11px;color:var(--ui-text);background:var(--ui-surface);font-family:inherit;font-size:13px;font-weight:400}
+.field-input:focus{border-color:var(--ui-focus);box-shadow:0 0 0 3px var(--ui-focus-ring);outline:0}
+textarea.field-input{min-height:96px;resize:vertical;line-height:1.5}
+.modal input:not([type=checkbox]),.modal textarea,.modal select,.modal form input:not([type=checkbox]),.sprint-modal form input,.metadata-modal form input,.project-modal form input,.delete-project-modal form input,.collab-modal form input,.settings-card input,.settings-card textarea,.auth-card input,.detail-section input,.detail-section select,.detail-section textarea,.detail-description{font-size:13px;font-weight:400}
 .meeting-title-input,.detail-title-input{font-weight:500}
 input::placeholder,textarea::placeholder{color:var(--ui-placeholder);opacity:1;font-weight:400}

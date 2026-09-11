@@ -7,6 +7,7 @@ import { PRIORITIES, STAGES } from '../../constants/workflow';
 import { metadataApi } from '../../api/metadata';
 import { AppSelect } from '../common/AppSelect';
 import { MultiCheckSelect, AssigneeOption, PriorityOption } from '../common/MultiCheckSelect';
+import { TextField } from '../common/Field';
 import './kanban-workspace.css';
 import './metadata.css';
 
@@ -89,6 +90,7 @@ function SprintCreateModal({ onClose, onCreate }) {
   const start = todayIso();
   const end = iso(new Date(Date.now() + 13 * 86400000));
   const [form, setForm] = useState({ name: '', goal: '', startDate: start, endDate: end, status: 'planned' });
+  useEffect(() => { const onKey = e => { if (e.key === 'Escape') onClose(); }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey); }, [onClose]);
   const submit = async event => {
     event.preventDefault();
     if (!form.name.trim()) return;
@@ -102,7 +104,7 @@ function SprintCreateModal({ onClose, onCreate }) {
   return <div className="modal-backdrop" onMouseDown={onClose}><section className="sprint-modal" role="dialog" aria-modal="true" aria-labelledby="sprint-dialog-title" onMouseDown={event => event.stopPropagation()}>
     <button type="button" className="modal-close" onClick={onClose} aria-label="Close dialog"><X size={19}/></button>
     <span className="sprint-modal-icon"><Timer size={21}/></span><h2 id="sprint-dialog-title">Create sprint</h2><p>Set a goal and schedule, then pull tasks in from the backlog.</p>
-    <form onSubmit={submit}><label>Sprint name<input autoFocus value={form.name} onChange={event => setForm({ ...form, name: event.target.value })} placeholder="e.g. Sprint 4" required/></label><label>Goal<input value={form.goal} onChange={event => setForm({ ...form, goal: event.target.value })} placeholder="What should this sprint achieve?"/></label><div className="form-grid"><label>Start date<input type="date" value={form.startDate} onChange={event => setForm({ ...form, startDate: event.target.value })}/></label><label>End date<input type="date" value={form.endDate} min={form.startDate} onChange={event => setForm({ ...form, endDate: event.target.value })}/></label></div><div className="modal-actions"><button type="button" className="text-button" onClick={onClose}>Cancel</button><button className="primary-button">Create sprint</button></div></form>
+    <form onSubmit={submit}><TextField label="Sprint name" autoFocus value={form.name} onChange={event => setForm({ ...form, name: event.target.value })} placeholder="e.g. Sprint 4" required/><TextField label="Goal" value={form.goal} onChange={event => setForm({ ...form, goal: event.target.value })} placeholder="What should this sprint achieve?"/><div className="form-grid"><TextField label="Start date" type="date" value={form.startDate} onChange={event => setForm({ ...form, startDate: event.target.value })}/><TextField label="End date" type="date" min={form.startDate} value={form.endDate} onChange={event => setForm({ ...form, endDate: event.target.value })}/></div><div className="modal-actions"><button type="button" className="text-button" onClick={onClose}>Cancel</button><button className="primary-button">Create sprint</button></div></form>
   </section></div>;
 }
 
