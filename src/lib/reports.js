@@ -40,8 +40,9 @@ export function portfolioProjects(reviews, projects, fallbackName, today) {
 export function taskOverview(reviews, today) {
   const items = activeReviews(reviews);
   const done = items.filter(isResolved);
+  const inProgress = items.filter(r => !isResolved(r) && (r.stage === 'In Progress' || r.status === 'In Progress' || r.status === 'Review'));
   const overdue = items.filter(r => isOverdue(r, today));
-  return { total: items.length, done: done.length, overdue: overdue.length, progress: items.length ? done.length / items.length : 0 };
+  return { total: items.length, done: done.length, inProgress: inProgress.length, overdue: overdue.length, progress: items.length ? done.length / items.length : 0 };
 }
 
 export function sprintTasks(reviews, sprint) {

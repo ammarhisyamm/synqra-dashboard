@@ -129,6 +129,69 @@
   overflow-wrap: anywhere;
 }
 
+/* Task Overview follows the reference hierarchy without a gray statistic fill. */
+.task-overview-card {
+  min-height: 300px;
+}
+
+.task-overview-card .report-progress-head {
+  margin-top: 8px;
+  color: var(--ui-text-secondary);
+  font-size: 15px;
+}
+
+.task-overview-card .report-progress {
+  height: 6px;
+  margin: 16px 0 28px;
+  background: var(--ui-border);
+}
+
+.task-overview-card .report-stats {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  background: transparent;
+}
+
+.task-overview-card .report-stats > div {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px 16px 0;
+}
+
+.task-overview-card .report-stats > div + div::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+  background: var(--ui-border);
+  content: '';
+}
+
+.task-overview-card .report-stats svg {
+  color: var(--ui-primary);
+  margin-bottom: 10px;
+}
+
+.task-overview-card .report-stats strong {
+  margin: 0;
+  color: var(--ui-text);
+  font-size: 30px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  line-height: 1.1;
+}
+
+.task-overview-card .report-stats span {
+  color: var(--ui-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
 /* Fixed UI respects device safe areas. */
 .app-footer {
   padding-bottom: env(safe-area-inset-bottom);
@@ -168,6 +231,29 @@
 
   :where(.form-grid, .detail-grid, .collab-invite-row) {
     grid-template-columns: 1fr;
+  }
+
+  .task-overview-card {
+    min-height: 0;
+  }
+
+  .task-overview-card .report-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    row-gap: 24px;
+  }
+
+  .task-overview-card .report-stats > div:nth-child(3)::before {
+    display: none;
+  }
+
+  .task-overview-card .report-stats > div:nth-child(4)::before {
+    display: none;
+  }
+
+  .task-overview-card .report-stats > div:nth-child(3),
+  .task-overview-card .report-stats > div:nth-child(4) {
+    border-top: 1px solid var(--ui-border);
+    padding-top: 24px;
   }
 }
 

@@ -22,7 +22,7 @@ test('status fallback follows the shared workflow definition', () => {
 test('overview calculations exclude archived reviews and resolved overdue work', () => {
   assert.equal(isOverdue(reviews[0], today), false);
   assert.equal(isOverdue(reviews[1], today), true);
-  assert.deepEqual(taskOverview(reviews, today), { total: 3, done: 1, overdue: 1, progress: 1 / 3 });
+  assert.deepEqual(taskOverview(reviews, today), { total: 3, done: 1, inProgress: 2, overdue: 1, progress: 1 / 3 });
 });
 
 test('portfolio and status reports use the same active task source', () => {
