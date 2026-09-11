@@ -100,7 +100,7 @@ async function routeApi(request, env) {
     return result.meta.changes ? json({ ok: true }) : json({ error: 'Invite not found.' }, 404);
   }
   if (request.method === 'GET' && path === '/api/metadata') {
-    const result = await env.DB.prepare('SELECT id, project_id AS projectId, type, name, parent_id AS parentId, color FROM project_metadata ORDER BY type, name').all();
+    const result = await env.DB.prepare("SELECT id, project_id AS projectId, type, name, parent_id AS parentId, color, COALESCE(status, CASE WHEN COALESCE(archived, 0) = 1 THEN 'archived' ELSE 'active' END) AS status, COALESCE(archived, 0) AS archived FROM project_metadata ORDER BY type, name").all();
     return json({ metadata: result.results });
   }
   if (request.method === 'POST' && path === '/api/metadata') {
@@ -108,13 +108,18 @@ async function routeApi(request, env) {
     const body = await readBody(request); if (!body || !['epic', 'feature', 'label'].includes(body.type)) return json({ error: 'Invalid metadata type.' }, 400);
     const item = { id: id(), projectId: safeText(body.projectId, 80) || 'default', type: body.type, name: safeText(body.name, 100), parentId: safeText(body.parentId, 80) || null, color: /^#[0-9a-fA-F]{6}$/.test(body.color || '') ? body.color : '#111b30' };
     if (!item.name) return json({ error: 'Name is required.' }, 400);
-    try { await env.DB.prepare('INSERT INTO project_metadata (id, project_id, type, name, parent_id, color) VALUES (?, ?, ?, ?, ?, ?)').bind(item.id, item.projectId, item.type, item.name, item.parentId, item.color).run(); return json(item, 201); } catch { return json({ error: 'That item already exists in this project.' }, 409); }
+    try { await env.DB.prepare('INSERT INTO project_metadata (id, project_id, type, name, parent_id, color, status, archived) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').bind(item.id, item.projectId, item.type, item.name, item.parentId, item.color, 'active', 0).run(); return json({ ...item, status: 'active', archived: 0 }, 201); } catch { return json({ error: 'That item already exists in this project.' }, 409); }
   }
   const metadataMatch = path.match(/^\/api\/metadata\/([a-zA-Z0-9-]+)$/);
   if (request.method === 'PATCH' && metadataMatch) {
     if (!['super_admin', 'admin'].includes(user.role)) return json({ error: 'Admin access required.' }, 403);
     const body = await readBody(request); if (!body) return json({ error: 'Invalid JSON.' }, 400);
     const fields = {}; if ('name' in body) fields.name = safeText(body.name, 100); if ('parentId' in body) fields.parent_id = safeText(body.parentId, 80) || null; if ('color' in body && /^#[0-9a-fA-F]{6}$/.test(body.color)) fields.color = body.color;
+    if ('archived' in body || 'status' in body) {
+      const archived = body.archived === true || body.archived === 1 || body.status === 'archived';
+      fields.status = archived ? 'archived' : 'active';
+      fields.archived = archived ? 1 : 0;
+    }
     if (!Object.keys(fields).length || ('name' in fields && !fields.name)) return json({ error: 'Valid changes are required.' }, 400);
     const result = await env.DB.prepare(`UPDATE project_metadata SET ${Object.keys(fields).map(key => `${key} = ?`).join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(...Object.values(fields), metadataMatch[1]).run();
     return result.meta.changes ? json({ ok: true }) : json({ error: 'Metadata not found.' }, 404);

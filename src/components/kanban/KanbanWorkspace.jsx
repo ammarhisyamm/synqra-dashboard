@@ -1,11 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
-  CalendarBlank, CaretDown, CaretRight, Funnel, Kanban, ListBullets,
-  MagnifyingGlass, Plus, Rows, SquaresFour, Tag, Target, Timer, Trash, User, Users, X
+  Archive, CalendarBlank, CaretDown, CaretRight, Funnel, Kanban, ListBullets,
+  MagnifyingGlass, PencilSimple as Pencil, Plus, Rows, SquaresFour, Tag, Target, Timer, Trash, User, Users, X
 } from '@phosphor-icons/react';
 import { PRIORITIES, STAGES } from '../../constants/workflow';
 import { metadataApi } from '../../api/metadata';
 import { AppSelect } from '../common/AppSelect';
+import { MultiCheckSelect, AssigneeOption, PriorityOption } from '../common/MultiCheckSelect';
 import './kanban-workspace.css';
 import './metadata.css';
 
@@ -22,25 +23,65 @@ function TaskMeta({ task }) {
   return <span className="kanban-task-meta">{task.epic && <em>{task.epic}</em>}{task.feature && <em>{task.feature}</em>}{labels.slice(0, 1).map(label => <em key={label}>{label}</em>)}</span>;
 }
 
-function MetadataManager({ projectId, metadata, onClose, onRefresh, requestConfirm }) {
+const METADATA_COLORS = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#14b8a6', '#ef4444'];
+const isArchivedMeta = item => item?.status === 'archived' || item?.archived === 1 || item?.archived === true;
+
+function MetadataManager({ projectId, projectName, metadata, taskCounts = {}, onClose, onRefresh, requestConfirm, onToast }) {
   const [type, setType] = useState('epic');
   const [name, setName] = useState('');
+  const [color, setColor] = useState(METADATA_COLORS[0]);
   const [parentId, setParentId] = useState('');
+  const [query, setQuery] = useState('');
+  const [showArchived, setShowArchived] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [editingName, setEditingName] = useState('');
   const [busy, setBusy] = useState(false);
+  useEffect(() => { setQuery(''); setEditingId(null); setColor(METADATA_COLORS[0]); }, [type]);
   const items = metadata.filter(item => item.type === type);
-  const epics = metadata.filter(item => item.type === 'epic');
+  const visible = items.filter(item => {
+    if (!showArchived && isArchivedMeta(item)) return false;
+    if (query && !item.name.toLowerCase().includes(query.toLowerCase())) return false;
+    return true;
+  });
+  const activeCount = items.filter(item => !isArchivedMeta(item)).length;
+  const archivedCount = items.length - activeCount;
+  const epics = metadata.filter(item => item.type === 'epic' && !isArchivedMeta(item));
   const parentOptions = [{ value: '', label: 'No parent epic' }, ...epics.map(item => ({ value: item.id, label: item.name }))];
-  const save = async event => { event.preventDefault(); if (!name.trim() || busy) return; setBusy(true); try { await metadataApi.create({ projectId, type, name, parentId: type === 'feature' ? parentId : '' }); setName(''); setParentId(''); await onRefresh(); } finally { setBusy(false); } };
-  const doRemove = async item => { await metadataApi.remove(item.id); await onRefresh(); };
+  const parentName = id => epics.find(item => item.id === id)?.name || metadata.find(item => item.id === id)?.name || '';
+  const countFor = item => taskCounts[`${item.type}:${item.name}`] || 0;
+  const fail = error => { const message = error?.message || 'Something didn’t finish. Try again.'; if (onToast) onToast(message); };
+  const save = async event => {
+    event.preventDefault();
+    if (!name.trim() || busy) return;
+    setBusy(true);
+    try {
+      await metadataApi.create({ projectId, type, name: name.trim(), color, parentId: type === 'feature' ? parentId : '' });
+      setName(''); setParentId(''); setColor(METADATA_COLORS[0]);
+      await onRefresh();
+    } catch (error) { fail(error); } finally { setBusy(false); }
+  };
+  const toggleArchive = async item => {
+    try { await metadataApi.update(item.id, { archived: !isArchivedMeta(item) }); await onRefresh(); }
+    catch (error) { fail(error); }
+  };
+  const commitRename = async item => {
+    const next = editingName.trim();
+    setEditingId(null);
+    if (!next || next === item.name) return;
+    try { await metadataApi.update(item.id, { name: next }); await onRefresh(); }
+    catch (error) { fail(error); }
+  };
+  const doRemove = async item => { try { await metadataApi.remove(item.id); await onRefresh(); } catch (error) { fail(error); } };
   const remove = item => {
     if (requestConfirm) {
-      requestConfirm({ icon: <Trash size={24} />, title: `Remove ${item.name}?`, subtitle: 'Existing tasks keep their current value.', confirmLabel: 'Remove', onConfirm: () => doRemove(item) });
+      requestConfirm({ danger: true, icon: <Trash size={24} />, title: `Delete ${item.name} permanently?`, subtitle: `${countFor(item)} task${countFor(item) === 1 ? '' : 's'} use this ${type}. Existing tasks keep their current value.`, confirmLabel: 'Delete permanently', onConfirm: () => doRemove(item) });
       return;
     }
-    if (!confirm(`Remove ${item.name}? Existing tasks keep their current value.`)) return;
+    if (!confirm(`Delete ${item.name} permanently? Existing tasks keep their current value.`)) return;
     doRemove(item);
   };
-  return <div className="modal-backdrop" onMouseDown={onClose}><section className="metadata-modal" role="dialog" aria-modal="true" aria-labelledby="metadata-dialog-title" onMouseDown={event => event.stopPropagation()}><button type="button" className="modal-close" onClick={onClose} aria-label="Close dialog"><X size={19}/></button><span className="sprint-modal-icon"><Tag size={20}/></span><h2 id="metadata-dialog-title">Manage task metadata</h2><p>Create reusable epics, features, and labels for this project.</p><div className="metadata-tabs">{['epic','feature','label'].map(item => <button type="button" key={item} className={type === item ? 'active' : ''} onClick={() => setType(item)}>{item}s</button>)}</div><form onSubmit={save}><input value={name} onChange={event => setName(event.target.value)} placeholder={`New ${type} name`} autoFocus/>{type === 'feature' && <AppSelect value={parentId} options={parentOptions} onChange={setParentId} placeholder="No parent epic" ariaLabel="Parent epic"/>}<button className="primary-button" disabled={busy || !name.trim()}><Plus size={15}/> Add</button></form><div className="metadata-list">{items.length ? items.map(item => <div key={item.id}><span><i style={{ background: item.color }}/>{item.name}</span><button type="button" onClick={() => remove(item)} aria-label={`Delete ${item.name}`}><Trash size={15}/></button></div>) : <p>No {type}s yet.</p>}</div><div className="modal-actions"><button type="button" className="text-button" onClick={onClose}>Close</button></div></section></div>;
+  const copy = { epic: { title: `Manage epics${projectName ? ` — ${projectName}` : ''}`, desc: 'Buat, ubah, arsipkan (soft delete), atau hapus permanen epic untuk project ini.', placeholder: 'Nama epic baru…' }, feature: { title: 'Manage features', desc: 'Buat, ubah, arsipkan, atau hapus permanen feature di bawah epic yang dipilih.', placeholder: 'Nama feature baru…' }, label: { title: `Manage labels${projectName ? ` — ${projectName}` : ''}`, desc: 'Buat label custom seperti Bug, Enhancement, atau New Feature untuk mengkategorikan task.', placeholder: 'Label name (e.g. Bug, Enhancement)…' } }[type];
+  return <div className="modal-backdrop" onMouseDown={onClose}><section className="metadata-modal" role="dialog" aria-modal="true" aria-labelledby="metadata-dialog-title" onMouseDown={event => event.stopPropagation()}><button type="button" className="modal-close" onClick={onClose} aria-label="Close dialog"><X size={19}/></button><span className="sprint-modal-icon"><Tag size={20}/></span><h2 id="metadata-dialog-title">{copy.title}</h2><p>{copy.desc}</p><div className="metadata-tabs">{['epic','feature','label'].map(item => <button type="button" key={item} className={type === item ? 'active' : ''} onClick={() => setType(item)}>{item}s <span className="metadata-tab-count">{metadata.filter(entry => entry.type === item && !isArchivedMeta(entry)).length}</span></button>)}</div><form onSubmit={save} className="metadata-create"><input value={name} onChange={event => setName(event.target.value)} placeholder={copy.placeholder} autoFocus aria-label={`New ${type} name`}/><div className="metadata-color-row" role="radiogroup" aria-label={`${type} color`}>{METADATA_COLORS.map(option => <button key={option} type="button" className={`metadata-color${color === option ? ' selected' : ''}`} style={{ background: option }} aria-label={`Use color ${option}`} aria-pressed={color === option} onClick={() => setColor(option)}/>)}</div>{type === 'feature' && <AppSelect value={parentId} options={parentOptions} onChange={setParentId} placeholder="Select epic…" ariaLabel="Parent epic"/>}<button className="primary-button" disabled={busy || !name.trim()}><Plus size={15}/> Add</button></form><div className="metadata-tools"><label className="metadata-search"><MagnifyingGlass size={14}/><input value={query} onChange={event => setQuery(event.target.value)} placeholder={`Search ${type}s…`} aria-label={`Search ${type}s`}/></label><button type="button" className={`metadata-archive-toggle${showArchived ? ' active' : ''}`} onClick={() => setShowArchived(value => !value)}><Archive size={14}/> Archived ({archivedCount})</button></div><div className="metadata-list">{visible.length ? visible.map(item => { const archived = isArchivedMeta(item); const tasks = countFor(item); return <div key={item.id} className={archived ? 'archived' : ''}><span className="metadata-row-main"><i style={{ background: item.color || METADATA_COLORS[0] }}/>{editingId === item.id ? <input className="metadata-rename" value={editingName} autoFocus onChange={event => setEditingName(event.target.value)} onBlur={() => commitRename(item)} onKeyDown={event => { if (event.key === 'Enter') commitRename(item); if (event.key === 'Escape') setEditingId(null); }} aria-label={`Rename ${item.name}`}/> : <strong>{item.name}</strong>}{type === 'feature' && item.parentId && parentName(item.parentId) && <small> · {parentName(item.parentId)}</small>}<small className="metadata-task-count">{tasks} task{tasks === 1 ? '' : 's'}</small>{archived && <small className="metadata-archived-pill">archived</small>}</span><span className="metadata-row-actions"><button type="button" onClick={() => { setEditingId(item.id); setEditingName(item.name); }} aria-label={`Rename ${item.name}`} title="Rename"><Pencil size={15}/></button><button type="button" onClick={() => toggleArchive(item)} aria-label={archived ? `Restore ${item.name}` : `Archive ${item.name}`} title={archived ? 'Restore' : 'Archive'}><Archive size={15}/></button><button type="button" className="danger" onClick={() => remove(item)} aria-label={`Delete ${item.name} permanently`} title="Delete permanently"><Trash size={15}/></button></span></div>; }) : <p>{query ? `No ${type}s match “${query}”.` : archivedCount && !showArchived ? `No active ${type}s. Toggle Archived to restore items.` : `No ${type}s yet. Create your first ${type} above.`}</p>}</div><div className="modal-actions"><span className="metadata-footnote">{activeCount} active · {archivedCount} archived</span><button type="button" className="text-button" onClick={onClose}>Close</button></div></section></div>;
 }
 
 function SprintCreateModal({ onClose, onCreate }) {
@@ -105,39 +146,55 @@ function Timeline({ tasks, onOpen }) {
   return <section className="timeline-board"><div className="timeline-scroll"><div className="timeline-head"><strong>Task</strong><div>{dates.map(date => <span key={date}>{toDate(date).getDate()}</span>)}</div></div>{Object.entries(grouped).map(([epic, items]) => <div className="timeline-group" key={epic}><strong className="timeline-group-label"><i/>{epic}</strong>{items.map(task => { const taskStart = task.startDate || task.due || dates[0]; const taskEnd = task.due || task.startDate || taskStart; const offset = Math.max(0, Math.min(13, daysBetween(dates[0], taskStart))); const span = Math.max(1, Math.min(14 - offset, daysBetween(taskStart, taskEnd) + 1)); return <div className="timeline-row" key={task.id}><button onClick={() => onOpen(task)}><span>{task.key || 'TASK'}</span><strong>{task.title}</strong><small>{task.assignee || 'Unassigned'}</small></button><div className="timeline-track">{dates.map(date => <i key={date}/>) }<button className="timeline-bar" style={{ gridColumn: `${offset + 1} / span ${span}` }} onClick={() => onOpen(task)} title={`${task.title} · ${labelDate(taskStart)} – ${labelDate(taskEnd)}`}>{span > 2 && task.title}</button></div></div>; })}</div>)}</div></section>;
 }
 
-export function KanbanWorkspace({ project, team = [], reviews, sprints = [], metadata = [], projectId, updateReview, createSprint, updateSprint, refreshMetadata, setModal, onOpen, requestConfirm }) {
+export function KanbanWorkspace({ project, team = [], reviews, sprints = [], metadata = [], projectId, updateReview, createSprint, updateSprint, refreshMetadata, setModal, onOpen, requestConfirm, onToast }) {
   const teamNames = team.map(t => t.name);
   const [view, setView] = useState('board');
   const [search, setSearch] = useState('');
-  const [assignee, setAssignee] = useState('');
-  const [status, setStatus] = useState('');
-  const [priority, setPriority] = useState('');
-  const [epic, setEpic] = useState('');
-  const [feature, setFeature] = useState('');
-  const [label, setLabel] = useState('');
+  const [assignees, setAssignees] = useState([]);
+  const [statuses, setStatuses] = useState([]);
+  const [priorities, setPriorities] = useState([]);
+  const [epicFilter, setEpicFilter] = useState([]);
+  const [featureFilter, setFeatureFilter] = useState([]);
+  const [labelFilter, setLabelFilter] = useState([]);
   const [dragId, setDragId] = useState(null);
   const [metadataOpen, setMetadataOpen] = useState(false);
 
   const owners = useMemo(() => teamNames.length ? teamNames : [...new Set(reviews.map(task => task.assignee).filter(Boolean))], [teamNames, reviews]);
-  const epics = useMemo(() => [...new Set([...metadata.filter(item => item.type === 'epic').map(item => item.name), ...reviews.map(task => task.epic).filter(Boolean)])], [metadata, reviews]);
-  const features = useMemo(() => [...new Set([...metadata.filter(item => item.type === 'feature').map(item => item.name), ...reviews.map(task => task.feature).filter(Boolean)])], [metadata, reviews]);
-  const labels = useMemo(() => [...new Set([...metadata.filter(item => item.type === 'label').map(item => item.name), ...reviews.flatMap(task => Array.isArray(task.labels) ? task.labels : [])])], [metadata, reviews]);
-  
+  const ownerEmails = useMemo(() => { const map = {}; team.forEach(member => { if (member?.name) map[member.name] = member.email || ''; }); return map; }, [team]);
+  const activeMetadata = useMemo(() => metadata.filter(item => !isArchivedMeta(item)), [metadata]);
+  const epics = useMemo(() => [...new Set([...activeMetadata.filter(item => item.type === 'epic').map(item => item.name), ...reviews.map(task => task.epic).filter(Boolean)])], [activeMetadata, reviews]);
+  const features = useMemo(() => [...new Set([...activeMetadata.filter(item => item.type === 'feature').map(item => item.name), ...reviews.map(task => task.feature).filter(Boolean)])], [activeMetadata, reviews]);
+  const labels = useMemo(() => [...new Set([...activeMetadata.filter(item => item.type === 'label').map(item => item.name), ...reviews.flatMap(task => Array.isArray(task.labels) ? task.labels : [])])], [activeMetadata, reviews]);
+  const taskCounts = useMemo(() => {
+    const counts = {};
+    reviews.forEach(task => {
+      if (task.epic) counts[`epic:${task.epic}`] = (counts[`epic:${task.epic}`] || 0) + 1;
+      if (task.feature) counts[`feature:${task.feature}`] = (counts[`feature:${task.feature}`] || 0) + 1;
+      (Array.isArray(task.labels) ? task.labels : []).forEach(label => { counts[`label:${label}`] = (counts[`label:${label}`] || 0) + 1; });
+    });
+    return counts;
+  }, [reviews]);
+
   const filtered = useMemo(() => reviews.filter(task => {
     const text = `${task.title} ${task.key || ''} ${task.description || ''}`.toLowerCase();
-    return (!search || text.includes(search.toLowerCase())) && (!assignee || task.assignee === assignee) && (!status || statusFor(task) === status) && (!priority || task.priority === priority) && (!epic || task.epic === epic) && (!feature || task.feature === feature) && (!label || (task.labels || []).includes(label));
-  }), [reviews, search, assignee, status, priority, epic, feature, label]);
-  
-  const hasFilters = search || assignee || status || priority || epic || feature || label;
-  const drop = stage => ({ onDragOver: event => event.preventDefault(), onDrop: event => { event.preventDefault(); if (dragId) updateReview(dragId, { stage }); setDragId(null); } });
-  const clear = () => { setSearch(''); setAssignee(''); setStatus(''); setPriority(''); setEpic(''); setFeature(''); setLabel(''); };
+    const taskLabels = Array.isArray(task.labels) ? task.labels : [];
+    return (!search || text.includes(search.toLowerCase()))
+      && (!assignees.length || assignees.includes(task.assignee || ''))
+      && (!statuses.length || statuses.includes(statusFor(task)))
+      && (!priorities.length || priorities.includes(task.priority))
+      && (!epicFilter.length || epicFilter.includes(task.epic || ''))
+      && (!featureFilter.length || featureFilter.includes(task.feature || ''))
+      && (!labelFilter.length || labelFilter.some(label => taskLabels.includes(label)));
+  }), [reviews, search, assignees, statuses, priorities, epicFilter, featureFilter, labelFilter]);
 
-  const teamOptions = [{ value: '', label: 'Team' }, ...owners.map(v => ({ value: v, label: v }))];
-  const statusOptions = [{ value: '', label: 'Filter' }, { value: 'Open', label: 'Open' }, { value: 'In Progress', label: 'In Progress' }, { value: 'Review', label: 'Review' }, { value: 'Resolved', label: 'Resolved' }, { value: 'Rejected', label: 'Rejected' }];
-  const epicOptions = [{ value: '', label: 'Epics' }, ...epics.map(v => ({ value: v, label: v }))];
-  const featureOptions = [{ value: '', label: 'Features' }, ...features.map(v => ({ value: v, label: v }))];
-  const labelOptions = [{ value: '', label: 'Labels' }, ...labels.map(v => ({ value: v, label: v }))];
-  const priorityOptions = [{ value: '', label: 'All priorities' }, ...PRIORITIES.map(v => ({ value: v, label: v }))];
+  const hasFilters = search || assignees.length || statuses.length || priorities.length || epicFilter.length || featureFilter.length || labelFilter.length;
+  const activeFilterCount = assignees.length + statuses.length + priorities.length + epicFilter.length + featureFilter.length + labelFilter.length;
+  const drop = stage => ({ onDragOver: event => event.preventDefault(), onDrop: event => { event.preventDefault(); if (dragId) updateReview(dragId, { stage }); setDragId(null); } });
+  const clear = () => { setSearch(''); setAssignees([]); setStatuses([]); setPriorities([]); setEpicFilter([]); setFeatureFilter([]); setLabelFilter([]); };
+
+  const statusChoices = ['Open', 'In Progress', 'Review', 'Resolved', 'Rejected'];
+  const epicColor = name => activeMetadata.find(item => item.type === 'epic' && item.name === name)?.color;
+  const labelColor = name => activeMetadata.find(item => item.type === 'label' && item.name === name)?.color || '#111b30';
 
   const activeSprint = sprints.find(s => s.status === 'active') || sprints[0];
 
@@ -160,62 +217,65 @@ export function KanbanWorkspace({ project, team = [], reviews, sprints = [], met
           <MagnifyingGlass size={16} />
           <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Filter tasks…" />
         </label>
-        <AppSelect
+        <MultiCheckSelect
           prefix={
             owners.length > 0 ? (
               <span className="team-avatar-stack">
                 {owners.slice(0, 3).map((o, idx) => (
                   <span key={o} className={`mini-avatar avatar-bg-${idx % 3}`}>
-                    {o.slice(0, 2).toUpperCase()}
+                    {String(o).slice(0, 2).toUpperCase()}
                   </span>
                 ))}
               </span>
             ) : null
           }
           icon={owners.length === 0 ? Users : undefined}
-          value={assignee}
-          options={teamOptions}
-          onChange={setAssignee}
+          values={assignees}
+          options={owners.map((name, idx) => ({ value: name, label: name, hint: ownerEmails[name] || undefined, index: idx }))}
+          onChange={setAssignees}
           placeholder="Team"
-          ariaLabel="Team filter"
+          ariaLabel="Filter by assignee"
+          emptyLabel="No team members yet"
           className="toolbar-select"
+          renderOption={(item, active) => <AssigneeOption name={item.label} email={item.hint} index={item.index || 0} />}
         />
-        <AppSelect
+        <MultiCheckSelect
           icon={Funnel}
-          value={status}
-          options={statusOptions}
-          onChange={setStatus}
+          values={statuses}
+          options={statusChoices}
+          onChange={setStatuses}
           placeholder="Filter"
-          ariaLabel="Status filter"
+          ariaLabel="Filter by status"
           className="toolbar-select"
         />
-        <AppSelect
+        <MultiCheckSelect
           icon={Target}
-          value={epic}
-          options={epicOptions}
-          onChange={setEpic}
+          values={epicFilter}
+          options={epics.map(name => ({ value: name, label: name, color: epicColor(name), hint: taskCounts[`epic:${name}`] ? `${taskCounts[`epic:${name}`]} tasks` : '0 tasks' }))}
+          onChange={setEpicFilter}
           placeholder="Epics"
-          badge={epics.length > 0 ? epics.length : undefined}
-          ariaLabel="Epics filter"
+          ariaLabel="Filter by epic"
+          emptyLabel="No epics yet"
           className="toolbar-select compact"
         />
-        <AppSelect
+        <MultiCheckSelect
           icon={SquaresFour}
-          value={feature}
-          options={featureOptions}
-          onChange={setFeature}
+          values={featureFilter}
+          options={features.map(name => ({ value: name, label: name, hint: taskCounts[`feature:${name}`] ? `${taskCounts[`feature:${name}`]} tasks` : '0 tasks' }))}
+          onChange={setFeatureFilter}
           placeholder="Features"
-          ariaLabel="Features filter"
+          ariaLabel="Filter by feature"
+          emptyLabel="No features yet"
           className="toolbar-select compact"
         />
-        <AppSelect
+        <MultiCheckSelect
           icon={Tag}
-          value={label}
-          options={labelOptions}
-          onChange={setLabel}
+          values={labelFilter}
+          options={labels.map(name => ({ value: name, label: name, color: labelColor(name), hint: taskCounts[`label:${name}`] ? `${taskCounts[`label:${name}`]} tasks` : '0 tasks' }))}
+          onChange={setLabelFilter}
           placeholder="Labels"
-          badge={labels.length > 0 ? labels.length : undefined}
-          ariaLabel="Labels filter"
+          ariaLabel="Filter by label"
+          emptyLabel="No labels yet"
           className="toolbar-select compact"
         />
         <button className="secondary-button" onClick={() => setMetadataOpen(true)} title="Manage epics, features, and labels">
@@ -247,9 +307,9 @@ export function KanbanWorkspace({ project, team = [], reviews, sprints = [], met
       <div className="kanban-filter-row">
         <div className="kanban-filter-group">
           <span>Priority</span>
-          <AppSelect value={priority} options={priorityOptions} onChange={setPriority} placeholder="All priorities" ariaLabel="Priority filter"/>
+          <MultiCheckSelect values={priorities} options={PRIORITIES.map(value => ({ value, label: value }))} onChange={setPriorities} placeholder="All priorities" ariaLabel="Filter by priority" className="priority-multi" renderOption={item => <PriorityOption label={item.label} />} />
         </div>
-        {hasFilters && <button className="clear-filters-btn" onClick={clear}>Clear filters</button>}
+        {hasFilters && <button className="clear-filters-btn" onClick={clear}>Clear filters{activeFilterCount ? ` (${activeFilterCount})` : ''}</button>}
         <span className="task-count-label">{filtered.length} task{filtered.length === 1 ? '' : 's'} shown</span>
       </div>
     </div>
@@ -258,6 +318,6 @@ export function KanbanWorkspace({ project, team = [], reviews, sprints = [], met
     {view === 'list' && <div className="kanban-list-view">{STAGES.map(stage => <section key={stage}><header><strong>{stage}</strong><span>{filtered.filter(task => task.stage === stage).length}</span></header>{filtered.filter(task => task.stage === stage).map(task => <TaskRow key={task.id} task={task} onOpen={onOpen}/>)}</section>)}</div>}
     {view === 'planning' && <SprintPlanning tasks={filtered} sprints={sprints} onOpen={onOpen} onUpdateTask={updateReview} onUpdateSprint={updateSprint} onCreateSprint={createSprint}/>}
     {view === 'timeline' && <Timeline tasks={filtered} onOpen={onOpen}/>}
-    {metadataOpen && <MetadataManager projectId={projectId} metadata={metadata} onClose={() => setMetadataOpen(false)} onRefresh={refreshMetadata} requestConfirm={requestConfirm}/>}
+    {metadataOpen && <MetadataManager projectId={projectId} projectName={project?.name} metadata={metadata} taskCounts={taskCounts} onClose={() => setMetadataOpen(false)} onRefresh={refreshMetadata} requestConfirm={requestConfirm} onToast={onToast}/>}
   </section>;
 }
