@@ -179,3 +179,12 @@ h1,h2,h3,h4,strong,b,button,.breadcrumb-title,.side-label,.command-group-label,.
   .kanban-header-bar .kanban-toolbar-actions .app-select-trigger,.kanban-header-bar .toolbar-meta-trigger,.kanban-header-bar .kanban-project-trigger{height:36px;min-height:36px}
   .kanban-header-bar .create-task-cta{height:36px;min-height:36px}
 }
+
+/* Form typography contract (documented in design.md §Inputs):
+   labels are caption 12px/500; fields are 13px/400 so weight and size never
+   inherit from the label; placeholders use the muted token at weight 400.
+   Display-size title inputs are the only 500-weight exception. */
+.modal label,.modal form>label,.sprint-modal form>label,.metadata-modal form label,.metadata-search,.settings-card label,.project-modal label,.delete-project-modal label,.collab-modal label,.auth-card label,.detail-section label,.field-label{font-size:12px;font-weight:500;color:var(--ui-text-secondary)}
+.modal input:not([type=checkbox]),.modal textarea,.modal select,.sprint-modal input,.metadata-modal input,.project-modal input,.delete-project-modal input,.collab-modal input,.settings-card input,.settings-card textarea,.auth-card input,.detail-section input,.detail-section select,.detail-section textarea,.detail-description{font-size:13px;font-weight:400}
+.meeting-title-input,.detail-title-input{font-weight:500}
+input::placeholder,textarea::placeholder{color:var(--ui-placeholder);opacity:1;font-weight:400}

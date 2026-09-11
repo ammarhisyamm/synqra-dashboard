@@ -149,6 +149,10 @@ Default height is 36px. Use 13px UI text at weight 500. Include a 7–8px icon g
 - Standard inputs/selects: 40px high, `radius-md`, 1px border, 11–12px horizontal padding.
 - Compact search/filter controls: 36px high.
 - Label sits above the field with a 7px gap. Each field takes the full width of its grid track.
+- Form label contract: 12px, weight 500, `--color-text-secondary`. Never 600/700, never uppercase, and the same in every modal, settings, auth, and detail form.
+- Field text contract: 13px, weight 400, `--color-text`. Fields must set weight and size explicitly — never inherit them from the label.
+- Placeholder contract: `--color-text-subtle` (`--ui-placeholder`, #98a6b9), weight 400, same size as the field text. Placeholders are never bold and never use a second colour; write them as short examples or prompts ("e.g. …", "Add …", "Search …").
+- Display-size title inputs (meeting title, task detail title) are the only weight-500 inputs; they are not labelled fields.
 - Use the shared `AppSelect` component for custom menus; do not introduce unstyled platform-select UI for new functionality.
 - On focus: border `--color-focus` plus a 3px `--color-focus-ring` ring.
 - Always provide an empty option or placeholder when a field is optional. Do not prefill people or past dates unless explicitly required by the user.
