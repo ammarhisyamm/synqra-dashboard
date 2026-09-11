@@ -32,3 +32,55 @@
 .ai-generated-at{display:block;margin-top:4px;font-size:11px;color:#9aa6b5}
 .ai-item-badges{display:flex;align-items:center;gap:8px}
 .ai-badge{font-style:normal;font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#7c3aed;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:999px;padding:2px 8px;white-space:nowrap}
+
+/* Participants popup (MeetingEditor avatar) */
+.participants-wrap{position:relative;display:inline-flex}
+.avatar-button{cursor:pointer;border:0}
+.avatar-button:hover{opacity:.85}
+.participants-popup{position:absolute;z-index:60;top:calc(100% + 10px);left:0;width:min(340px,calc(100vw - 48px));background:#fff;border:1px solid #e5eaf1;border-radius:16px;box-shadow:0 18px 50px #17223822;padding:16px;display:grid;gap:10px;color:#26334a}
+.participants-popup>strong{font-size:15px;font-weight:600}
+.participants-chips{display:flex;flex-wrap:wrap;gap:8px}
+.participant-chip{display:inline-flex;align-items:center;gap:6px;background:#f1f5fa;border-radius:999px;padding:6px 8px 6px 12px;font-size:13px;color:#26334a}
+.participant-chip button{display:grid;place-items:center;border:0;background:transparent;color:#8a98aa;cursor:pointer;padding:2px}
+.participant-chip button:hover{color:#d8525b}
+.participants-label{margin:6px 0 0;font-size:11px;font-weight:600;letter-spacing:.08em;color:#9aa6b5}
+.participants-add{display:flex;gap:8px}
+.participants-add input{flex:1;min-width:0;border:1px solid #e0e8f1;border-radius:9px;padding:8px 10px;font-size:13px;color:#2d3d54}
+.participants-add .secondary-button{padding:8px 12px;font-size:12px;white-space:nowrap}
+.participant-row{display:flex;align-items:center;gap:9px;font-size:13px;color:#2d3d54;cursor:pointer;padding:2px 0}
+.participant-row input{width:16px;height:16px;accent-color:#172238}
+.participants-empty{margin:0;font-size:12px;color:#9aa6b5}
+
+/* AI action items grouped table */
+.ai-task-groups{display:grid;gap:16px}
+.ai-task-card{border:1px solid #e5eaf1;border-radius:14px;background:#fff;overflow:hidden}
+.ai-task-card-head{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid #eef1f5}
+.ai-task-card-head .avatar-dark{background:#172238}
+.ai-task-card-head strong{font-size:15px;font-weight:600;color:#1c2739}
+.ai-task-count{margin-left:auto;font-size:12px;color:#98a4b3}
+.ai-task-add{font-size:12px}
+.ai-task-table-wrap{overflow-x:auto}
+.ai-task-table{width:100%;border-collapse:collapse;font-size:13px}
+.ai-task-table th{text-align:left;font-weight:500;font-size:12px;color:#98a4b3;padding:10px 16px;border-bottom:1px solid #eef1f5;white-space:nowrap}
+.ai-task-table td{padding:12px 16px;border-bottom:1px solid #f1f4f8;color:#26334a;vertical-align:middle}
+.ai-task-table tr:last-child td{border-bottom:0}
+.ai-task-table tr.discarded td{opacity:.5}
+.ai-task-table td.muted{color:#8a98aa}
+.ai-task-check{display:flex;align-items:center;gap:10px}
+.ai-task-check input[type="checkbox"]{width:15px;height:15px;accent-color:#172238;flex:none}
+.ai-task-title{border:0;background:transparent;padding:0;font-size:13px;font-weight:500;color:#1c2739;cursor:text;text-align:left}
+.ai-task-title:hover{text-decoration:underline}
+.ai-task-title-input{border:1px solid #cdd8e5;border-radius:7px;padding:6px 9px;font-size:13px;color:#1c2739;width:100%;min-width:180px}
+.severity{display:inline-flex;align-items:center;gap:6px;border:1px solid #e5eaf1;border-radius:999px;padding:4px 11px;font-size:12px;font-weight:600;white-space:nowrap}
+.severity i{width:7px;height:7px;border-radius:50%;background:#98a4b3}
+.severity-blocker{color:#c24d4d;border-color:#f3c9c9}.severity-blocker i{background:#e25757}
+.severity-major{color:#c26a1b;border-color:#f0d3ae}.severity-major i{background:#e8821e}
+.severity-minor{color:#5b6a7f}.severity-minor i{background:#98a4b3}
+.status-inline .app-select-trigger{border:1px solid #e5eaf1;border-radius:999px;padding:4px 10px;font-size:12px}
+.ai-delete.small{width:28px;height:28px}
+.ai-task-edit{padding:14px 16px;border-top:1px solid #eef1f5;display:grid;gap:10px;background:#fbfcfe}
+.ai-task-edit textarea{border:1px solid #e0e8f1;border-radius:9px;padding:9px 11px;font-size:13px;color:#2d3d54;resize:vertical}
+.ai-task-edit-row{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:9px}
+.ai-task-edit-row label{display:grid;gap:4px;font-size:11px;color:#8a98aa}
+.ai-task-edit-row input{border:1px solid #e0e8f1;border-radius:9px;padding:8px 10px;font-size:13px;color:#2d3d54}
+@media(max-width:820px){.ai-task-edit-row{grid-template-columns:1fr 1fr}}

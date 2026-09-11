@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, CalendarBlank, Check, FileText, Lightbulb, MagicWand, ArrowCounterClockwise as RotateCcw, Sparkle, Target, User, Users, X } from '@phosphor-icons/react';
 import { MeetingAiReview } from './MeetingAiReview';
 import { extractItemsLocally, generateActionItemsWithOrvix, hashNotes } from '../../api/ai';
+import { api } from '../../api/client';
 import { Wave } from '../Wave.jsx';
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -13,14 +14,20 @@ const templates = [
   { title: 'Sprint Planning', subtitle: 'Goal, stories, risks', icon: Target, notes: 'Goal:\n\nStories:\n\nRisks:\n' }
 ];
 
-export function MeetingEditor({ user, onClose, onCreate, onToast }) {
+export function MeetingEditor({ user, team = [], onClose, onCreate, onToast }) {
   const [phase, setPhase] = useState('writing');
   const [form, setForm] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(DRAFT_STORAGE_KEY));
-      return saved?.title || saved?.notes ? { title: saved.title || '', date: saved.date || today(), notes: saved.notes || '' } : { title: '', date: today(), notes: '' };
-    } catch { return { title: '', date: today(), notes: '' }; }
+      const base = saved?.title || saved?.notes ? { title: saved.title || '', date: saved.date || today(), notes: saved.notes || '', attendees: Array.isArray(saved.attendees) ? saved.attendees : [] } : { title: '', date: today(), notes: '', attendees: [] };
+      return base;
+    } catch { return { title: '', date: today(), notes: '', attendees: [] }; }
   });
+  const [participantsOpen, setParticipantsOpen] = useState(false);
+  const [manualName, setManualName] = useState('');
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviting, setInviting] = useState(false);
+  const participantsRef = useRef(null);
   const [items, setItems] = useState([]);
   const [brief, setBrief] = useState(null);
   const [generatedHash, setGeneratedHash] = useState('');
@@ -82,6 +89,49 @@ export function MeetingEditor({ user, onClose, onCreate, onToast }) {
   };
 
   const preview = useMemo(() => items.filter(item => item.keep).length, [items]);
+  const attendees = useMemo(() => Array.isArray(form.attendees) ? form.attendees : [], [form.attendees]);
+  const teamMembers = useMemo(() => {
+    const seen = new Set(attendees.map(a => a.toLowerCase()));
+    return (team || []).filter(t => t?.name && !seen.has(t.name.toLowerCase()));
+  }, [team, attendees]);
+  const toggleAttendee = name => {
+    const value = (name || '').trim();
+    if (!value) return;
+    setForm(prev => {
+      const current = Array.isArray(prev.attendees) ? prev.attendees : [];
+      const exists = current.some(a => a.toLowerCase() === value.toLowerCase());
+      return { ...prev, attendees: exists ? current.filter(a => a.toLowerCase() !== value.toLowerCase()) : [...current, value] };
+    });
+    setSaved(false);
+  };
+  const addManualAttendee = () => {
+    if (!manualName.trim()) return;
+    toggleAttendee(manualName.trim());
+    setManualName('');
+  };
+  const inviteToProject = async () => {
+    const email = inviteEmail.trim().toLowerCase();
+    if (!email || !/^\S+@\S+\.\S+$/.test(email)) { onToast('Enter a valid email address'); return; }
+    setInviting(true);
+    try {
+      await api('/api/project-members', { method: 'POST', body: JSON.stringify({ email, role: 'viewer' }) });
+      const label = email.split('@')[0];
+      setForm(prev => {
+        const current = Array.isArray(prev.attendees) ? prev.attendees : [];
+        return current.some(a => a.toLowerCase() === label.toLowerCase() || a.toLowerCase() === email) ? prev : { ...prev, attendees: [...current, label] };
+      });
+      setInviteEmail('');
+      onToast(`Invited ${email} — added to participants`);
+    } catch (err) { onToast(err.message); } finally { setInviting(false); }
+  };
+  useEffect(() => {
+    if (!participantsOpen) return undefined;
+    const onDown = e => { if (participantsRef.current && !participantsRef.current.contains(e.target)) setParticipantsOpen(false); };
+    const onKey = e => { if (e.key === 'Escape') setParticipantsOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
+  }, [participantsOpen]);
   const saveDraft = () => {
     try { localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(form)); setSaved(true); onToast('Meeting draft saved'); }
     catch { onToast('Meeting draft could not be saved'); }
@@ -151,7 +201,38 @@ export function MeetingEditor({ user, onClose, onCreate, onToast }) {
             <CalendarBlank size={14} />
             <input type="date" value={form.date} onChange={event => update('date', event.target.value)} />
           </label>
-          <span className="avatar">{(user?.name || 'A').slice(0, 1).toUpperCase()}</span>
+          <span className="participants-wrap" ref={participantsRef}>
+            <button type="button" className="avatar avatar-button" onClick={() => setParticipantsOpen(open => !open)} aria-label="Meeting participants" aria-expanded={participantsOpen} title="Participants">
+              {(user?.name || 'A').slice(0, 1).toUpperCase()}
+            </button>
+            {participantsOpen && (
+              <div className="participants-popup" role="dialog" aria-label="Meeting participants">
+                <strong>Participants</strong>
+                {attendees.length > 0 && (
+                  <div className="participants-chips">
+                    {attendees.map(name => <span key={name} className="participant-chip">{name}<button type="button" onClick={() => toggleAttendee(name)} aria-label={`Remove ${name}`}><X size={13}/></button></span>)}
+                  </div>
+                )}
+                <p className="participants-label">MANUAL</p>
+                <div className="participants-add">
+                  <input value={manualName} onChange={e => setManualName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addManualAttendee(); } }} placeholder="Add name…" aria-label="Add participant manually" />
+                  <button type="button" className="secondary-button" disabled={!manualName.trim()} onClick={addManualAttendee}>Add</button>
+                </div>
+                <p className="participants-label">TIM</p>
+                {teamMembers.length ? teamMembers.map(t => (
+                  <label key={t.email || t.name} className="participant-row">
+                    <input type="checkbox" checked={attendees.some(a => a.toLowerCase() === t.name.toLowerCase())} onChange={() => toggleAttendee(t.name)} />
+                    <span>{t.name}</span>
+                  </label>
+                )) : <p className="participants-empty">No other team members.</p>}
+                <p className="participants-label">INVITE KE PROJECT</p>
+                <div className="participants-add">
+                  <input type="email" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); inviteToProject(); } }} placeholder="email@contoh.com" aria-label="Invite email to project" />
+                  <button type="button" className="secondary-button" disabled={inviting || !inviteEmail.trim()} onClick={inviteToProject}>{inviting ? '…' : 'Invite'}</button>
+                </div>
+              </div>
+            )}
+          </span>
           <span>Draft</span>
           <span className={saved ? 'save-state saved' : 'save-state'}>
             <i />

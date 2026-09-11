@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   Archive, ArrowRight, Bell, CalendarBlank as CalendarDays, CalendarPlus, Check,
-  CheckCircle as CheckCircle2, CaretDown as ChevronDown, CaretUpDown as ChevronsUpDown,
+  CheckCircle as CheckCircle2, CaretUpDown as ChevronsUpDown,
   ClipboardText as ClipboardList, Crown, EnvelopeSimple, Folder, House as Home,
   Info, Kanban as KanbanSquare, ChartBar, List as Menu, ChatCircle as MessageCircle,
   DotsThreeVertical as MoreVertical, Plus, MagnifyingGlass as Search, Gear as Settings,
@@ -42,6 +42,6 @@ export function Sidebar({ page, setPage, menuOpen, setMenuOpen, collapsed, onMen
 export function ProjectSwitcher({ project, projects = [], onSelect, onNew, onClose }) {
   const [query, setQuery] = useState('');
   const visible = projects.filter(item => item.name.toLowerCase().includes(query.toLowerCase()));
-  return <div className="project-switcher"><div className="switcher-title">PROJECT</div><button className="current-project" onClick={onClose}><Folder size={22}/><span>{project.name}</span><ChevronDown size={17}/></button><label className="project-search"><Search size={19}/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search projects"/></label><div className="project-list">{visible.length ? visible.map(item => <button key={item.id} className={item.id === project.id ? 'selected' : ''} onClick={() => onSelect(item)}><Folder size={19}/><span>{item.name}</span>{item.id === project.id && <Check size={20}/>}</button>) : <p className="project-empty">No projects found.</p>}</div><button className="new-project" onClick={onNew}><Plus size={21}/> New project</button><button className="switcher-close" onClick={onClose} aria-label="Close"><X size={17}/></button></div>;
+  return <div className="project-switcher"><div className="switcher-head"><span className="switcher-title">PROJECT</span><button className="switcher-close" onClick={onClose} aria-label="Close"><X size={15}/></button></div><label className="project-search"><Search size={16}/><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search projects"/></label><div className="project-list">{visible.length ? visible.map(item => <button key={item.id} className={item.id === project.id ? 'selected' : ''} onClick={() => onSelect(item)}><Folder size={16}/><span>{item.name}</span>{item.id === project.id && <Check size={16}/>}</button>) : <p className="project-empty">No projects found.</p>}</div><button className="new-project" onClick={onNew}><Plus size={16}/> New project</button></div>;
 }
 
