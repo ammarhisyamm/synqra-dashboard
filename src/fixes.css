@@ -415,7 +415,7 @@ button,
 
 @media (max-width: 720px) {
   .kanban-header-bar {
-    padding: 12px !important;
+    padding: 10px !important;
   }
 
   .kanban-header-bar .kanban-project-trigger {
