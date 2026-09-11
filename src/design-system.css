@@ -137,14 +137,16 @@ h1,h2,h3,h4,strong,b,button,.breadcrumb-title,.side-label,.command-group-label,.
    (ellipsis) to protect the row. No flex:1, no width:100%, no wrap on row 1. */
 .kanban-header-bar{display:block;padding:8px;border-bottom:0}
 .kanban-header-bar .kanban-toolbar-actions{display:flex;align-items:center;justify-content:flex-start;flex-wrap:nowrap;gap:12px;width:100%;min-width:0;margin:0;padding:0}
-.kanban-header-bar .kanban-project-trigger{flex:0 1 300px;width:300px;max-width:320px;min-width:220px;height:50px;min-height:50px;padding:0 18px;border-radius:12px;font-size:15px}
+.kanban-header-bar .kanban-project-trigger{flex:0 1 300px;width:300px;max-width:320px;min-width:220px;height:50px;min-height:50px;padding:0 8px;border-radius:12px;font-size:13px}
 .kanban-header-bar .kanban-project-trigger > span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .kanban-header-bar .toolbar-select{flex:0 0 auto;width:auto;max-width:none;min-width:0}
-.kanban-header-bar .toolbar-select .app-select-trigger{width:auto;min-width:0;height:50px;min-height:50px;padding:0 8px;border-radius:12px;gap:9px;font-size:15px;white-space:nowrap;justify-content:center}
+.kanban-header-bar .toolbar-select .app-select-trigger{width:auto;min-width:0;height:50px;min-height:50px;padding:0 8px;border-radius:12px;gap:9px;font-size:13px;white-space:nowrap;justify-content:center}
+.kanban-header-bar .toolbar-select .app-select-label{font-size:13px}
 .kanban-header-bar .toolbar-select .app-select-chevron{display:none}
-.kanban-header-bar .toolbar-meta-trigger{flex:0 0 auto;width:auto;max-width:none;min-width:0;height:50px;min-height:50px;padding:0 8px;border-radius:12px;gap:9px;font-size:15px;justify-content:center;white-space:nowrap}
+.kanban-header-bar .toolbar-meta-trigger{flex:0 0 auto;width:auto;max-width:none;min-width:0;height:50px;min-height:50px;padding:0 8px;border-radius:12px;gap:9px;font-size:13px;justify-content:center;white-space:nowrap}
 .kanban-header-bar .toolbar-divider{flex:0 0 auto;height:32px;margin:0 4px 0 auto}
-.kanban-header-bar .create-task-cta{flex:0 0 auto;width:auto;min-width:0;height:50px;min-height:50px;margin-left:0;border-radius:12px;padding:0 20px;font-size:15px;white-space:nowrap}
+/* Create Task owns its sizing — keep separate from trigger/meta rules. */
+.kanban-header-bar .create-task-cta{flex:0 0 auto;width:auto;min-width:0;height:50px;min-height:50px;margin-left:0;border-radius:12px;padding:0 8px;font-size:13px;white-space:nowrap}
 .kanban-header-bar .mini-avatar{width:24px;height:24px;font-size:9px}
 .kanban-header-bar .kanban-toolbar-actions .app-select-icon,.kanban-header-bar .kanban-toolbar-actions .toolbar-meta-trigger>svg,.kanban-header-bar .kanban-toolbar-actions .kanban-project-trigger>svg,.kanban-header-bar .kanban-toolbar-actions .create-task-cta>svg{width:18px;height:18px;flex:none}
 /* Team keeps avatars + full label: never shrink, cap only long selections. */
@@ -163,9 +165,11 @@ h1,h2,h3,h4,strong,b,button,.breadcrumb-title,.side-label,.command-group-label,.
   .kanban-header-bar .kanban-toolbar-actions{flex-wrap:wrap;gap:8px}
   .kanban-header-bar .kanban-project-trigger{flex:1 1 200px;width:auto;max-width:none;min-width:180px;height:44px;min-height:44px}
   .kanban-header-bar .toolbar-select,.kanban-header-bar .toolbar-meta-trigger{flex:0 1 auto;width:auto}
-  .kanban-header-bar .toolbar-select .app-select-trigger,.kanban-header-bar .toolbar-meta-trigger,.kanban-header-bar .create-task-cta{height:44px;min-height:44px;padding-left:8px;padding-right:8px;font-size:13px}
+  .kanban-header-bar .toolbar-select .app-select-trigger,.kanban-header-bar .toolbar-meta-trigger{height:44px;min-height:44px;padding-left:8px;padding-right:8px;font-size:13px}
+  .kanban-header-bar .create-task-cta{height:44px;min-height:44px;padding-left:8px;padding-right:8px;font-size:13px}
   .kanban-header-bar .create-task-cta{margin-left:auto}
 }
 @media(max-width:720px){
-  .kanban-header-bar .kanban-toolbar-actions .app-select-trigger,.kanban-header-bar .toolbar-meta-trigger,.kanban-header-bar .create-task-cta,.kanban-header-bar .kanban-project-trigger{height:44px;min-height:44px}
+  .kanban-header-bar .kanban-toolbar-actions .app-select-trigger,.kanban-header-bar .toolbar-meta-trigger,.kanban-header-bar .kanban-project-trigger{height:44px;min-height:44px}
+  .kanban-header-bar .create-task-cta{height:44px;min-height:44px}
 }
