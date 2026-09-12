@@ -29,3 +29,17 @@ export async function createSession(user, env) {
 export function signedIn(user, token, status = 200) {
   return Response.json({ user: publicUser(user) }, { status, headers: { 'cache-control': 'no-store', 'set-cookie': `${sessionCookie}=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=604800` } });
 }
+
+export async function canAccessProject(env, user, projectId = 'default', permission = 'view') {
+  if (['super_admin', 'admin'].includes(user.role)) return true;
+  const project = await env.DB.prepare('SELECT id, access_mode AS accessMode FROM projects WHERE id = ?').bind(projectId).first();
+  if (!project) return false;
+  const membership = await env.DB.prepare('SELECT role FROM project_memberships WHERE project_id = ? AND user_id = ?').bind(projectId, user.id).first();
+  if (membership) return permission === 'view' || membership.role === 'editor';
+  return permission === 'view' && project.accessMode === 'link';
+}
+
+export async function projectIdForReview(env, reviewId) {
+  const row = await env.DB.prepare('SELECT project_id AS projectId FROM reviews WHERE id = ?').bind(reviewId).first();
+  return row?.projectId || null;
+}

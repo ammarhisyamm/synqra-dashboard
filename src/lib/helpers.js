@@ -31,7 +31,22 @@ export const seed = {
 };
 
 export function loadData() {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || seed; } catch { return seed; }
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    if (!saved || typeof saved !== 'object') return seed;
+    return {
+      ...seed,
+      ...saved,
+      project: { ...seed.project, ...(saved.project || {}) },
+      reviews: Array.isArray(saved.reviews) ? saved.reviews : seed.reviews,
+      meetings: Array.isArray(saved.meetings) ? saved.meetings : seed.meetings,
+      projects: Array.isArray(saved.projects) ? saved.projects : [],
+      sprints: Array.isArray(saved.sprints) ? saved.sprints : [],
+      metadata: Array.isArray(saved.metadata) ? saved.metadata : [],
+      spaces: Array.isArray(saved.spaces) ? saved.spaces : [],
+      notifications: Array.isArray(saved.notifications) ? saved.notifications : []
+    };
+  } catch { return seed; }
 }
 
 export function statusFor(review) {

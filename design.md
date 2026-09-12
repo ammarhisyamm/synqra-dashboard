@@ -250,3 +250,11 @@ Do not add an isolated component-specific “design fix” when a shared primiti
 - API responses are treated as user/workspace state and must use `Cache-Control: no-store`; the client API wrapper also requests `no-store` by default.
 - Feature CSS imports belong with the feature when practical. Do not promote detail, meeting workflow, or Kanban compatibility rules back into the global entrypoint.
 - Verification is required before deleting compatibility rules: production build, automated tests, CSS diff check, and a visual pass at desktop, tablet, and narrow mobile widths with long/empty content.
+
+### Data access and delivery guardrails
+
+- Project access is represented by `project_memberships(project_id, user_id, role)`. `editor` may mutate project data; `viewer` is read-only. Workspace admins retain global access, while link-access projects remain readable to authenticated users.
+- Every project-scoped API handler must resolve the owning `project_id` and authorize it before reading or mutating data. Bootstrap responses must apply the same project visibility rule so the client cannot infer data from another project.
+- The primary JavaScript entry is route-split with `React.lazy`; page-sized modules load only when their route is selected. Keep shared primitives and the app shell in the entry chunk, and verify bundle sizes with `npm run build`.
+- The main browser journeys are covered by `npm run test:e2e`: authentication/navigation and opening a task from All Reviews. Keep these tests deterministic by mocking API boundaries, not by depending on production data.
+- After schema or authorization changes, run the unit suite, E2E suite, production build, and the matching remote D1 migration before deployment. API responses remain `no-store`; immutable hashed assets may use long-lived cache headers.

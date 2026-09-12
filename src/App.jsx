@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Archive, ArrowRight, Bell, CalendarBlank as CalendarDays, CalendarPlus, Check, CheckCircle as CheckCircle2, CaretDown as ChevronDown, CaretLeft as ChevronLeft, CaretRight as ChevronRight, CaretUpDown as ChevronsUpDown, Circle as CircleDot,
   ClipboardText as ClipboardList, Clock, Clock as Clock3, Copy, DownloadSimple as Download, ArrowSquareOut as ExternalLink, Eye, Flag, Folder, House as Home, Info, Kanban as KanbanSquare, Link as Link2, ListChecks, Lock,
@@ -19,8 +19,6 @@ import { meetingsApi } from './api/meetings';
 import { NewProjectModal } from './components/projects/NewProjectModal';
 import { DeleteProjectModal } from './components/projects/DeleteProjectModal';
 import { CommandPalette } from './components/navigation/CommandPalette';
-import { MeetingEditor } from './components/meetings/MeetingEditor';
-import { KanbanWorkspace } from './components/kanban/KanbanWorkspace';
 import { AppSelect } from './components/common/AppSelect';
 
 import { REPORT_COLORS, seed, loadData, statusFor, nextTaskKey, downloadReviewsCsv, elapsedLabel, makeHistoryModel, historyDateLabel, deduplicateNotifications, extractNotes } from './lib/helpers';
@@ -28,15 +26,19 @@ import { ErrorPanel } from './components/common/ErrorPanel';
 import { SectionHead, AttentionCard, StatusPill, Empty, Metric, InlineSync, DetailSection, MetricCard, Priority, PageHeading, DatePicker, ActionDialog, SelectField, Modal } from './components/common/ui';
 import { NotificationMenu, Sidebar, ProjectSwitcher } from './components/layout/Shell';
 import { AuthLoading, AuthScreen, CollaboratorModal } from './components/auth/Auth';
-import { Dashboard, MeetingRail, Summary, SprintSummary } from './components/dashboard/Dashboard';
-import { Reviews } from './components/reviews/Reviews';
-import { ReviewDetailEnhanced } from './components/reviews/ReviewDetail';
-import { Meetings, MeetingModal } from './components/meetings/MeetingsView';
-import { RAG_META, RagPill, Donut, BurndownChart, CfdChart, Reports, VelocityBars } from './components/reports/Reports';
-import { ArchivePage } from './components/archive/ArchivePage';
-import { SettingsPageEnhanced } from './components/settings/SettingsPage';
-import { AdminPageEnhanced } from './components/admin/AdminPage';
-import { ReviewModal } from './components/reviews/ReviewModal';
+
+const Dashboard = lazy(() => import('./components/dashboard/Dashboard').then(module => ({ default: module.Dashboard })));
+const Reviews = lazy(() => import('./components/reviews/Reviews').then(module => ({ default: module.Reviews })));
+const ReviewDetailEnhanced = lazy(() => import('./components/reviews/ReviewDetail').then(module => ({ default: module.ReviewDetailEnhanced })));
+const Meetings = lazy(() => import('./components/meetings/MeetingsView').then(module => ({ default: module.Meetings })));
+const MeetingModal = lazy(() => import('./components/meetings/MeetingsView').then(module => ({ default: module.MeetingModal })));
+const MeetingEditor = lazy(() => import('./components/meetings/MeetingEditor').then(module => ({ default: module.MeetingEditor })));
+const KanbanWorkspace = lazy(() => import('./components/kanban/KanbanWorkspace').then(module => ({ default: module.KanbanWorkspace })));
+const Reports = lazy(() => import('./components/reports/Reports').then(module => ({ default: module.Reports })));
+const ArchivePage = lazy(() => import('./components/archive/ArchivePage').then(module => ({ default: module.ArchivePage })));
+const SettingsPageEnhanced = lazy(() => import('./components/settings/SettingsPage').then(module => ({ default: module.SettingsPageEnhanced })));
+const AdminPageEnhanced = lazy(() => import('./components/admin/AdminPage').then(module => ({ default: module.AdminPageEnhanced })));
+const ReviewModal = lazy(() => import('./components/reviews/ReviewModal').then(module => ({ default: module.ReviewModal })));
 
 export function App() {
   const [data, setData] = useState(loadData);
@@ -135,8 +137,8 @@ export function App() {
   }, [page]);
 
   const activeProjectId = data.project?.id || 'default';
-  const activeReviews = useMemo(() => data.reviews.filter(r => !r.archived && (activeProjectId === 'default' ? (!r.projectId || r.projectId === 'default') : r.projectId === activeProjectId)), [data.reviews, activeProjectId]);
-  const activeMeetings = useMemo(() => data.meetings.filter(meeting => activeProjectId === 'default' ? (!meeting.projectId || meeting.projectId === 'default') : meeting.projectId === activeProjectId), [data.meetings, activeProjectId]);
+  const activeReviews = useMemo(() => (data.reviews || []).filter(r => !r.archived && (activeProjectId === 'default' ? (!r.projectId || r.projectId === 'default') : r.projectId === activeProjectId)), [data.reviews, activeProjectId]);
+  const activeMeetings = useMemo(() => (data.meetings || []).filter(meeting => activeProjectId === 'default' ? (!meeting.projectId || meeting.projectId === 'default') : meeting.projectId === activeProjectId), [data.meetings, activeProjectId]);
   const activeWorkload = useMemo(() => {
     const counts = activeReviews.filter(review => review.stage !== 'Completed').reduce((result, review) => {
       const assignee = review.assignee || 'Unassigned';
@@ -363,25 +365,29 @@ export function App() {
       {projectOpen && <ProjectSwitcher project={data.project} projects={data.projects || []} collapsed={collapsed} onSelect={selected => { setData(prev => ({ ...prev, project: selected })); setProjectOpen(false); setPage('Overview'); }} onNew={() => { setProjectOpen(false); setModal('project'); }} onClose={() => setProjectOpen(false)} />}
       {collabOpen && <CollaboratorModal user={user} onClose={() => setCollabOpen(false)} onToast={setToast} onMembersChanged={refreshTeam} />}
       <ErrorPanel compact key={page}>
+      <Suspense fallback={<div className="empty-state"><Wave /> Loading page…</div>}>
       {page === 'Overview' && <Dashboard reviews={activeReviews} meetings={activeMeetings} workload={activeWorkload} reportByStatus={activeReportByStatus} sprints={activeSprints} goTo={setPage} onSubmitReview={() => setModal('review')} onNewMeeting={openNewMeeting} />}
       {page === 'All Reviews' && <Reviews reviews={activeReviews} query={query} setQuery={setQuery} updateReview={updateReview} archiveReview={archiveReview} setModal={setModal} onOpen={setSelectedReview} teamList={team} sync={{ saving: savingField, saved: savedField, failed: failedField }} onRetry={failed => { setFailedField(null); updateReview(failed.id, failed.patch, failed.field); }} />}
       {page === 'Meetings' && <Meetings meetings={activeMeetings} reviews={activeReviews} addMeeting={addMeeting} addReview={addReview} onDeleteMeeting={deleteMeeting} setToast={setToast} setModal={setModal} onNewMeeting={openNewMeeting} onTasksCreated={count => showSuccess(`${count} review items created`, 'Action items from the meeting notes are now on the board.', 'View board', () => setPage('Board'))} onOpen={setSelectedReview} />}
       {page === 'Meeting Editor' && <MeetingEditor user={user} team={team} onClose={() => setPage('Meetings')} onToast={setToast} onCreate={createMeetingFromEditor} />}
       {page === 'Board' && <KanbanWorkspace project={data.project} team={team} reviews={activeReviews} sprints={activeSprints} metadata={(data.metadata || []).filter(item => !item.projectId || item.projectId === activeProjectId)} projectId={activeProjectId} updateReview={updateReview} createSprint={addSprint} updateSprint={updateSprint} refreshMetadata={refreshMetadata} setModal={setModal} onOpen={setSelectedReview} requestConfirm={opts => setDialog(opts)} onToast={setToast} onProjectClick={() => setProjectOpen(!projectOpen)} />}
-      {page === 'Archive' && <ArchivePage reviews={data.reviews.filter(r => r.archived)} restoreReview={restoreReview} goTo={setPage} />}
+      {page === 'Archive' && <ArchivePage reviews={(data.reviews || []).filter(r => r.archived)} restoreReview={restoreReview} goTo={setPage} />}
       {page === 'Reports' && <Reports reviews={data.reviews} projects={data.projects || []} sprints={data.sprints || []} projectName={data.project.name} onRefresh={refreshAll} onOpen={setSelectedReview} updatedAt={lastSync} />}
       {page === 'Settings' && <SettingsPageEnhanced project={data.project} user={user} saveProject={saveProject} setToast={setToast} onDeleteProject={() => setModal('delete-project')} />}
       {page === 'Admin' && <AdminPageEnhanced user={user} setToast={setToast} requestConfirm={opts => setDialog(opts)} />}
+      </Suspense>
       </ErrorPanel>
     </main>
     {toast && <div className="toast"><CheckCircle2 size={17}/>{toast}</div>}
     <ErrorPanel compact key={'modal-' + String(modal) + '-' + (selectedReview ? selectedReview.id : 'none')}>
+    <Suspense fallback={null}>
     {modal === 'review' && <ReviewModal meetings={activeMeetings} team={team} onClose={() => setModal(null)} onSave={(review) => { addReview(review); setModal(null); showSuccess('Review created', `"${review.title}" is now on the board.`, 'View All Reviews', () => setPage('All Reviews')); }} />}
     {modal === 'meeting' && <MeetingModal onClose={() => setModal(null)} onSave={async meeting => { await addMeeting(meeting); setModal(null); showSuccess('Meeting saved', `"${meeting.title}" has been added to Meetings.`, 'View Meetings', () => setPage('Meetings')); }} />}
     {modal === 'project' && <NewProjectModal onClose={() => setModal(null)} onCreate={createProject} />}
     {modal === 'delete-project' && data.project?.id !== 'default' && <DeleteProjectModal project={data.project} onClose={() => setModal(null)} onDelete={deleteProject} />}
     {selectedReview && <ReviewDetailEnhanced review={selectedReview} meetings={activeMeetings} metadata={(data.metadata || []).filter(item => !item.projectId || item.projectId === activeProjectId)} sprints={activeSprints} user={user} team={team} onClose={() => setSelectedReview(null)} onActivity={refreshNotifications} onUpdated={saved => { setData(prev => ({...prev, reviews: prev.reviews.map(r => r.id === saved.id ? {...r, ...saved} : r)})); setSelectedReview(saved); }} onDeleted={id => { setData(prev => ({...prev, reviews: prev.reviews.filter(r => r.id !== id)})); setSelectedReview(null); showSuccess('Task deleted', 'The task has been permanently removed.', 'Done'); }} onToast={setToast} onRemoveRequest={doDelete => setDialog({ danger: true, icon: <Trash2 size={24}/>, title: 'Delete this review?', subtitle: 'This review and its comments will be permanently deleted.', confirmLabel: 'Delete review', onConfirm: doDelete })} />}
     {dialog && <ActionDialog dialog={dialog} onClose={() => setDialog(null)} />}
+    </Suspense>
     </ErrorPanel>
   </div>;
 }
