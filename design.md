@@ -155,6 +155,7 @@ Default height is 36px. Use 13px UI text at weight 500. Include a 7–8px icon g
 - Field text contract: 13px, weight 400, `--color-text`. Fields must set weight and size explicitly — never inherit them from the label.
 - Placeholder contract: `--color-text-subtle` (`--ui-placeholder`, #98a6b9), weight 400, same size as the field text. Placeholders are never bold and never use a second colour; write them as short examples or prompts ("e.g. …", "Add …", "Search …").
 - Display-size title inputs (meeting title, task detail title) are the only weight-500 inputs; they are not labelled fields.
+- Assignee (multi): `MultiCheckSelect` with `AssigneeOption` (avatar, name, email hint) and an avatar-stack prefix — same anatomy as the Board Team filter. Selections persist as the `assignees` array (max 8); `assignee` remains the primary (first) value so tables, cards, and filters keep working unchanged.
 - Use the shared `AppSelect` component for custom menus; do not introduce unstyled platform-select UI for new functionality.
 - On focus: border `--color-focus` plus a 3px `--color-focus-ring` ring.
 - Always provide an empty option or placeholder when a field is optional. Do not prefill people or past dates unless explicitly required by the user.

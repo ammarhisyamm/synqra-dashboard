@@ -180,6 +180,10 @@ h1,h2,h3,h4,strong,b,button,.breadcrumb-title,.side-label,.command-group-label,.
   .kanban-header-bar .create-task-cta{height:36px;min-height:36px}
 }
 
+/* Modals must stay centered and reachable when taller than the viewport:
+   cap height and scroll internally instead of overflowing the backdrop. */
+.modal,.action-dialog,.project-modal,.delete-project-modal,.collab-modal,.sprint-modal{max-height:calc(100dvh - 32px);overflow-y:auto}
+
 /* Form typography contract (documented in design.md §Inputs):
    labels are caption 12px/500; fields are 13px/400 so weight and size never
    inherit from the label; placeholders use the muted token at weight 400.

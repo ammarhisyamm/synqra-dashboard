@@ -11,6 +11,12 @@ export function normalizeReview(input, partial = false) {
   if (!partial || 'priority' in input) { if (!priorities.has(input.priority)) throw new Error('Invalid priority.'); review.priority = input.priority; }
   if (!partial || 'stage' in input) { const stage = safeText(input.stage, 80); if (!stage) throw new Error('Invalid stage.'); review.stage = stage; }
   if (!partial || 'assignee' in input) review.assignee = safeText(input.assignee, 80);
+  if (!partial || 'assignees' in input) {
+    const list = (Array.isArray(input.assignees) ? input.assignees : []).map(name => safeText(name, 80)).filter(Boolean).slice(0, 8);
+    review.assignees = JSON.stringify(list);
+    if (list.length) review.assignee = list[0];
+    else if (!partial) review.assignee = review.assignee || '';
+  }
   if (!partial || 'due' in input) review.due = /^\d{4}-\d{2}-\d{2}$/.test(input.due || '') ? input.due : null;
   if (!partial || 'start_date' in input || 'startDate' in input) {
     const start = input.start_date ?? input.startDate;
@@ -40,7 +46,7 @@ export function normalizeReview(input, partial = false) {
 
 
 export async function reviewSnapshot(env, reviewId) {
-  return env.DB.prepare("SELECT id, key, title, area, priority, stage, assignee, due, start_date AS startDate, description, status, submitted_by AS submittedBy, reporter, meeting_id AS meetingId, estimate_hours AS estimateHours, epic, feature, sprint, labels, project_id AS projectId, parent_id AS parentId, item_type AS itemType, sprint_id AS sprintId, created_at AS createdAt, updated_at AS updatedAt, archived FROM reviews WHERE id = ?").bind(reviewId).first();
+  return env.DB.prepare("SELECT id, key, title, area, priority, stage, assignee, assignees, due, start_date AS startDate, description, status, submitted_by AS submittedBy, reporter, meeting_id AS meetingId, estimate_hours AS estimateHours, epic, feature, sprint, labels, project_id AS projectId, parent_id AS parentId, item_type AS itemType, sprint_id AS sprintId, created_at AS createdAt, updated_at AS updatedAt, archived FROM reviews WHERE id = ?").bind(reviewId).first();
 }
 
 export async function notifyUsers(env, excludeUserId, { type, title, body, reviewId = null }) {

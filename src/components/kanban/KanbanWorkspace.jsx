@@ -183,7 +183,7 @@ export function KanbanWorkspace({ project, team = [], reviews, sprints = [], met
     const text = `${task.title} ${task.key || ''} ${task.description || ''}`.toLowerCase();
     const taskLabels = Array.isArray(task.labels) ? task.labels : [];
     return (!search || text.includes(search.toLowerCase()))
-      && (!assignees.length || assignees.includes(task.assignee || ''))
+      && (!assignees.length || assignees.some(name => (Array.isArray(task.assignees) && task.assignees.length ? task.assignees : [task.assignee]).includes(name)))
       && (!statuses.length || statuses.includes(statusFor(task)))
       && (!priorities.length || priorities.includes(task.priority))
       && (!epicFilter.length || epicFilter.includes(task.epic || ''))

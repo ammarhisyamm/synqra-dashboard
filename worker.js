@@ -338,7 +338,7 @@ async function routeApi(request, env) {
       if (review.meeting_id && !await env.DB.prepare('SELECT id FROM meetings WHERE id = ?').bind(review.meeting_id).first()) return json({ error: 'Related meeting not found.' }, 400);
       if (review.parent_id && !await env.DB.prepare('SELECT id FROM reviews WHERE id = ?').bind(review.parent_id).first()) return json({ error: 'Parent item not found.' }, 400);
       const base = { id: reviewId, ...review, submitted_by: review.submitted_by || user.name, archived: 0 };
-      const insertRow = key => env.DB.prepare('INSERT INTO reviews (id, key, title, area, priority, stage, assignee, due, start_date, description, status, submitted_by, meeting_id, reporter, estimate_hours, epic, feature, sprint, labels, project_id, parent_id, item_type, sprint_id, archived) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(base.id, key, base.title, base.area, base.priority, base.stage, base.assignee, base.due, base.start_date ?? null, base.description, base.status, base.submitted_by, base.meeting_id, base.reporter || user.name, base.estimate_hours ?? null, base.epic || '', base.feature || '', base.sprint || '', base.labels || '[]', base.project_id || 'default', base.parent_id || null, base.item_type || 'task', base.sprint_id || null, base.archived).run();
+      const insertRow = key => env.DB.prepare('INSERT INTO reviews (id, key, title, area, priority, stage, assignee, assignees, due, start_date, description, status, submitted_by, meeting_id, reporter, estimate_hours, epic, feature, sprint, labels, project_id, parent_id, item_type, sprint_id, archived) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(base.id, key, base.title, base.area, base.priority, base.stage, base.assignee, base.assignees ?? JSON.stringify(base.assignee ? [base.assignee] : []), base.due, base.start_date ?? null, base.description, base.status, base.submitted_by, base.meeting_id, base.reporter || user.name, base.estimate_hours ?? null, base.epic || '', base.feature || '', base.sprint || '', base.labels || '[]', base.project_id || 'default', base.parent_id || null, base.item_type || 'task', base.sprint_id || null, base.archived).run();
       // Retry on key collision: MAX()+1 races under concurrency, key is UNIQUE.
       let lastError = null;
       for (let attempt = 0; attempt < 5; attempt++) {
@@ -356,7 +356,7 @@ async function routeApi(request, env) {
       await env.DB.prepare('INSERT INTO review_status_history (id, review_id, from_status, to_status, user_id) VALUES (?, ?, ?, ?, ?)').bind(id(), base.id, null, base.status, user.id).run();
       await recordActivity(env, base.id, user.id, 'created', { title: base.title });
       const saved = await reviewSnapshot(env, base.id);
-      return json({ ...saved, labels: parseJson(saved.labels, []) }, 201);
+      return json({ ...saved, labels: parseJson(saved.labels, []), assignees: parseJson(saved.assignees, []) }, 201);
     } catch (error) { return json({ error: error.message }, 400); }
   }
 
@@ -373,7 +373,7 @@ async function routeApi(request, env) {
       env.DB.prepare('SELECT id, title, item_type AS itemType, stage, status FROM reviews WHERE parent_id = ? AND archived = 0 ORDER BY created_at ASC').bind(detailsMatch[1]),
       env.DB.prepare('SELECT id, filename, content_type AS contentType, size, created_at AS createdAt FROM review_attachments WHERE review_id = ? ORDER BY created_at DESC').bind(detailsMatch[1])
     ]);
-    return json({ review: { ...review, labels: parseJson(review.labels, []) }, meeting: meeting.results[0] || null, comments: comments.results, subtasks: subtasks.results.map(item => ({ ...item, completed: Boolean(item.completed) })), history: history.results, children: children.results, attachments: attachments.results, activity: activity.results.map(item => ({ ...item, metadata: parseJson(item.metadata, {}) })) });
+    return json({ review: { ...review, labels: parseJson(review.labels, []), assignees: parseJson(review.assignees, []) }, meeting: meeting.results[0] || null, comments: comments.results, subtasks: subtasks.results.map(item => ({ ...item, completed: Boolean(item.completed) })), history: history.results, children: children.results, attachments: attachments.results, activity: activity.results.map(item => ({ ...item, metadata: parseJson(item.metadata, {}) })) });
   }
   const commentMatch = path.match(/^\/api\/reviews\/([a-zA-Z0-9-]+)\/comments$/);
   if (request.method === 'POST' && commentMatch) {
@@ -403,7 +403,7 @@ async function routeApi(request, env) {
       if ('status' in patch && patch.status !== before.status) await env.DB.prepare('INSERT INTO review_status_history (id, review_id, from_status, to_status, user_id) VALUES (?, ?, ?, ?, ?)').bind(id(), reviewMatch[1], before.status, patch.status, user.id).run();
       const changes = Object.fromEntries(keys.map(key => [key, { from: before[key], to: saved[key] }]));
       await recordActivity(env, reviewMatch[1], user.id, 'updated', { fields: keys, changes });
-      return json({ ...saved, labels: parseJson(saved.labels, []) });
+      return json({ ...saved, labels: parseJson(saved.labels, []), assignees: parseJson(saved.assignees, []) });
     } catch (error) { return json({ error: error.message }, 400); }
   }
 
