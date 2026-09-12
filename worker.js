@@ -443,7 +443,7 @@ async function routeApi(request, env) {
     const item = await env.DB.prepare('SELECT object_key AS objectKey, filename, content_type AS contentType FROM review_attachments WHERE id = ?').bind(attachmentMatch[1]).first();
     if (!item) return json({ error: 'Attachment not found.' }, 404); const object = await env.ATTACHMENTS.get(item.objectKey);
     if (!object) return json({ error: 'Attachment object not found.' }, 404);
-    return new Response(object.body, { headers: { 'content-type': item.contentType, 'content-disposition': `attachment; filename="${item.filename.replace(/"/g, '')}"`, 'cache-control': 'private, max-age=3600' } });
+    return new Response(object.body, { headers: { 'content-type': item.contentType, 'content-disposition': `attachment; filename="${item.filename.replace(/"/g, '')}"`, 'cache-control': 'no-store' } });
   }
   if (attachmentMatch && request.method === 'DELETE') {
     if (!env.ATTACHMENTS) return json({ error: 'R2 attachments are not configured.' }, 503);

@@ -27,6 +27,9 @@ import { dateLabel, relativeDate } from '../../lib/dates';
 import { elapsedLabel, historyDateLabel, statusFor, makeHistoryModel } from '../../lib/helpers';
 import { DetailSection, SelectField, StatusPill, Priority } from '../common/ui';
 import { AREAS, STAGES, PRIORITIES } from '../../constants/workflow';
+import '../../detail.css';
+import '../../detail-overrides.css';
+import '../../workflow.css';
 
 export function ReviewDetailEnhanced({ review, meetings, metadata = [], sprints = [], user, team = [], onClose, onUpdated, onDeleted, onToast, onRemoveRequest, onActivity = () => {} }) {
   const teamNames = team.map(t => t.name);
@@ -47,7 +50,7 @@ export function ReviewDetailEnhanced({ review, meetings, metadata = [], sprints 
   const toggleSubtask = async item => { try { const saved = await api(`/api/reviews/${review.id}/subtasks/${item.id}`, { method: 'PATCH', body: JSON.stringify({ completed: !item.completed }) }); setDetail(previous => ({ ...previous, subtasks: previous.subtasks.map(current => current.id === item.id ? { ...current, ...saved } : current) })); onActivity(); } catch (error) { onToast(error.message); } };
   const submitComment = async event => { event.preventDefault(); if (!comment.trim()) return; try { const saved = await api(`/api/reviews/${review.id}/comments`, { method: 'POST', body: JSON.stringify({ body: comment }) }); setDetail(previous => ({ ...previous, comments: [...(previous.comments || []), saved] })); setComment(''); onActivity(); onToast('Comment added'); } catch (error) { onToast(error.message); } };
   const remove = () => { const action = async () => { try { await api(`/api/reviews/${review.id}`, { method: 'DELETE' }); onDeleted(review.id); } catch (error) { onToast(error.message); } }; onRemoveRequest ? onRemoveRequest(action) : action(); };
-  const uploadFile = async file => { if (!file) return; setUploading(true); try { const form = new FormData(); form.append('file', file); const response = await fetch(`/api/reviews/${review.id}/attachments`, { method: 'POST', body: form }); const result = await response.json(); if (!response.ok) throw new Error(result.error); setDetail(previous => ({ ...previous, attachments: [result, ...(previous.attachments || [])] })); onActivity(); onToast('Attachment uploaded'); } catch (error) { onToast(error.message); } finally { setUploading(false); } };
+  const uploadFile = async file => { if (!file) return; setUploading(true); try { const form = new FormData(); form.append('file', file); const response = await fetch(`/api/reviews/${review.id}/attachments`, { method: 'POST', body: form, cache: 'no-store' }); const result = await response.json(); if (!response.ok) throw new Error(result.error); setDetail(previous => ({ ...previous, attachments: [result, ...(previous.attachments || [])] })); onActivity(); onToast('Attachment uploaded'); } catch (error) { onToast(error.message); } finally { setUploading(false); } };
   const upload = event => { const file = event.target.files?.[0]; event.target.value = ''; uploadFile(file); };
   const labels = Array.isArray(draft.labels) ? draft.labels : [];
   const epics = metadata.filter(item => item.type === 'epic').map(item => item.name);

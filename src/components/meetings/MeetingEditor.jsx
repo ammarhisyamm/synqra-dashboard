@@ -4,6 +4,7 @@ import { MeetingAiReview } from './MeetingAiReview';
 import { extractItemsLocally, generateActionItemsWithOrvix, hashNotes } from '../../api/ai';
 import { api } from '../../api/client';
 import { Wave } from '../Wave.jsx';
+import '../../workflow.css';
 
 const today = () => new Date().toISOString().slice(0, 10);
 const DRAFT_STORAGE_KEY = 'synqra-meeting-editor-draft';

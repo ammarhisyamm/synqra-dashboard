@@ -1,6 +1,7 @@
 export async function api(path, options = {}) {
   const response = await fetch(path, {
     ...options,
+    cache: options.cache || 'no-store',
     headers: { 'content-type': 'application/json', ...(options.headers || {}) }
   });
   let body;
@@ -22,4 +23,3 @@ export async function api(path, options = {}) {
   }
   return body || {};
 }
-

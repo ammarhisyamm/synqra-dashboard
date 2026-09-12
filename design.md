@@ -210,14 +210,20 @@ Before implementing a component or feature:
 
 ## 6. Applied UI coverage
 
-The shared system is applied to every current product surface:
+The shared primitives and token layer are the default for every new or touched control. Feature migration is tracked explicitly so compatibility CSS is not removed before the page has been checked at desktop, tablet, and 375px widths.
 
-- Application shell, sidebar, top bar, project switcher, notifications, and command palette.
-- Overview, reviews, reports, admin tables, archive, meetings, meeting editor, and AI review.
-- Board, sprint planning, timeline, task-detail drawer, settings, authentication, loading, empty, and error states.
-- All shared buttons, fields, dropdowns, cards, tables, pills, dialogs, and responsive layouts.
+| Surface | Migration state | Compatibility CSS scope |
+| --- | --- | --- |
+| Shell, sidebar, top bar, project switcher, notifications, command palette | Shared controls adopted; layout compatibility retained | `styles.css`, `fixes.css` |
+| Overview / dashboard | Shared buttons, pills, cards, and fields adopted | `styles.css`, `design-system.css` |
+| Reviews list and review modal | Shared fields, selects, dialogs, pills, and CSV action adopted | `styles.css`, `fixes.css` |
+| Task-detail drawer | Feature-owned detail/workflow styles; shared selects, fields, dialogs, and status primitives | `detail.css`, `detail-overrides.css`, `workflow.css` |
+| Meetings, editor, and AI review | Feature-owned workflow styles; shared fields/selects/dialogs where touched | `workflow.css`, `styles.css` |
+| Reports | Shared cards, selects, pills, and report overview styling | `styles.css`, `design-system.css` |
+| Settings, archive, and admin | Shared fields, dialogs, pills, and common layout contract | `styles.css`, `design-system.css` |
+| Kanban list, board, sprint planning, timeline, metadata dialogs | Specialized board layout retained; shared toolbar/select/dialog contract | `kanban-convergence.css`, `metadata.css`, `kanban-workspace.css`, `fixes.css` |
 
-Legacy styles may remain for structural compatibility, but `src/design-system.css` is loaded last and owns the final visual contract. A feature is incomplete if it bypasses this layer or introduces a competing palette, type scale, radius, or field anatomy.
+Legacy styles may remain for structural compatibility, but `src/design-system.css` is loaded last and owns the final visual contract. A feature is incomplete if it bypasses shared primitives for a newly touched control or introduces a competing palette, type scale, radius, or field anatomy.
 
 ## 7. Source of truth for implementation
 
@@ -240,3 +246,6 @@ Do not add an isolated component-specific “design fix” when a shared primiti
 - `src/components/common/AppSelect.jsx` uses Radix Select for focus management, keyboard navigation, Escape handling, and portal positioning while retaining the Synqra class contract during migration.
 - Cloudflare serves the HTML shell with `no-store` so deployments pick up the newest Vite manifest immediately. Fingerprinted `/assets/*.css` and `/assets/*.js` files use immutable one-year caching; non-fingerprinted public assets revalidate hourly.
 - User data in `localStorage` is not cleared as part of a UI deploy. Application data is product state, not a disposable browser cache.
+- API responses are treated as user/workspace state and must use `Cache-Control: no-store`; the client API wrapper also requests `no-store` by default.
+- Feature CSS imports belong with the feature when practical. Do not promote detail, meeting workflow, or Kanban compatibility rules back into the global entrypoint.
+- Verification is required before deleting compatibility rules: production build, automated tests, CSS diff check, and a visual pass at desktop, tablet, and narrow mobile widths with long/empty content.

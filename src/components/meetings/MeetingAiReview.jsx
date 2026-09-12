@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { ArrowLeft, CheckSquare, Trash, Flag, Users, MagicWand, Plus, Check } from '@phosphor-icons/react';
 import { AREAS, PRIORITIES } from '../../constants/workflow';
 import { AppSelect } from '../common/AppSelect';
+import '../../workflow.css';
 
 const initials = name => (name || 'M').trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
 const STATUS_OPTIONS = ['Open', 'In Progress', 'Review', 'Resolved', 'Rejected'];
