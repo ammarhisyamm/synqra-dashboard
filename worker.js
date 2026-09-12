@@ -494,6 +494,21 @@ async function routeApi(request, env) {
 export default {
   async fetch(request, env) {
     if (new URL(request.url).pathname.startsWith('/api/')) return routeApi(request, env);
-    return env.ASSETS.fetch(request);
+    const response = await env.ASSETS.fetch(request);
+    const pathname = new URL(request.url).pathname;
+    const headers = new Headers(response.headers);
+    // HTML is the manifest that points at Vite's hashed bundles. Never cache
+    // it at the browser/edge so a deploy cannot leave users on an old bundle.
+    if (pathname === '/' || pathname.endsWith('.html')) {
+      headers.set('cache-control', 'no-store, no-cache, must-revalidate');
+      headers.set('pragma', 'no-cache');
+    } else if (/\/assets\/[^/]+-[A-Za-z0-9_-]{6,}\.(?:css|js)$/.test(pathname)) {
+      // Hashed Vite assets are immutable and safe to cache aggressively.
+      headers.set('cache-control', 'public, max-age=31536000, immutable');
+    } else {
+      headers.set('cache-control', 'public, max-age=3600, must-revalidate');
+    }
+    headers.set('x-content-type-options', 'nosniff');
+    return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
   }
 };

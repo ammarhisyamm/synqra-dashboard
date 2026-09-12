@@ -221,11 +221,11 @@ Legacy styles may remain for structural compatibility, but `src/design-system.cs
 
 ## 7. Source of truth for implementation
 
-The visual system is implemented in `src/design-system.css`. New feature CSS must consume its `--ui-*` tokens instead of adding raw colour, radius, shadow, or font-weight values. This file is intentionally loaded after legacy styles so migrated components share one visual contract.
+The visual system is implemented by the token layer in `src/styles/globals.css` and the compatibility layer in `src/design-system.css`. New Tailwind components must consume the shadcn-compatible variables (`--background`, `--primary`, `--border`, and related tokens) through `cn()` and utility classes. Feature CSS that still exists must consume the `--ui-*` tokens instead of adding raw colour, radius, shadow, or font-weight values. Legacy styles remain only while their feature is being migrated and verified.
 
 | Need | Required primitive / rule |
 | --- | --- |
-| Menu or select | `AppSelect` with an accessible listbox; no new native `<select>` UI in product flows |
+| Menu or select | `AppSelect` backed by Radix Select; no new native `<select>` UI in product flows |
 | Dialog, confirm, or popup | `Modal` / `ActionDialog` anatomy: backdrop, labelled title, close action, Escape handling, and shared footer |
 | Labeled text field, textarea, date, password | `TextField` / `TextAreaField` / `Field` from `components/common/Field.jsx` — never a raw `<label><input>` pair |
 | Text field, textarea, date, number | 40px field contract with label above, full grid-track width, and shared focus ring |
@@ -233,3 +233,10 @@ The visual system is implemented in `src/design-system.css`. New feature CSS mus
 | New component | Start from the nearest existing primitive, then update this guide if a reusable pattern changes |
 
 Do not add an isolated component-specific “design fix” when a shared primitive can solve it. If a new pattern is genuinely needed, first document its token, responsive behaviour, states, and accessibility contract here; then implement it in the shared layer.
+
+## 8. Migration and cache contract
+
+- New UI work uses `src/components/ui/` primitives and Tailwind v4 utilities first. Existing feature CSS is compatibility-only and must be removed after visual verification, not copied into another global file.
+- `src/components/common/AppSelect.jsx` uses Radix Select for focus management, keyboard navigation, Escape handling, and portal positioning while retaining the Synqra class contract during migration.
+- Cloudflare serves the HTML shell with `no-store` so deployments pick up the newest Vite manifest immediately. Fingerprinted `/assets/*.css` and `/assets/*.js` files use immutable one-year caching; non-fingerprinted public assets revalidate hourly.
+- User data in `localStorage` is not cleared as part of a UI deploy. Application data is product state, not a disposable browser cache.
