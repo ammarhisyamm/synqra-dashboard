@@ -206,3 +206,52 @@ textarea.field-input{min-height:96px;resize:vertical;line-height:1.5}
 .modal input:not([type=checkbox]),.modal textarea,.modal select,.modal form input:not([type=checkbox]),.sprint-modal form input,.metadata-modal form input,.project-modal form input,.delete-project-modal form input,.collab-modal form input,.settings-card input,.settings-card textarea,.auth-card input,.detail-section input,.detail-section select,.detail-section textarea,.detail-description{font-size:13px;font-weight:400}
 .meeting-title-input,.detail-title-input{font-weight:500}
 input::placeholder,textarea::placeholder{color:var(--ui-placeholder);opacity:1;font-weight:400}
+
+/* Final responsive contract: detail drawer, fields, menus, and Kanban use the
+   same 4px spacing rhythm after legacy compatibility styles have loaded. */
+.detail-panel{width:min(400px,100%);max-width:400px}
+.detail-head,.detail-section,.detail-footer{padding-left:20px;padding-right:20px}
+.detail-section{padding-top:20px;padding-bottom:20px}
+.detail-grid{gap:16px;padding:16px}
+.detail-grid label,.detail-section>label{min-width:0;gap:8px}
+.detail-grid input,.detail-grid select,.detail-section>label input,.detail-section>label select,.detail-description{width:100%;min-width:0;box-sizing:border-box}
+.detail-panel .app-select{width:100%;min-width:0}
+.detail-panel .app-select-trigger{width:100%;min-width:0;min-height:40px}
+.app-select-menu{width:var(--radix-select-trigger-width,100%);min-width:var(--radix-select-trigger-width,100%);max-width:min(360px,calc(100vw - 32px))}
+.app-multi-select .app-select-menu{width:100%;min-width:100%;max-width:none}
+
+.kanban-workspace{padding-left:clamp(16px,3vw,32px);padding-right:clamp(16px,3vw,32px)}
+.kanban-header-bar,.kanban-nav-tabs-bar{box-sizing:border-box}
+.kanban-header-bar .kanban-toolbar-actions{gap:12px}
+.kanban-header-bar .kanban-project-trigger{min-width:0}
+.kanban-header-bar .toolbar-select .app-select-trigger,.kanban-header-bar .toolbar-meta-trigger,.kanban-header-bar .create-task-cta{min-height:40px;height:40px}
+.kanban-nav-tabs-bar{gap:16px;padding:12px 16px}
+.kanban-nav-tabs-bar .kanban-view-tabs{min-width:0;overflow-x:auto}
+.kanban-nav-tabs-bar .kanban-filter-row{gap:12px}
+.kanban-board-grid{gap:16px}
+.kanban-stage{min-width:0}
+
+@media(max-width:1180px){
+  .kanban-header-bar .kanban-toolbar-actions{align-items:stretch;flex-wrap:wrap;gap:8px}
+  .kanban-header-bar .kanban-project-trigger{flex:1 1 100%;width:100%;max-width:none}
+  .kanban-header-bar .toolbar-select,.kanban-header-bar .toolbar-meta-trigger{flex:1 1 calc(50% - 4px);width:auto}
+  .kanban-header-bar .create-task-cta{flex:1 1 100%;width:100%;margin-left:0}
+  .kanban-nav-tabs-bar{align-items:stretch;flex-wrap:wrap}
+  .kanban-nav-tabs-bar .kanban-filter-row{margin-left:0}
+}
+
+@media(max-width:720px){
+  .detail-panel{width:100%;max-width:none}
+  .detail-head,.detail-section,.detail-footer{padding-left:16px;padding-right:16px}
+  .detail-grid{grid-template-columns:1fr;gap:16px;padding:16px}
+  .detail-wide{grid-column:auto}
+  .kanban-workspace{padding-top:16px;padding-bottom:64px}
+  .kanban-header-bar{padding:12px}
+  .kanban-nav-tabs-bar{padding:8px 12px 12px}
+  .kanban-nav-tabs-bar .kanban-view-tabs{width:100%;overflow-x:auto}
+  .kanban-nav-tabs-bar .kanban-filter-row{width:100%;flex-wrap:wrap;gap:8px}
+  .kanban-nav-tabs-bar .kanban-filter-group{flex:1 1 100%}
+  .kanban-nav-tabs-bar .kanban-filter-group .app-select{flex:1;min-width:0}
+  .kanban-nav-tabs-bar .task-count-label{margin-left:0}
+  .kanban-board-grid{grid-template-columns:repeat(5,minmax(240px,1fr));gap:12px}
+}
