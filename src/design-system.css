@@ -183,6 +183,9 @@ h1,h2,h3,h4,strong,b,button,.breadcrumb-title,.side-label,.command-group-label,.
 /* Modals must stay centered and reachable when taller than the viewport:
    cap height and scroll internally instead of overflowing the backdrop. */
 .modal,.action-dialog,.project-modal,.delete-project-modal,.collab-modal,.sprint-modal{max-height:calc(100dvh - 32px);overflow-y:auto}
+/* Radix DialogContent carries .modal: pin centering in this unlayered final
+   layer so legacy rules and Tailwind layer order can never un-center it. */
+.modal{position:fixed;left:50%;top:50%;translate:-50% -50%;margin:0}
 
 /* Form typography contract (documented in design.md §Inputs):
    labels are caption 12px/500; fields are 13px/400 so weight and size never
