@@ -6,7 +6,7 @@ export class ErrorPanel extends Component {
   static getDerivedStateFromError(error) { return { error }; }
   componentDidCatch(error) {
     console.error('Unhandled Synqra runtime error:', error);
-    this.setState({ errorId: `${Date.now().toString(36)}-${Math.floor(Math.random() * 1296).toString(36)}` });
+    this.setState({ errorId: crypto.randomUUID() });
   }
   retry = () => this.setState({ error: null, errorId: null });
   goBack = () => {

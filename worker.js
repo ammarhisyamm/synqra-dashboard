@@ -7,6 +7,19 @@ import { normalizeReview, reviewSnapshot, notifyUsers, recordActivity } from './
 import { bootstrap } from './worker/bootstrap.js';
 import { handleAiGenerate } from './worker/ai.js';
 
+const MUTATING_METHODS = new Set(['POST', 'PATCH', 'DELETE', 'PUT']);
+const securityHeaders = {
+  'x-content-type-options': 'nosniff',
+  'x-frame-options': 'DENY',
+  'referrer-policy': 'strict-origin-when-cross-origin',
+  'permissions-policy': 'camera=(), microphone=(), geolocation=()'
+};
+function secureResponse(response) {
+  const headers = new Headers(response.headers);
+  Object.entries(securityHeaders).forEach(([name, value]) => headers.set(name, value));
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
+
 async function routeApi(request, env) {
   const path = new URL(request.url).pathname;
   if (request.method === 'POST' && path === '/api/auth/register') {
@@ -42,6 +55,10 @@ async function routeApi(request, env) {
 
   const user = await sessionUser(request, env);
   if (!user) return json({ error: 'Sign in required.' }, 401);
+  if (MUTATING_METHODS.has(request.method)) {
+    const origin = request.headers.get('Origin');
+    if (origin && origin !== new URL(request.url).origin) return json({ error: 'Cross-origin requests are not allowed.' }, 403);
+  }
   await ensureWorkspaceSchema(env);
   if (request.method === 'POST' && path === '/api/ai/generate') return handleAiGenerate(request, env);
   if (request.method === 'GET' && path === '/api/admin/users') {
@@ -493,7 +510,7 @@ async function routeApi(request, env) {
 
 export default {
   async fetch(request, env) {
-    if (new URL(request.url).pathname.startsWith('/api/')) return routeApi(request, env);
+    if (new URL(request.url).pathname.startsWith('/api/')) return secureResponse(await routeApi(request, env));
     const response = await env.ASSETS.fetch(request);
     const pathname = new URL(request.url).pathname;
     const headers = new Headers(response.headers);
@@ -508,7 +525,8 @@ export default {
     } else {
       headers.set('cache-control', 'public, max-age=3600, must-revalidate');
     }
-    headers.set('x-content-type-options', 'nosniff');
+    Object.entries(securityHeaders).forEach(([name, value]) => headers.set(name, value));
+    headers.set('content-security-policy', "default-src 'self'; img-src 'self' data:; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
     return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
   }
 };
