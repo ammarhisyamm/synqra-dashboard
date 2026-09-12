@@ -1,19 +1,23 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
   ArrowRight, CaretLeft as ChevronLeft, CaretRight as ChevronRight,
   ClipboardText as ClipboardList, Clock as Clock3, Circle as CircleDot,
-  Flag, SlidersHorizontal, SquaresFour, Rows, Tag, Target, Users, X
+  Flag, SlidersHorizontal, SquaresFour, Rows, Tag, Target, Users
 } from '@phosphor-icons/react';
 import { AppSelect } from './AppSelect';
 import { Field } from './Field';
 import { dateLabel } from '../../lib/dates';
+import { Badge } from '../ui/badge';
+import { Button } from '../ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
+import { cn } from '@/lib/utils';
 
-export function SectionHead({ title, action, actionLabel, aside }) { return <div className="section-head"><h2>{title}</h2>{action ? <button onClick={action}>{actionLabel || 'View all'} <ArrowRight size={15}/></button> : <span>{aside}</span>}</div>; }
+export function SectionHead({ title, action, actionLabel, aside }) { return <div className="section-head flex items-center justify-between gap-4"><h2 className="text-balance">{title}</h2>{action ? <Button variant="ghost" size="sm" onClick={action}>{actionLabel || 'View all'} <ArrowRight size={15}/></Button> : <span>{aside}</span>}</div>; }
 export function AttentionCard({ review, today, onReview }) {
   const meta = `${review.due < today ? 'Overdue' : review.priority} · ${review.stage} · Due ${dateLabel(review.due)}`;
   return <article className="attention-card"><div className="attention-top"><span className={`dot ${review.priority.toLowerCase()}`}/><div><strong>{review.title}</strong><p>{meta}</p></div></div><button className="review-btn" onClick={onReview}>Open review</button></article>;
 }
-export function StatusPill({ value }) { return <span className={`status-pill ${value.toLowerCase().replace(' ', '-')}`}>{value}</span>; }
+export function StatusPill({ value }) { const normalized = value.toLowerCase(); const variant = normalized.includes('block') || normalized.includes('overdue') ? 'danger' : normalized.includes('complete') || normalized.includes('resolved') ? 'success' : normalized.includes('progress') ? 'info' : normalized.includes('review') ? 'warning' : 'neutral'; return <Badge variant={variant}>{value}</Badge>; }
 export function Empty({ text }) { return <div className="empty-state">{text}</div>; }
 export function Metric({ label, value }) { return <div><span>{label}</span><strong>{value}</strong></div>; }
 export function InlineSync({ rowId, field, sync, onRetry }) {
@@ -25,7 +29,7 @@ export function InlineSync({ rowId, field, sync, onRetry }) {
 }
 export function DetailSection({title,children,icon:Icon}){return <section className="detail-section"><h3>{Icon && <Icon size={17} aria-hidden="true"/>}<span>{title}</span></h3>{children}</section>}
 export function MetricCard({ label, value }) { return <article><span>{label}</span><strong>{value}</strong></article>; }
-export function Priority({ value }) { return <span className={`priority ${value.toLowerCase()}`}><i/>{value}</span>; }
+export function Priority({ value }) { const normalized = value.toLowerCase(); const variant = normalized === 'blocker' || normalized === 'urgent' ? 'danger' : normalized === 'major' || normalized === 'high' ? 'warning' : 'neutral'; return <Badge variant={variant}><i className="mr-1.5 size-1.5 rounded-full bg-current"/>{value}</Badge>; }
 export function PageHeading({ eyebrow, title, description, action }) { return <div className="page-heading"><div>{eyebrow && <small>{eyebrow}</small>}<h1>{title}</h1>{description && <p>{description}</p>}</div>{action}</div>; }
 export function DatePicker({ value, onPick, onClear }) {
   const initial = value ? new Date(`${value}T12:00:00`) : new Date();
@@ -45,8 +49,7 @@ export function DatePicker({ value, onPick, onClear }) {
 }
 export function ActionDialog({ dialog, onClose }) {
   const isSuccess = !!dialog.success;
-  useEffect(() => { const onKey = e => { if (e.key === 'Escape') onClose(); }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey); }, [onClose]);
-  return <div className="modal-backdrop" onMouseDown={onClose}><section className="action-dialog" role="alertdialog" aria-modal="true" aria-labelledby="action-dialog-title" onMouseDown={e => e.stopPropagation()}><button type="button" className="modal-close" onClick={onClose} aria-label="Close dialog"><X size={19}/></button><span className={`action-icon${dialog.danger ? ' danger' : ''}${isSuccess ? ' success' : ''}`}>{dialog.icon}</span><h2 id="action-dialog-title">{dialog.title}</h2><p>{dialog.subtitle}</p>{isSuccess ? <button className="primary-button action-cta" onClick={() => { onClose(); dialog.onCta && dialog.onCta(); }}>{dialog.ctaLabel || 'Done'}</button> : <div className="modal-actions action-buttons"><button className="text-button" onClick={onClose}>{dialog.cancelLabel || 'Cancel'}</button><button className={dialog.danger ? 'danger-button' : 'primary-button'} onClick={() => { dialog.onConfirm && dialog.onConfirm(); onClose(); }}>{dialog.confirmLabel || 'Confirm'}</button></div>}</section></div>;
+  return <Dialog open onOpenChange={open => { if (!open) onClose(); }}><DialogContent className="action-dialog"><DialogHeader className="items-center text-center"><span className={cn('action-icon', dialog.danger && 'danger', isSuccess && 'success')}>{dialog.icon}</span><DialogTitle>{dialog.title}</DialogTitle><DialogDescription>{dialog.subtitle}</DialogDescription></DialogHeader>{isSuccess ? <Button className="action-cta" onClick={() => { onClose(); dialog.onCta && dialog.onCta(); }}>{dialog.ctaLabel || 'Done'}</Button> : <DialogFooter><Button variant="ghost" onClick={onClose}>{dialog.cancelLabel || 'Cancel'}</Button><Button variant={dialog.danger ? 'destructive' : 'default'} onClick={() => { dialog.onConfirm && dialog.onConfirm(); onClose(); }}>{dialog.confirmLabel || 'Confirm'}</Button></DialogFooter>}</DialogContent></Dialog>;
 }
 export function SelectField({ label,value,values,onChange }) { const icons = { Phase: ClipboardList, Team: Users, Status: CircleDot, Priority: Flag, Epic: Target, Feature: SquaresFour, Sprint: Rows, Labels: Tag, 'Estimate (hours)': Clock3 }; const Icon = icons[label] || SlidersHorizontal; return <Field label={label} icon={Icon}><AppSelect value={value} options={values} onChange={onChange} ariaLabel={label}/></Field>; }
-export function Modal({title,subtitle,onClose,children}) { useEffect(() => { const onKey = e => { if (e.key === 'Escape') onClose(); }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey); }, [onClose]); return <div className="modal-backdrop" onMouseDown={onClose}><section className="modal" role="dialog" aria-modal="true" aria-label={title} onMouseDown={e=>e.stopPropagation()}><button className="modal-close" onClick={onClose} aria-label="Close dialog"><X size={19}/></button><h2>{title}</h2><p>{subtitle}</p>{children}</section></div>; }
+export function Modal({ title, subtitle, onClose, children }) { return <Dialog open onOpenChange={open => { if (!open) onClose(); }}><DialogContent className="modal"><DialogHeader><DialogTitle>{title}</DialogTitle><DialogDescription>{subtitle}</DialogDescription></DialogHeader>{children}</DialogContent></Dialog>; }

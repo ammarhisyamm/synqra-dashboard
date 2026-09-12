@@ -1,7 +1,11 @@
+import { Input } from '../ui/input';
+import { Textarea } from '../ui/textarea';
+import { cn } from '@/lib/utils';
+
 export function Field({ label, icon: Icon, hint, children, className = '' }) {
   return (
-    <label className={`field ${className}`.trim()}>
-      {label && <span className="field-label">{Icon && <Icon size={14} />}{label}</span>}
+    <label className={cn('field', className)}>
+      {label && <span className="field-label">{Icon && <Icon size={14} aria-hidden="true" />}{label}</span>}
       {children}
       {hint && <small className="field-hint">{hint}</small>}
     </label>
@@ -11,7 +15,7 @@ export function Field({ label, icon: Icon, hint, children, className = '' }) {
 export function TextField({ label, icon, hint, className = '', ...props }) {
   return (
     <Field label={label} icon={icon} hint={hint} className={className}>
-      <input className="field-input" {...props} />
+      <Input className="field-input" {...props} />
     </Field>
   );
 }
@@ -19,7 +23,7 @@ export function TextField({ label, icon, hint, className = '', ...props }) {
 export function TextAreaField({ label, icon, hint, rows = 3, className = '', ...props }) {
   return (
     <Field label={label} icon={icon} hint={hint} className={className}>
-      <textarea className="field-input" rows={rows} {...props} />
+      <Textarea className="field-input" rows={rows} {...props} />
     </Field>
   );
 }
