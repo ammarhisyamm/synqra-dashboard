@@ -146,6 +146,7 @@ export function MeetingEditor({ user, team = [], onClose, onCreate, onToast }) {
     return (
       <MeetingAiReview
         user={user}
+        team={team}
         meeting={form}
         items={items}
         brief={brief}

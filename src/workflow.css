@@ -85,5 +85,34 @@
 .ai-task-edit-row input{border:1px solid #e0e8f1;border-radius:9px;padding:8px 10px;font-size:13px;color:#2d3d54}
 @media(max-width:820px){.ai-task-edit-row{grid-template-columns:1fr 1fr}}
 @media(max-width:650px){.ai-task-edit-row{grid-template-columns:1fr}.ai-task-table th:nth-child(2),.ai-task-table td:nth-child(2){display:none}}
+
+/* AI review fields are editable at the point of review. Keep the controls
+   compact on wide tables and let the table scroll rather than crush values. */
+.ai-task-table{min-width:760px;table-layout:fixed}
+.ai-task-table th:nth-child(1),.ai-task-table td:nth-child(1){width:34%}
+.ai-task-table th:nth-child(2),.ai-task-table td:nth-child(2){width:18%}
+.ai-task-table th:nth-child(3),.ai-task-table td:nth-child(3){width:14%}
+.ai-task-table th:nth-child(4),.ai-task-table td:nth-child(4){width:15%}
+.ai-task-table th:nth-child(5),.ai-task-table td:nth-child(5){width:13%}
+.ai-task-table th:nth-child(6),.ai-task-table td:nth-child(6){width:6%}
+.ai-task-table td>.app-select,.ai-task-table td>.ai-due-inline{width:100%;min-width:0}
+.ai-task-table .app-select-trigger{min-height:36px;height:36px;padding:0 8px;border:1px solid #e0e8f1;border-radius:8px;background:#fff;color:#52657f;font-size:12px}
+.ai-task-table .app-select-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ai-task-table .ai-priority-inline .app-select-trigger{border-radius:999px;font-weight:600}
+.ai-task-table .ai-priority-inline.priority-blocker .app-select-trigger{border-color:#f3c9c9;color:#c24d4d}
+.ai-task-table .ai-priority-inline.priority-major .app-select-trigger{border-color:#f0d3ae;color:#c26a1b}
+.ai-task-table .ai-priority-inline.priority-minor .app-select-trigger{border-color:#e5eaf1;color:#5b6a7f}
+.ai-due-inline{height:36px;box-sizing:border-box;border:1px solid #e0e8f1;border-radius:8px;padding:0 8px;color:#52657f;background:#fff;font:inherit;font-size:12px}
+.ai-task-table .app-select-trigger:focus-visible,.ai-due-inline:focus-visible,.ai-task-title-input:focus-visible{outline:2px solid #8fa9ff;outline-offset:2px}
+@media(max-width:650px){
+  .ai-task-table{min-width:680px}
+  .ai-task-table th:nth-child(2),.ai-task-table td:nth-child(2){display:table-cell}
+  .ai-task-table th:nth-child(1),.ai-task-table td:nth-child(1){width:32%}
+  .ai-task-table th:nth-child(2),.ai-task-table td:nth-child(2){width:18%}
+  .ai-task-table th:nth-child(3),.ai-task-table td:nth-child(3){width:15%}
+  .ai-task-table th:nth-child(4),.ai-task-table td:nth-child(4){width:15%}
+  .ai-task-table th:nth-child(5),.ai-task-table td:nth-child(5){width:14%}
+  .ai-task-table th:nth-child(6),.ai-task-table td:nth-child(6){width:6%}
+}
 @media(pointer:coarse){.primary-button,.secondary-button{min-height:44px}.icon-button,.mobile-menu,.collaborator,.notification{width:44px;height:44px}.text-button{min-height:44px}}
 @media(max-width:650px){.participants-popup{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:min(340px,calc(100vw - 32px));max-height:calc(100dvh - 48px);overflow-y:auto}}

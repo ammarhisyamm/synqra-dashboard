@@ -330,7 +330,7 @@ export function App() {
   const createMeetingFromEditor = async ({ meeting, items }) => {
     try {
       const created = await addMeeting({ ...meeting, projectId: activeProjectId, itemCount: items.length });
-      const results = await Promise.allSettled(items.map(item => addReview({ title: item.title, description: item.description, area: item.area, priority: item.priority, stage: 'Planning', status: 'Open', assignee: item.assignee, due: item.due, meetingId: created.id })));
+      const results = await Promise.allSettled(items.map(item => addReview({ title: item.title, description: item.description, area: item.area, priority: item.priority, stage: 'Planning', status: item.status || 'Open', assignee: item.assignee || '', assignees: item.assignee ? [item.assignee] : [], due: item.due, meetingId: created.id })));
       const createdCount = results.filter(result => result.status === 'fulfilled').length;
       const failedCount = results.length - createdCount;
       // itemCount is derived server-side (COUNT subquery); just reflect the true count locally.

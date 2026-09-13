@@ -7,7 +7,7 @@ import '../../workflow.css';
 const initials = name => (name || 'M').trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
 const STATUS_OPTIONS = ['Open', 'In Progress', 'Review', 'Resolved', 'Rejected'];
 
-export function MeetingAiReview({ user, meeting, items, brief, setItems, selectedCount, onBack, onCreate }) {
+export function MeetingAiReview({ user, team = [], meeting, items, brief, setItems, selectedCount, onBack, onCreate }) {
   const [editingId, setEditingId] = useState(null);
   const update = (id, key, value) => {
     setItems(previous => previous.map(item => (item.id === id ? { ...item, [key]: value } : item)));
@@ -34,6 +34,7 @@ export function MeetingAiReview({ user, meeting, items, brief, setItems, selecte
       assignee: assignee || user?.name || '',
       due: '',
       priority: 'Major',
+      status: 'Open',
       area: 'Engineering'
     };
     setItems(previous => [...previous, newItem]);
@@ -126,7 +127,7 @@ export function MeetingAiReview({ user, meeting, items, brief, setItems, selecte
                   <div className="ai-task-table-wrap">
                     <table className="ai-task-table">
                       <thead>
-                        <tr><th>Task Name</th><th>Requested by</th><th>Severity</th><th>Status</th><th>Due</th><th aria-label="Actions" /></tr>
+                        <tr><th>Task Name</th><th>Assignee</th><th>Severity</th><th>Status</th><th>Due</th><th aria-label="Actions" /></tr>
                       </thead>
                       <tbody>
                         {groupItems.map(item => (
@@ -149,9 +150,23 @@ export function MeetingAiReview({ user, meeting, items, brief, setItems, selecte
                                 )}
                               </label>
                             </td>
-                            <td className="muted">{meeting?.title || 'Meeting Notes'}</td>
                             <td>
-                              <span className={`severity severity-${item.priority.toLowerCase()}`}><i />{item.priority}</span>
+                              <AppSelect
+                                className="inline ai-assignee-inline"
+                                value={item.assignee || ''}
+                                options={[{ value: '', label: 'Unassigned' }, ...team.filter(member => member?.name).map(member => ({ value: member.name, label: member.name }))]}
+                                onChange={val => update(item.id, 'assignee', val)}
+                                ariaLabel={`Assignee of ${item.title}`}
+                              />
+                            </td>
+                            <td>
+                              <AppSelect
+                                className={`inline ai-priority-inline priority-${String(item.priority || 'Major').toLowerCase()}`}
+                                value={item.priority || 'Major'}
+                                options={PRIORITIES}
+                                onChange={val => update(item.id, 'priority', val)}
+                                ariaLabel={`Priority of ${item.title}`}
+                              />
                             </td>
                             <td>
                               <AppSelect
@@ -162,7 +177,9 @@ export function MeetingAiReview({ user, meeting, items, brief, setItems, selecte
                                 ariaLabel={`Status of ${item.title}`}
                               />
                             </td>
-                            <td className="muted">{item.due || '—'}</td>
+                            <td>
+                              <input className="ai-due-inline" type="date" value={item.due || ''} onChange={event => update(item.id, 'due', event.target.value)} aria-label={`Due date of ${item.title}`} />
+                            </td>
                             <td>
                               <button
                                 className="ai-delete small"
