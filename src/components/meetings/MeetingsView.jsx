@@ -5,6 +5,7 @@ import { dateLabel, groupDateLabel, shortDate } from '../../lib/dates';
 import { statusFor, extractNotes } from '../../lib/helpers';
 import { PageHeading, Empty, DatePicker, Modal } from '../common/ui';
 import { TextField, TextAreaField } from '../common/Field';
+import '../../workflow.css';
 
 export function Meetings({ meetings, reviews = [], addMeeting, addReview, onDeleteMeeting, setToast, setModal, onNewMeeting, onTasksCreated, onOpen }) {
   const [selected, setSelected] = useState(meetings[0]?.id);
