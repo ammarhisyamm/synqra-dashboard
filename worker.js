@@ -541,8 +541,15 @@ async function routeApi(request, env) {
 export default {
   async fetch(request, env) {
     if (new URL(request.url).pathname.startsWith('/api/')) return secureResponse(await routeApi(request, env));
-    const response = await env.ASSETS.fetch(request);
     const pathname = new URL(request.url).pathname;
+    // Keep clients with a cached pre-deploy entry bundle from breaking when a
+    // lazy chunk hash changes between releases. The old Reviews chunk is the
+    // only legacy asset currently observed in production.
+    const legacyAssetAliases = {
+      '/assets/Reviews-DXQop5KM.js': '/assets/Reviews-CWXLhP15.js'
+    };
+    const assetPath = legacyAssetAliases[pathname];
+    const response = await env.ASSETS.fetch(assetPath ? new Request(new URL(assetPath, request.url), request) : request);
     const headers = new Headers(response.headers);
     // HTML is the manifest that points at Vite's hashed bundles. Never cache
     // it at the browser/edge so a deploy cannot leave users on an old bundle.
