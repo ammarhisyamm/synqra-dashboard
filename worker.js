@@ -543,10 +543,16 @@ export default {
     if (new URL(request.url).pathname.startsWith('/api/')) return secureResponse(await routeApi(request, env));
     const pathname = new URL(request.url).pathname;
     // Keep clients with a cached pre-deploy entry bundle from breaking when a
-    // lazy chunk hash changes between releases. The old Reviews chunk is the
-    // only legacy asset currently observed in production.
+    // Vite fingerprints lazy chunks and their CSS. A browser can retain an
+    // older index module briefly after a deploy, so keep the previous route
+    // assets resolvable during the rollout instead of letting one stale
+    // import take down the whole section.
     const legacyAssetAliases = {
-      '/assets/Reviews-DXQop5KM.js': '/assets/Reviews-CWXLhP15.js'
+      '/assets/Reviews-DXQop5KM.js': '/assets/Reviews-CWXLhP15.js',
+      '/assets/workflow-BVUo_fz7.css': '/assets/workflow-3EA3HGuE.css',
+      '/assets/KanbanWorkspace-DvHzMlb6.js': '/assets/KanbanWorkspace-DUxWHsUO.js',
+      '/assets/Reports-BbF7l5mE.js': '/assets/Reports-CjsgjNh1.js',
+      '/assets/ArchivePage-ffFcbMS7.js': '/assets/ArchivePage-CkBt80yt.js'
     };
     const assetPath = legacyAssetAliases[pathname];
     const response = await env.ASSETS.fetch(assetPath ? new Request(new URL(assetPath, request.url), request) : request);
