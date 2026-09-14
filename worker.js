@@ -18,6 +18,19 @@ const accessDenied = () => json({ error: 'You do not have access to this project
 async function requireProject(env, user, projectId, permission = 'view') {
   return canAccessProject(env, user, projectId || 'default', permission);
 }
+async function userProjectCount(env, userId) {
+  const row = await env.DB.prepare('SELECT COUNT(*) AS count FROM project_memberships WHERE user_id = ?').bind(userId).first();
+  return Number(row?.count || 0);
+}
+async function canCreateProject(env, user) {
+  if (['super_admin', 'admin'].includes(user.role)) return true;
+  return await userProjectCount(env, user.id) === 0;
+}
+async function canManageMembers(env, user) {
+  if (['super_admin', 'admin'].includes(user.role)) return true;
+  const row = await env.DB.prepare("SELECT 1 FROM project_memberships WHERE user_id = ? AND role = 'editor' LIMIT 1").bind(user.id).first();
+  return Boolean(row);
+}
 async function visibleProjectRows(env, user, rows) {
   if (['super_admin', 'admin'].includes(user.role)) return rows;
   const visible = await Promise.all(rows.map(async row => ({ row, allowed: await requireProject(env, user, row.projectId, 'view') })));
@@ -44,7 +57,6 @@ async function routeApi(request, env) {
     const user = { id: id(), email, name, role: Number(count) === 0 ? 'super_admin' : 'member' };
     user.username = username;
     await env.DB.prepare('INSERT INTO users (id, email, username, name, password_hash, role) VALUES (?, ?, ?, ?, ?, ?)').bind(user.id, user.email, user.username, user.name, await passwordHash(password), user.role).run();
-    await env.DB.prepare("INSERT OR IGNORE INTO project_memberships (project_id, user_id, role) VALUES ('default', ?, 'editor')").bind(user.id).run();
     return signedIn(user, await createSession(user, env), 201);
   }
   if (request.method === 'POST' && path === '/api/auth/login') {
@@ -77,6 +89,7 @@ async function routeApi(request, env) {
     return json({ users: result.results });
   }
   if (request.method === 'GET' && path === '/api/project-members') {
+    if (!await canManageMembers(env, user)) return json({ members: [] });
     const result = await env.DB.prepare("SELECT m.id, m.email, COALESCE(r.role, m.role, 'viewer') AS role, m.status, m.created_at AS createdAt FROM project_members m LEFT JOIN project_member_roles r ON r.member_id = m.id ORDER BY m.created_at DESC").all();
     return json({ members: result.results });
   }
@@ -100,7 +113,7 @@ async function routeApi(request, env) {
     return json({ team });
   }
   if (request.method === 'POST' && path === '/api/project-members') {
-    if (!['super_admin', 'admin'].includes(user.role)) return json({ error: 'Admin access required.' }, 403);
+    if (!await canManageMembers(env, user)) return json({ error: 'Editor access required.' }, 403);
     const body = await readBody(request); if (!body) return json({ error: 'Invalid JSON.' }, 400);
     const email = safeText(body.email, 254).toLowerCase();
     if (!/^\S+@\S+\.\S+$/.test(email)) return json({ error: 'Enter a valid email address.' }, 400);
@@ -114,7 +127,7 @@ async function routeApi(request, env) {
   }
   const memberMatch = path.match(/^\/api\/project-members\/([a-zA-Z0-9-]+)$/);
   if (request.method === 'PATCH' && memberMatch) {
-    if (!['super_admin', 'admin'].includes(user.role)) return json({ error: 'Admin access required.' }, 403);
+    if (!await canManageMembers(env, user)) return json({ error: 'Editor access required.' }, 403);
     const body = await readBody(request); const role = body?.role;
     if (!['viewer', 'editor'].includes(role)) return json({ error: 'Choose Viewer or Editor.' }, 400);
     const exists = await env.DB.prepare('SELECT id FROM project_members WHERE id = ?').bind(memberMatch[1]).first();
@@ -124,7 +137,7 @@ async function routeApi(request, env) {
     return json({ ok: true, role });
   }
   if (request.method === 'DELETE' && memberMatch) {
-    if (!['super_admin', 'admin'].includes(user.role)) return json({ error: 'Admin access required.' }, 403);
+    if (!await canManageMembers(env, user)) return json({ error: 'Editor access required.' }, 403);
     const result = await env.DB.prepare('DELETE FROM project_members WHERE id = ?').bind(memberMatch[1]).run();
     if (result.meta.changes) await notifyUsers(env, user.id, { type: 'member_removed', title: 'Team invite removed', body: user.name + ' removed a pending team invite' });
     return result.meta.changes ? json({ ok: true }) : json({ error: 'Invite not found.' }, 404);
@@ -199,9 +212,9 @@ async function routeApi(request, env) {
     return json({ spaces: result.results });
   }
   if (request.method === 'POST' && path === '/api/projects') {
-    if (!['super_admin', 'admin'].includes(user.role)) return json({ error: 'Admin access required.' }, 403);
+    if (!await canCreateProject(env, user)) return json({ error: 'You already belong to a project.' }, 403);
     const body = await readBody(request); const name = safeText(body?.name, 120); if (!name) return json({ error: 'Project name is required.' }, 400);
-    const project = { id: id(), name, description: safeText(body.description, 2000), spaceId: safeText(body.spaceId, 80) || 'default', accessMode: 'link' };
+    const project = { id: id(), name, description: safeText(body.description, 2000), spaceId: safeText(body.spaceId, 80) || 'default', accessMode: 'invite' };
     try { await env.DB.prepare('INSERT INTO projects (id, space_id, name, description, access_mode) VALUES (?, ?, ?, ?, ?)').bind(project.id, project.spaceId, project.name, project.description, project.accessMode).run(); await env.DB.prepare("INSERT INTO project_memberships (project_id, user_id, role) VALUES (?, ?, 'editor')").bind(project.id, user.id).run(); await notifyUsers(env, user.id, { type: 'project_created', title: 'Project created', body: user.name + ' created ' + project.name }); return json(project, 201); } catch { return json({ error: 'Space or project already exists.' }, 409); }
   }
   const projectMatch = path.match(/^\/api\/projects\/([a-zA-Z0-9-]+)$/);
@@ -548,11 +561,16 @@ export default {
     // assets resolvable during the rollout instead of letting one stale
     // import take down the whole section.
     const legacyAssetAliases = {
-      '/assets/Reviews-DXQop5KM.js': '/assets/Reviews-CWXLhP15.js',
+      '/assets/Reviews-DXQop5KM.js': '/assets/Reviews-DimfEV7i.js',
+      '/assets/Reviews-CWXLhP15.js': '/assets/Reviews-DimfEV7i.js',
       '/assets/workflow-BVUo_fz7.css': '/assets/workflow-3EA3HGuE.css',
-      '/assets/KanbanWorkspace-DvHzMlb6.js': '/assets/KanbanWorkspace-DUxWHsUO.js',
-      '/assets/Reports-BbF7l5mE.js': '/assets/Reports-CjsgjNh1.js',
-      '/assets/ArchivePage-ffFcbMS7.js': '/assets/ArchivePage-CkBt80yt.js'
+      '/assets/KanbanWorkspace-DvHzMlb6.js': '/assets/KanbanWorkspace-exjtLWuq.js',
+      '/assets/KanbanWorkspace-DUxWHsUO.js': '/assets/KanbanWorkspace-exjtLWuq.js',
+      '/assets/Reports-BbF7l5mE.js': '/assets/Reports-YRvqlTGd.js',
+      '/assets/Reports-CjsgjNh1.js': '/assets/Reports-YRvqlTGd.js',
+      '/assets/ArchivePage-ffFcbMS7.js': '/assets/ArchivePage-DHBVz1Qf.js',
+      '/assets/ArchivePage-CkBt80yt.js': '/assets/ArchivePage-DHBVz1Qf.js',
+      '/assets/index-CY9Vl-DC.css': '/assets/index-U-8iiyNV.css'
     };
     const assetPath = legacyAssetAliases[pathname];
     const response = await env.ASSETS.fetch(assetPath ? new Request(new URL(assetPath, request.url), request) : request);

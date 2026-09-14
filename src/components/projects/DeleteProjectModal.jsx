@@ -19,7 +19,12 @@ export function DeleteProjectModal({ project, onClose, onDelete }) {
       <div className="delete-project-icon"><Warning size={25}/></div>
       <DialogHeader><DialogTitle>Delete project?</DialogTitle><DialogDescription>This will permanently delete <strong>“{project.name}”</strong> and all associated data. This cannot be undone.</DialogDescription></DialogHeader>
       <span className="delete-project-label">THE FOLLOWING WILL BE DELETED:</span>
-      <div className="delete-project-effects"><span><Check size={14}/> Reviews</span><span><Check size={14}/> Meetings</span><span><Check size={14}/> Comments</span><span><Check size={14}/> Workflow data</span></div>
+      <ul className="delete-project-effects">
+        <li><Check size={14}/> Reviews</li>
+        <li><Check size={14}/> Meetings</li>
+        <li><Check size={14}/> Comments</li>
+        <li><Check size={14}/> Workflow data</li>
+      </ul>
       <form onSubmit={submit}>
         <label>Type <strong>{project.name}</strong> to confirm<Input autoFocus value={confirmation} onChange={event => setConfirmation(event.target.value)} placeholder={project.name}/></label>
         <DialogFooter><Button type="button" variant="ghost" onClick={onClose}>Cancel</Button><Button variant="destructive" disabled={!matches || pending}><Trash size={15}/>{pending ? 'Deleting…' : 'Delete project'}</Button></DialogFooter>

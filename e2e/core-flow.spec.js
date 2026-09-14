@@ -50,8 +50,40 @@ test('reviews list opens task detail', async ({ page }) => {
   await mockApi(page);
   await page.goto('/');
   await signIn(page);
-  await page.getByRole('button', { name: 'All Reviews', description: 'All Reviews' }).click();
+  await page.getByRole('button', { name: 'All Reviews', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'All Reviews' })).toBeVisible();
   await page.getByText('Verify task flow', { exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Properties' })).toBeVisible();
+});
+
+test('new user can create a project and finish onboarding', async ({ page }) => {
+  let project = null;
+  let projects = [];
+  await page.route('**/*', async route => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (!url.pathname.startsWith('/api/')) return route.continue();
+    if (url.pathname === '/api/auth/me') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ user }) });
+    if (url.pathname === '/api/bootstrap') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ project, projects, reviews: [], meetings: [], spaces: [], workflowStatuses: [], sprints: [], metadata: [], unreadNotifications: 0, workload: [], reportByStatus: [] }) });
+    if (url.pathname === '/api/team') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ team: [] }) });
+    if (url.pathname === '/api/project-members' && request.method() === 'POST') return route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ email: 'teammate@example.com', role: 'editor', emailSent: false }) });
+    if (url.pathname === '/api/project-members') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ members: [] }) });
+    if (url.pathname === '/api/projects' && request.method() === 'POST') {
+      project = { id: 'project-new', name: 'New Project', description: '', accessMode: 'invite', initials: 'N' };
+      projects = [project];
+      return route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify(project) });
+    }
+    if (url.pathname === '/api/notifications') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ notifications: [] }) });
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) });
+  });
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Create your first project' })).toBeVisible();
+  await page.getByLabel('Project name').fill('New Project');
+  await page.getByRole('button', { name: 'Create project' }).click();
+  await expect(page.getByRole('heading', { name: 'Invite your team to New Project' })).toBeVisible();
+  await page.getByLabel('Invite email').fill('teammate@example.com');
+  await page.getByRole('button', { name: 'Invite' }).click();
+  await expect(page.getByRole('button', { name: 'Finish setup' })).toBeVisible();
+  await page.getByRole('button', { name: 'Finish setup' }).click();
+  await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
 });

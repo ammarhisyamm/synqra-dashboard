@@ -18,9 +18,9 @@ function DialogContent({ className, children, showClose = true, ...props }) {
   </DialogPrimitive.Content></DialogPortal>;
 }
 
-function DialogHeader({ className, ...props }) { return <div className={cn('flex flex-col gap-1.5 text-left', className)} {...props} />; }
-function DialogTitle({ className, ...props }) { return <DialogPrimitive.Title className={cn('text-balance text-xl font-medium tracking-normal', className)} {...props} />; }
-function DialogDescription({ className, ...props }) { return <DialogPrimitive.Description className={cn('text-pretty text-sm leading-relaxed text-muted-foreground', className)} {...props} />; }
-function DialogFooter({ className, ...props }) { return <div className={cn('flex items-center justify-end gap-2', className)} {...props} />; }
+function DialogHeader({ className, ...props }) { return <div data-slot="dialog-header" className={cn('flex flex-col gap-1.5 text-left', className)} {...props} />; }
+function DialogTitle({ className, ...props }) { return <DialogPrimitive.Title data-slot="dialog-title" className={cn('text-balance text-xl font-medium tracking-normal', className)} {...props} />; }
+function DialogDescription({ className, ...props }) { return <DialogPrimitive.Description data-slot="dialog-description" className={cn('text-pretty text-sm leading-relaxed text-muted-foreground', className)} {...props} />; }
+function DialogFooter({ className, ...props }) { return <div data-slot="dialog-footer" className={cn('flex items-center justify-end gap-2', className)} {...props} />; }
 
 export { Dialog, DialogTrigger, DialogClose, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter };
