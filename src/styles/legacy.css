@@ -1,0 +1,5 @@
+/* Compatibility entrypoint for feature CSS that has not completed migration.
+   Keep this list ordered: base styles first, feature fixes second. New UI
+   should use src/components/ui and design-system.css instead of adding here. */
+@import '../styles.css';
+@import '../fixes.css';
