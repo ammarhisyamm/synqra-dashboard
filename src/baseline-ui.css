@@ -79,6 +79,90 @@
   overscroll-behavior-x: contain;
 }
 
+/* Reports Task List: keep the desktop table, but turn each mobile row into a
+   readable stack instead of allowing the fixed desktop width to clip text. */
+.task-list-table .row-description {
+  display: block;
+  margin-bottom: 4px;
+  line-height: 1.2;
+}
+
+.task-list-table td:first-child {
+  min-width: 240px;
+  white-space: normal;
+}
+
+.task-list-table td:first-child strong {
+  display: block;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
+}
+
+@media (max-width: 650px) {
+  .task-list-table-wrap {
+    overflow: visible;
+  }
+
+  .task-list-table,
+  .task-list-table thead,
+  .task-list-table tbody,
+  .task-list-table tr,
+  .task-list-table td {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .task-list-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .task-list-table tbody tr {
+    padding: 16px;
+    border-top: 1px solid var(--ui-border);
+  }
+
+  .task-list-table tbody tr:first-child {
+    border-top: 0;
+  }
+
+  .task-list-table td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    min-width: 0;
+    height: auto;
+    padding: 6px 0;
+    border: 0;
+    white-space: normal;
+  }
+
+  .task-list-table td:first-child {
+    display: block;
+    min-width: 0;
+    padding-bottom: 10px;
+  }
+
+  .task-list-table td:not(:first-child)::before {
+    flex: 0 0 auto;
+    color: var(--ui-muted);
+    content: '';
+    font-size: 12px;
+  }
+
+  .task-list-table td:nth-child(2)::before { content: 'Status'; }
+  .task-list-table td:nth-child(3)::before { content: 'Priority'; }
+  .task-list-table td:nth-child(4)::before { content: 'Assignee'; }
+  .task-list-table td:nth-child(5)::before { content: 'Due date'; }
+  .task-list-table td:nth-child(6)::before { content: 'Estimate'; }
+}
+
 .activity-row,
 .notification-menu button,
 .linked-action-item,
