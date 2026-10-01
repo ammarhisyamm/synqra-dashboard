@@ -7,12 +7,13 @@ import { PageHeading, Empty, DatePicker, Modal } from '../common/ui';
 import { TextField, TextAreaField } from '../common/Field';
 import '../../workflow.css';
 
-export function Meetings({ readOnly = false, meetings, reviews = [], addMeeting, addReview, onDeleteMeeting, setToast, setModal, onNewMeeting, onTasksCreated, onOpen }) {
-  const [selected, setSelected] = useState(meetings[0]?.id);
+export function Meetings({ readOnly = false, meetings = [], reviews = [], addMeeting, addReview, onDeleteMeeting, setToast, setModal, onNewMeeting, onTasksCreated, onOpen }) {
+  const safeMeetings = Array.isArray(meetings) ? meetings : [];
+  const [selected, setSelected] = useState(safeMeetings[0]?.id);
   const [dateFilter, setDateFilter] = useState('');
   const [pickerOpen, setPickerOpen] = useState(false);
   useEffect(() => { if (!pickerOpen) return undefined; const onKey = e => { if (e.key === 'Escape') setPickerOpen(false); }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey); }, [pickerOpen]);
-  const meeting = meetings.find(m => m.id === selected) || meetings[0];
+  const meeting = safeMeetings.find(m => m.id === selected) || safeMeetings[0];
   const [drafts, setDrafts] = useState([]);
   const [notesOpen, setNotesOpen] = useState(false);
   const [creatingTasks, setCreatingTasks] = useState(false);
@@ -24,12 +25,13 @@ export function Meetings({ readOnly = false, meetings, reviews = [], addMeeting,
   }, [meeting?.id, readOnly]);
   useEffect(() => { setNotesOpen(false); }, [meeting?.id, readOnly]);
   useEffect(() => { if (!notesOpen) return undefined; const onKey = e => { if (e.key === 'Escape') setNotesOpen(false); }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey); }, [notesOpen]);
-  const visible = meetings.filter(m => !dateFilter || m.date === dateFilter);
+  const visible = safeMeetings.filter(m => !dateFilter || m.date === dateFilter);
   const groups = useMemo(() => {
     const map = new Map();
-    [...visible].sort((a, b) => b.date.localeCompare(a.date)).forEach(m => {
-      if (!map.has(m.date)) map.set(m.date, []);
-      map.get(m.date).push(m);
+    [...visible].sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))).forEach(m => {
+      const date = m.date || '';
+      if (!map.has(date)) map.set(date, []);
+      map.get(date).push(m);
     });
     return [...map.entries()];
   }, [visible]);
@@ -46,7 +48,7 @@ export function Meetings({ readOnly = false, meetings, reviews = [], addMeeting,
       if (failed.length) setTaskError(`${failed.length} task(s) failed. Your remaining drafts are kept for retry.`);
     } finally { setCreatingTasks(false); }
   };
-  const noteLines = meeting ? meeting.notes.split('\n').map(s => s.trim()).filter(Boolean) : [];
+  const noteLines = meeting ? String(meeting.notes || '').split('\n').map(s => s.trim()).filter(Boolean) : [];
   const meetingReviews = useMemo(() => reviews.filter(item => item.meetingId === meeting?.id), [reviews, meeting?.id]);
   const actionGroups = useMemo(() => {
     const items = [

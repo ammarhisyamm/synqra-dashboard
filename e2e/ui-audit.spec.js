@@ -5,10 +5,10 @@ const project = { id: 'qa-project', name: 'QA project', accessMode: 'invite', de
 const title = 'Long task title that should wrap without colliding with metadata or clipping fields';
 const baseTask = { id: 'qa-task', key: 'AR-101', title, projectId: project.id, priority: 'Major', area: 'Engineering', stage: 'In Progress', status: 'In Progress', assignee: user.name, assignees: [user.name], labels: [], description: 'Acceptance criteria', createdAt: '2026-10-01 02:38:00', due: '', estimateHours: 2.5, meetingId: 'qa-meeting' };
 
-async function fixture(page, { empty = false, failCreate = false, failPatch = false, readOnly = false } = {}) {
+async function fixture(page, { empty = false, failCreate = false, failPatch = false, readOnly = false, meetingNotes = 'Fix the login layout. Add documentation.', meetingDate = '2026-10-01' } = {}) {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
-  const data = { project, projects: [project], reviews: empty ? [] : [{ ...baseTask }], meetings: [{ id: 'qa-meeting', title: 'QA weekly sync', projectId: project.id, date: '2026-10-01', notes: 'Fix the login layout. Add documentation.', ai: true, attendees: [user.name] }], spaces: [], metadata: [{ id: 'epic-qa', type: 'epic', name: 'UI quality', projectId: project.id, color: '#6366f1' }], sprints: [], workflowStatuses: [], workload: [], reportByStatus: [], unreadNotifications: 0 };
+  const data = { project, projects: [project], reviews: empty ? [] : [{ ...baseTask }], meetings: [{ id: 'qa-meeting', title: 'QA weekly sync', projectId: project.id, date: meetingDate, notes: meetingNotes, ai: true, attendees: [user.name] }], spaces: [], metadata: [{ id: 'epic-qa', type: 'epic', name: 'UI quality', projectId: project.id, color: '#6366f1' }], sprints: [], workflowStatuses: [], workload: [], reportByStatus: [], unreadNotifications: 0 };
   const changes = [];
   data.project = { ...project, role: readOnly ? 'viewer' : 'editor' }; data.projects = [data.project];
   const details = { comments: [], subtasks: [], attachments: [], activity: [], history: [] };
@@ -115,6 +115,14 @@ test('failed task creation stays open, keeps input, never shows success', async 
   await expect(modal.getByRole('alert')).toHaveText(/QA simulated create failure/);
   await expect(modal.getByLabel('Title', { exact: true })).toHaveValue('Retryable task');
   await expect(page.getByRole('heading', { name: 'Review created' })).toHaveCount(0);
+});
+
+test('Meetings tolerates legacy records with missing date or notes', async ({ page }) => {
+  await fixture(page, { meetingDate: null, meetingNotes: null });
+  await navigate(page, 'Meetings');
+  await expect(page.getByRole('heading', { name: 'Meetings', exact: true })).toBeVisible();
+  await expect(page.getByText('No notes yet.', { exact: true })).toBeVisible();
+  await expect(page.getByText('Something went wrong', { exact: true })).toHaveCount(0);
 });
 
 test('create task dialog stays centered in the viewport', async ({ page }) => {
