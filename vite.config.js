@@ -6,8 +6,9 @@ import { fileURLToPath, URL } from 'node:url';
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
-    alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url)),
-    },
+    alias: [
+      { find: '@', replacement: fileURLToPath(new URL('./src', import.meta.url)) },
+      { find: /^@phosphor-icons\/react$/, replacement: fileURLToPath(new URL('./src/phosphor-icons-proxy.js', import.meta.url)) },
+    ],
   },
 });
