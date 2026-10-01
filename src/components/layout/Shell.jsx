@@ -4,7 +4,7 @@ import {
   CheckCircle as CheckCircle2, CaretUpDown as ChevronsUpDown,
   ClipboardText as ClipboardList, Crown, EnvelopeSimple, Folder, House as Home,
   Info, Kanban as KanbanSquare, ChartBar, List as Menu, ChatCircle as MessageCircle,
-  DotsThreeVertical as MoreVertical, Plus, MagnifyingGlass as Search, Gear as Settings,
+  DotsThreeVertical as MoreVertical, Plus, MagnifyingGlass as Search, Gear as Settings, Briefcase,
   ShieldCheck, Sparkle as Sparkles, Trash as Trash2, UserPlus, Users, X
 } from '@phosphor-icons/react';
 import { relativeDate } from '../../lib/dates';
@@ -15,7 +15,7 @@ export function NotificationMenu({ notifications, onClose, onOpen, onRead, onRea
 }
 
 export function Sidebar({ page, setPage, menuOpen, setMenuOpen, collapsed, onMenuClick, user, onSignOut, project, onProjectClick }) {
-  const workspace = [["Overview", Home], ["All Reviews", MessageCircle], ["Meetings", CalendarDays], ["Board", KanbanSquare], ["Reports", ChartBar], ["Archive", Archive]];
+  const workspace = [["Overview", Home], ["My Work", Briefcase], ["All Reviews", MessageCircle], ["Meetings", CalendarDays], ["Board", KanbanSquare], ["Reports", ChartBar], ["Archive", Archive]];
   const go = name => { setPage(name); setMenuOpen(false); };
   return <aside className={`sidebar${menuOpen ? ' open' : ''}${collapsed ? ' collapsed' : ''}`}>
     <div className="sidebar-head">

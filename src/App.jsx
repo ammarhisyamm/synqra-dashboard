@@ -39,6 +39,7 @@ const ArchivePage = lazy(() => import('./components/archive/ArchivePage').then(m
 const SettingsPageEnhanced = lazy(() => import('./components/settings/SettingsPage').then(module => ({ default: module.SettingsPageEnhanced })));
 const AdminPageEnhanced = lazy(() => import('./components/admin/AdminPage').then(module => ({ default: module.AdminPageEnhanced })));
 const ReviewModal = lazy(() => import('./components/reviews/ReviewModal').then(module => ({ default: module.ReviewModal })));
+const MyWork = lazy(() => import('./components/work/MyWork').then(module => ({ default: module.MyWork })));
 
 function EmptyWorkspaceOnboarding({ user, project, onCreateProject, onFinish, setToast, onMembersChanged }) {
   const [projectName, setProjectName] = useState('');
@@ -210,7 +211,7 @@ export function App() {
     return () => { window.removeEventListener('keydown', onShortcut); window.removeEventListener('unhandledrejection', onUnhandled); };
   }, []);
   useEffect(() => {
-    if (page !== 'All Reviews') setQuery('');
+    if (page !== 'All Reviews' && page !== 'My Work') setQuery('');
   }, [page]);
 
   const activeProjectId = data.project?.id || null;
@@ -451,6 +452,7 @@ export function App() {
       <ErrorPanel compact key={page}>
       <Suspense fallback={<div className="empty-state"><Wave /> Loading page…</div>}>
       {page === 'Overview' && <Dashboard reviews={activeReviews} meetings={activeMeetings} workload={activeWorkload} reportByStatus={activeReportByStatus} sprints={activeSprints} goTo={setPage} onSubmitReview={() => setModal('review')} onNewMeeting={openNewMeeting} />}
+      {page === 'My Work' && <MyWork reviews={activeReviews} user={user} onOpen={setSelectedReview} onCreateTask={() => setModal('review')} />}
       {page === 'All Reviews' && <Reviews reviews={activeReviews} query={query} setQuery={setQuery} updateReview={updateReview} archiveReview={archiveReview} setModal={setModal} onOpen={setSelectedReview} teamList={team} sync={{ saving: savingField, saved: savedField, failed: failedField }} onRetry={failed => { setFailedField(null); updateReview(failed.id, failed.patch, failed.field); }} />}
       {page === 'Meetings' && <Meetings meetings={activeMeetings} reviews={activeReviews} addMeeting={addMeeting} addReview={addReview} onDeleteMeeting={deleteMeeting} setToast={setToast} setModal={setModal} onNewMeeting={openNewMeeting} onTasksCreated={count => showSuccess(`${count} review items created`, 'Action items from the meeting notes are now on the board.', 'View board', () => setPage('Board'))} onOpen={setSelectedReview} />}
       {page === 'Meeting Editor' && <MeetingEditor user={user} team={team} onClose={() => setPage('Meetings')} onToast={setToast} onCreate={createMeetingFromEditor} />}
