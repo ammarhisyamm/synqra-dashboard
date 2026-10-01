@@ -5,3 +5,5 @@ dist
 .env
 *.log
 worker-configuration.d.ts
+test-results/
+playwright-report/

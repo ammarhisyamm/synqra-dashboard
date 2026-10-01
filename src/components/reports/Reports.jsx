@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ArrowRight, CaretDown as ChevronDown, ChartPieSlice, Clock, ListChecks, Lightning, ArrowCounterClockwise as RotateCcw, TrendUp, Users, Warning as TriangleAlert, CheckCircle as CheckCircle2, XCircle } from '@phosphor-icons/react';
 import { REPORT_COLORS, statusFor } from '../../lib/helpers';
 import { activeReviews, isResolved, portfolioProjects, taskOverview, sprintTasks, sprintStats, statusCounts, priorityCounts, teamWorkload, hoursTotals, formatHours } from '../../lib/reports';
-import { slashDate } from '../../lib/dates';
+import { localToday, slashDate } from '../../lib/dates';
 import { reportsApi } from '../../api/reports';
 import { AppSelect } from '../common/AppSelect';
 import { Wave } from '../Wave.jsx';
@@ -82,7 +82,7 @@ export function Reports({ reviews, projects, sprints, projectName, onRefresh, on
   const [burnLoading, setBurnLoading] = useState(false);
   const [expandedSprint, setExpandedSprint] = useState(null);
   const [overdueOnly, setOverdueOnly] = useState(false);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localToday();
   const tabs = [
     { id: 'portfolio', label: 'Portfolio & PMO', desc: 'Cross-project health, RAG status, portfolio overview' },
     { id: 'scrum', label: 'Scrum & Agile', desc: 'Sprint reports, velocity, burndown, CFD' },

@@ -1,11 +1,11 @@
 import { stages, areas, priorities, statuses, MAX_ATTACHMENT_BYTES } from './worker/constants.js';
 import { json, safeText, id, sessionCookie, cookieValue, publicUser, parseJson, readBody, authRateLimited, tooManyRequests, MIN_PASSWORD_LENGTH } from './worker/utils.js';
 import { ensureWorkspaceSchema } from './worker/schema.js';
-import { sendInviteEmail } from './worker/email.js';
 import { passwordHash, passwordMatches, sessionUser, createSession, signedIn, canAccessProject, projectIdForReview } from './worker/auth.js';
 import { normalizeReview, reviewSnapshot, notifyUsers, recordActivity } from './worker/reviews.js';
 import { bootstrap } from './worker/bootstrap.js';
 import { handleAiGenerate } from './worker/ai.js';
+import { handleProjectPeople } from './worker/project-people.js';
 
 const MUTATING_METHODS = new Set(['POST', 'PATCH', 'DELETE', 'PUT']);
 const securityHeaders = {
@@ -18,18 +18,17 @@ const accessDenied = () => json({ error: 'You do not have access to this project
 async function requireProject(env, user, projectId, permission = 'view') {
   return canAccessProject(env, user, projectId || 'default', permission);
 }
-async function userProjectCount(env, userId) {
-  const row = await env.DB.prepare('SELECT COUNT(*) AS count FROM project_memberships WHERE user_id = ?').bind(userId).first();
-  return Number(row?.count || 0);
+async function validateRelations(env, review, projectId, reviewId) {
+  for (const [key, table, label] of [['meeting_id','meetings','Meeting'], ['parent_id','reviews','Parent item'], ['sprint_id','sprints','Sprint']]) {
+    if (!review[key]) continue;
+    if (key === 'parent_id' && review[key] === reviewId) return 'A task cannot be its own parent.';
+    const related = await env.DB.prepare(`SELECT project_id FROM ${table} WHERE id=?`).bind(review[key]).first();
+    if (!related || related.project_id !== projectId) return `${label} must belong to the same project.`;
+  }
+  return null;
 }
 async function canCreateProject(env, user) {
-  if (['super_admin', 'admin'].includes(user.role)) return true;
-  return await userProjectCount(env, user.id) === 0;
-}
-async function canManageMembers(env, user) {
-  if (['super_admin', 'admin'].includes(user.role)) return true;
-  const row = await env.DB.prepare("SELECT 1 FROM project_memberships WHERE user_id = ? AND role = 'editor' LIMIT 1").bind(user.id).first();
-  return Boolean(row);
+  return user.role !== 'viewer';
 }
 async function visibleProjectRows(env, user, rows) {
   if (['super_admin', 'admin'].includes(user.role)) return rows;
@@ -82,81 +81,30 @@ async function routeApi(request, env) {
     if (origin && origin !== new URL(request.url).origin) return json({ error: 'Cross-origin requests are not allowed.' }, 403);
   }
   await ensureWorkspaceSchema(env);
+  const peopleResponse = await handleProjectPeople(request, env, user);
+  if (peopleResponse) return peopleResponse;
   if (request.method === 'POST' && path === '/api/ai/generate') return handleAiGenerate(request, env);
   if (request.method === 'GET' && path === '/api/admin/users') {
     if (!['super_admin', 'admin'].includes(user.role)) return json({ error: 'Admin access required.' }, 403);
     const result = await env.DB.prepare('SELECT id, email, username, name, role, created_at AS createdAt FROM users ORDER BY CASE role WHEN \'super_admin\' THEN 0 WHEN \'admin\' THEN 1 ELSE 2 END, name').all();
     return json({ users: result.results });
   }
-  if (request.method === 'GET' && path === '/api/project-members') {
-    if (!await canManageMembers(env, user)) return json({ members: [] });
-    const result = await env.DB.prepare("SELECT m.id, m.email, COALESCE(r.role, m.role, 'viewer') AS role, m.status, m.created_at AS createdAt FROM project_members m LEFT JOIN project_member_roles r ON r.member_id = m.id ORDER BY m.created_at DESC").all();
-    return json({ members: result.results });
-  }
-  if (request.method === 'GET' && path === '/api/team') {
-    // Assignable people: workspace users + invited members (email invites without accounts yet).
-    const [users, members] = await env.DB.batch([
-      env.DB.prepare('SELECT id, name, email FROM users ORDER BY name'),
-      env.DB.prepare('SELECT email FROM project_members ORDER BY created_at DESC')
-    ]);
-    const seen = new Set();
-    const team = [];
-    for (const u of users.results) {
-      const name = (u.name || '').trim() || u.email.split('@')[0];
-      if (!seen.has(name.toLowerCase())) { seen.add(name.toLowerCase()); team.push({ name, email: u.email, source: 'user' }); }
-    }
-    for (const m of members.results) {
-      const email = (m.email || '').trim().toLowerCase();
-      if (!email) continue;
-      if (!team.some(t => t.email.toLowerCase() === email)) team.push({ name: email.split('@')[0], email, source: 'invite' });
-    }
-    return json({ team });
-  }
-  if (request.method === 'POST' && path === '/api/project-members') {
-    if (!await canManageMembers(env, user)) return json({ error: 'Editor access required.' }, 403);
-    const body = await readBody(request); if (!body) return json({ error: 'Invalid JSON.' }, 400);
-    const email = safeText(body.email, 254).toLowerCase();
-    if (!/^\S+@\S+\.\S+$/.test(email)) return json({ error: 'Enter a valid email address.' }, 400);
-    if (await env.DB.prepare('SELECT id FROM project_members WHERE email = ?').bind(email).first()) return json({ error: 'That email has already been invited.' }, 409);
-    const role = ['viewer', 'editor'].includes(body.role) ? body.role : 'viewer';
-    const member = { id: id(), email, role, status: 'invited' };
-    await env.DB.batch([env.DB.prepare('INSERT INTO project_members (id, email, role, status, invited_by) VALUES (?, ?, ?, ?, ?)').bind(member.id, member.email, 'viewer', member.status, user.id), env.DB.prepare('INSERT INTO project_member_roles (member_id, role) VALUES (?, ?)').bind(member.id, role)]);
-    const emailResult = await sendInviteEmail(env, request, { to: email, inviterName: user.name });
-    await notifyUsers(env, user.id, { type: 'member_invited', title: 'Team member invited', body: user.name + ' invited ' + email + ' as ' + role });
-    return json({ ...member, emailSent: emailResult.sent, emailReason: emailResult.sent ? undefined : emailResult.reason }, 201);
-  }
-  const memberMatch = path.match(/^\/api\/project-members\/([a-zA-Z0-9-]+)$/);
-  if (request.method === 'PATCH' && memberMatch) {
-    if (!await canManageMembers(env, user)) return json({ error: 'Editor access required.' }, 403);
-    const body = await readBody(request); const role = body?.role;
-    if (!['viewer', 'editor'].includes(role)) return json({ error: 'Choose Viewer or Editor.' }, 400);
-    const exists = await env.DB.prepare('SELECT id FROM project_members WHERE id = ?').bind(memberMatch[1]).first();
-    if (!exists) return json({ error: 'Invite not found.' }, 404);
-    await env.DB.prepare("INSERT INTO project_member_roles (member_id, role, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP) ON CONFLICT(member_id) DO UPDATE SET role = excluded.role, updated_at = CURRENT_TIMESTAMP").bind(memberMatch[1], role).run();
-    await notifyUsers(env, user.id, { type: 'member_role_updated', title: 'Team access updated', body: user.name + ' updated access for an invited member' });
-    return json({ ok: true, role });
-  }
-  if (request.method === 'DELETE' && memberMatch) {
-    if (!await canManageMembers(env, user)) return json({ error: 'Editor access required.' }, 403);
-    const result = await env.DB.prepare('DELETE FROM project_members WHERE id = ?').bind(memberMatch[1]).run();
-    if (result.meta.changes) await notifyUsers(env, user.id, { type: 'member_removed', title: 'Team invite removed', body: user.name + ' removed a pending team invite' });
-    return result.meta.changes ? json({ ok: true }) : json({ error: 'Invite not found.' }, 404);
-  }
   if (request.method === 'GET' && path === '/api/metadata') {
     const result = await env.DB.prepare("SELECT id, project_id AS projectId, type, name, parent_id AS parentId, color, COALESCE(status, CASE WHEN COALESCE(archived, 0) = 1 THEN 'archived' ELSE 'active' END) AS status, COALESCE(archived, 0) AS archived FROM project_metadata ORDER BY type, name").all();
     return json({ metadata: await visibleProjectRows(env, user, result.results) });
   }
   if (request.method === 'POST' && path === '/api/metadata') {
-    if (!['super_admin', 'admin'].includes(user.role)) return json({ error: 'Admin access required.' }, 403);
     const body = await readBody(request); if (!body || !['epic', 'feature', 'label'].includes(body.type)) return json({ error: 'Invalid metadata type.' }, 400);
     const item = { id: id(), projectId: safeText(body.projectId, 80) || 'default', type: body.type, name: safeText(body.name, 100), parentId: safeText(body.parentId, 80) || null, color: /^#[0-9a-fA-F]{6}$/.test(body.color || '') ? body.color : '#111b30' };
     if (!item.name) return json({ error: 'Name is required.' }, 400);
     if (!await requireProject(env, user, item.projectId, 'edit')) return accessDenied();
-    try { await env.DB.prepare('INSERT INTO project_metadata (id, project_id, type, name, parent_id, color, status, archived) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').bind(item.id, item.projectId, item.type, item.name, item.parentId, item.color, 'active', 0).run(); await notifyUsers(env, user.id, { type: 'metadata_created', title: item.type + ' created', body: user.name + ' created ' + item.name }); return json({ ...item, status: 'active', archived: 0 }, 201); } catch { return json({ error: 'That item already exists in this project.' }, 409); }
+    try { await env.DB.prepare('INSERT INTO project_metadata (id, project_id, type, name, parent_id, color, status, archived) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').bind(item.id, item.projectId, item.type, item.name, item.parentId, item.color, 'active', 0).run(); await notifyUsers(env, user.id, { projectId: item.projectId, type: 'metadata_created', title: item.type + ' created', body: user.name + ' created ' + item.name }); return json({ ...item, status: 'active', archived: 0 }, 201); } catch { return json({ error: 'That item already exists in this project.' }, 409); }
   }
   const metadataMatch = path.match(/^\/api\/metadata\/([a-zA-Z0-9-]+)$/);
   if (request.method === 'PATCH' && metadataMatch) {
-    if (!['super_admin', 'admin'].includes(user.role)) return json({ error: 'Admin access required.' }, 403);
+    const item = await env.DB.prepare('SELECT project_id AS projectId FROM project_metadata WHERE id=?').bind(metadataMatch[1]).first();
+    if (!item) return json({ error: 'Metadata not found.' }, 404);
+    if (!await requireProject(env, user, item.projectId, 'edit')) return accessDenied();
     const body = await readBody(request); if (!body) return json({ error: 'Invalid JSON.' }, 400);
     const fields = {}; if ('name' in body) fields.name = safeText(body.name, 100); if ('parentId' in body) fields.parent_id = safeText(body.parentId, 80) || null; if ('color' in body && /^#[0-9a-fA-F]{6}$/.test(body.color)) fields.color = body.color;
     if ('archived' in body || 'status' in body) {
@@ -170,7 +118,9 @@ async function routeApi(request, env) {
     return result.meta.changes ? json({ ok: true }) : json({ error: 'Metadata not found.' }, 404);
   }
   if (request.method === 'DELETE' && metadataMatch) {
-    if (!['super_admin', 'admin'].includes(user.role)) return json({ error: 'Admin access required.' }, 403);
+    const item = await env.DB.prepare('SELECT project_id AS projectId FROM project_metadata WHERE id=?').bind(metadataMatch[1]).first();
+    if (!item) return json({ error: 'Metadata not found.' }, 404);
+    if (!await requireProject(env, user, item.projectId, 'edit')) return accessDenied();
     const result = await env.DB.prepare('DELETE FROM project_metadata WHERE id = ?').bind(metadataMatch[1]).run();
     if (result.meta.changes) await notifyUsers(env, user.id, { type: 'metadata_deleted', title: 'Metadata deleted', body: user.name + ' permanently deleted a metadata item' });
     return result.meta.changes ? json({ ok: true }) : json({ error: 'Metadata not found.' }, 404);
@@ -201,7 +151,7 @@ async function routeApi(request, env) {
     const result = await env.DB.prepare('DELETE FROM users WHERE id = ?').bind(adminMatch[1]).run();
     return result.meta.changes ? json({ ok: true }) : json({ error: 'User not found.' }, 404);
   }
-  if (request.method === 'GET' && path === '/api/bootstrap') return json(await bootstrap(env, user.id));
+  if (request.method === 'GET' && path === '/api/bootstrap') return json(await bootstrap(env, user.id, new URL(request.url).searchParams.get('project')));
 
   if (request.method === 'GET' && path === '/api/project-settings') {
     const settings = await env.DB.prepare("SELECT name, description, access_mode AS accessMode FROM project_settings WHERE id = 'default'").first();
@@ -212,10 +162,10 @@ async function routeApi(request, env) {
     return json({ spaces: result.results });
   }
   if (request.method === 'POST' && path === '/api/projects') {
-    if (!await canCreateProject(env, user)) return json({ error: 'You already belong to a project.' }, 403);
+    if (!await canCreateProject(env, user)) return json({ error: 'Project creation is not available for this account.' }, 403);
     const body = await readBody(request); const name = safeText(body?.name, 120); if (!name) return json({ error: 'Project name is required.' }, 400);
     const project = { id: id(), name, description: safeText(body.description, 2000), spaceId: safeText(body.spaceId, 80) || 'default', accessMode: 'invite' };
-    try { await env.DB.prepare('INSERT INTO projects (id, space_id, name, description, access_mode) VALUES (?, ?, ?, ?, ?)').bind(project.id, project.spaceId, project.name, project.description, project.accessMode).run(); await env.DB.prepare("INSERT INTO project_memberships (project_id, user_id, role) VALUES (?, ?, 'editor')").bind(project.id, user.id).run(); await notifyUsers(env, user.id, { type: 'project_created', title: 'Project created', body: user.name + ' created ' + project.name }); return json(project, 201); } catch { return json({ error: 'Space or project already exists.' }, 409); }
+    try { await env.DB.prepare('INSERT INTO projects (id, space_id, name, description, access_mode) VALUES (?, ?, ?, ?, ?)').bind(project.id, project.spaceId, project.name, project.description, project.accessMode).run(); await env.DB.prepare("INSERT INTO project_memberships (project_id, user_id, role) VALUES (?, ?, 'editor')").bind(project.id, user.id).run(); await notifyUsers(env, user.id, { projectId: project.id, type: 'project_created', title: 'Project created', body: user.name + ' created ' + project.name }); return json(project, 201); } catch { return json({ error: 'Space or project already exists.' }, 409); }
   }
   const projectMatch = path.match(/^\/api\/projects\/([a-zA-Z0-9-]+)$/);
   if (request.method === 'DELETE' && projectMatch) {
@@ -243,7 +193,10 @@ async function routeApi(request, env) {
   }
   if (request.method === 'PATCH' && projectMatch) {
     if (!['super_admin', 'admin'].includes(user.role)) return json({ error: 'Admin access required.' }, 403);
-    const body = await readBody(request); const fields = {}; if ('name' in (body || {})) fields.name = safeText(body.name, 120); if ('description' in (body || {})) fields.description = safeText(body.description, 2000); if (!Object.keys(fields).length) return json({ error: 'No changes supplied.' }, 400);
+    const body = await readBody(request); const fields = {}; if ('name' in (body || {})) fields.name = safeText(body.name, 120); if ('description' in (body || {})) fields.description = safeText(body.description, 2000);
+    if ('name' in fields && !fields.name) return json({ error: 'Project name is required.' }, 400);
+    if ('accessMode' in (body || {})) { if (!['invite', 'link'].includes(body.accessMode)) return json({ error: 'Invalid access mode.' }, 400); fields.access_mode = body.accessMode; }
+    if (!Object.keys(fields).length) return json({ error: 'No changes supplied.' }, 400);
     const result = await env.DB.prepare(`UPDATE projects SET ${Object.keys(fields).map(key => `${key} = ?`).join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(...Object.values(fields), projectMatch[1]).run(); return result.meta.changes ? json({ ok: true }) : json({ error: 'Project not found.' }, 404);
   }
   if (request.method === 'PATCH' && path === '/api/project-settings') {
@@ -254,12 +207,13 @@ async function routeApi(request, env) {
     if (!['invite', 'link'].includes(accessMode)) return json({ error: 'Invalid access mode.' }, 400);
     await env.DB.prepare("INSERT INTO project_settings (id, name, description, access_mode) VALUES ('default', ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name = excluded.name, description = excluded.description, access_mode = excluded.access_mode, updated_at = CURRENT_TIMESTAMP").bind(name, description, accessMode).run();
     await env.DB.prepare("UPDATE projects SET name = ?, description = ?, access_mode = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 'default'").bind(name, description, accessMode).run();
-    await notifyUsers(env, user.id, { type: 'project_updated', title: 'Project settings updated', body: user.name + ' updated project settings' });
+    await notifyUsers(env, user.id, { projectId: 'default', type: 'project_updated', title: 'Project settings updated', body: user.name + ' updated project settings' });
     return json({ name, description, accessMode, initials: name.slice(0, 1).toUpperCase() });
   }
   if (request.method === 'GET' && path === '/api/notifications') {
-    const result = await env.DB.prepare("SELECT n.id, n.type, n.title, n.body, n.read_at AS readAt, n.created_at AS createdAt, n.review_id AS reviewId FROM notifications n WHERE n.user_id = ? ORDER BY n.created_at DESC LIMIT 50").bind(user.id).all();
-    return json({ notifications: result.results.map(item => ({ ...item, read: Boolean(item.readAt) })) });
+    const result = await env.DB.prepare("SELECT n.id, n.type, n.title, n.body, n.read_at AS readAt, n.created_at AS createdAt, n.review_id AS reviewId, n.project_id AS projectId FROM notifications n WHERE n.user_id = ? ORDER BY n.created_at DESC LIMIT 50").bind(user.id).all();
+    const allowed = await Promise.all(result.results.map(async item => !item.projectId || await canAccessProject(env, user, item.projectId)));
+    return json({ notifications: result.results.filter((_, index) => allowed[index]).map(item => ({ ...item, read: Boolean(item.readAt) })) });
   }
   const notificationMatch = path.match(/^\/api\/notifications\/([a-zA-Z0-9-]+)$/);
   if (request.method === 'PATCH' && notificationMatch) {
@@ -331,16 +285,18 @@ async function routeApi(request, env) {
     return json({ sprints: await visibleProjectRows(env, user, result.results) });
   }
   if (request.method === 'POST' && path === '/api/workflow/sprints') {
-    if (!['super_admin', 'admin'].includes(user.role)) return json({ error: 'Admin access required.' }, 403);
     const body = await readBody(request); const name = safeText(body?.name, 100); if (!name) return json({ error: 'Sprint name is required.' }, 400);
     const projectId = safeText(body.projectId, 80) || 'default';
+    if (!await requireProject(env, user, projectId, 'edit')) return accessDenied();
     if (!await env.DB.prepare('SELECT id FROM projects WHERE id = ?').bind(projectId).first()) return json({ error: 'Project not found.' }, 400);
     const item = { id: id(), projectId, name, goal: safeText(body.goal, 500), startDate: safeText(body.startDate, 10) || null, endDate: safeText(body.endDate, 10) || null, status: ['planned','active','completed'].includes(body.status) ? body.status : 'planned' };
-    try { await env.DB.prepare('INSERT INTO sprints (id, project_id, name, goal, start_date, end_date, status) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(item.id, item.projectId, item.name, item.goal, item.startDate, item.endDate, item.status).run(); await notifyUsers(env, user.id, { type: 'sprint_created', title: 'Sprint created', body: user.name + ' created ' + item.name }); return json(item, 201); } catch { return json({ error: 'Sprint already exists.' }, 409); }
+    try { await env.DB.prepare('INSERT INTO sprints (id, project_id, name, goal, start_date, end_date, status) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(item.id, item.projectId, item.name, item.goal, item.startDate, item.endDate, item.status).run(); await notifyUsers(env, user.id, { projectId: item.projectId, type: 'sprint_created', title: 'Sprint created', body: user.name + ' created ' + item.name }); return json(item, 201); } catch { return json({ error: 'Sprint already exists.' }, 409); }
   }
   const sprintMatch = path.match(/^\/api\/workflow\/sprints\/([a-zA-Z0-9-]+)$/);
   if (request.method === 'PATCH' && sprintMatch) {
-    if (!['super_admin', 'admin'].includes(user.role)) return json({ error: 'Admin access required.' }, 403);
+    const item = await env.DB.prepare('SELECT project_id AS projectId FROM sprints WHERE id=?').bind(sprintMatch[1]).first();
+    if (!item) return json({ error: 'Sprint not found.' }, 404);
+    if (!await requireProject(env, user, item.projectId, 'edit')) return accessDenied();
     const body = await readBody(request) || {};
     const fields = {};
     if ('name' in body) fields.name = safeText(body.name, 100);
@@ -352,7 +308,7 @@ async function routeApi(request, env) {
     const result = await env.DB.prepare(`UPDATE sprints SET ${Object.keys(fields).map(key => `${key} = ?`).join(', ')} WHERE id = ?`).bind(...Object.values(fields), sprintMatch[1]).run();
     if (!result.meta.changes) return json({ error: 'Sprint not found.' }, 404);
     const saved = await env.DB.prepare('SELECT id, project_id AS projectId, name, goal, start_date AS startDate, end_date AS endDate, status FROM sprints WHERE id = ?').bind(sprintMatch[1]).first();
-    await notifyUsers(env, user.id, { type: 'sprint_updated', title: 'Sprint updated', body: user.name + ' updated ' + (saved?.name || 'a sprint') });
+    await notifyUsers(env, user.id, { projectId: saved.projectId, type: 'sprint_updated', title: 'Sprint updated', body: user.name + ' updated ' + (saved?.name || 'a sprint') });
     return json(saved);
   }
 
@@ -363,8 +319,8 @@ async function routeApi(request, env) {
       const reviewId = body.id && /^[a-zA-Z0-9-]{8,80}$/.test(body.id) ? body.id : id();
       if (!await env.DB.prepare('SELECT id FROM projects WHERE id = ?').bind(review.project_id || 'default').first()) return json({ error: 'Project not found.' }, 400);
       if (!await requireProject(env, user, review.project_id, 'edit')) return accessDenied();
-      if (review.meeting_id && !await env.DB.prepare('SELECT id FROM meetings WHERE id = ?').bind(review.meeting_id).first()) return json({ error: 'Related meeting not found.' }, 400);
-      if (review.parent_id && !await env.DB.prepare('SELECT id FROM reviews WHERE id = ?').bind(review.parent_id).first()) return json({ error: 'Parent item not found.' }, 400);
+      const relationError = await validateRelations(env, review, review.project_id);
+      if (relationError) return json({ error: relationError }, 400);
       const base = { id: reviewId, ...review, submitted_by: review.submitted_by || user.name, archived: 0 };
       const insertRow = key => env.DB.prepare('INSERT INTO reviews (id, key, title, area, priority, stage, assignee, assignees, due, start_date, description, status, submitted_by, meeting_id, reporter, estimate_hours, epic, feature, sprint, labels, project_id, parent_id, item_type, sprint_id, archived) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(base.id, key, base.title, base.area, base.priority, base.stage, base.assignee, base.assignees ?? JSON.stringify(base.assignee ? [base.assignee] : []), base.due, base.start_date ?? null, base.description, base.status, base.submitted_by, base.meeting_id, base.reporter || user.name, base.estimate_hours ?? null, base.epic || '', base.feature || '', base.sprint || '', base.labels || '[]', base.project_id || 'default', base.parent_id || null, base.item_type || 'task', base.sprint_id || null, base.archived).run();
       // Retry on key collision: MAX()+1 races under concurrency, key is UNIQUE.
@@ -425,8 +381,9 @@ async function routeApi(request, env) {
       if (!await requireProject(env, user, before.projectId, 'edit')) return accessDenied();
       const patch = normalizeReview(body, true); const keys = Object.keys(patch);
       if (!keys.length) return json({ error: 'No changes supplied.' }, 400);
-      if ('meeting_id' in patch && patch.meeting_id && !await env.DB.prepare('SELECT id FROM meetings WHERE id = ?').bind(patch.meeting_id).first()) return json({ error: 'Related meeting not found.' }, 400);
-      if ('project_id' in patch && !await env.DB.prepare('SELECT id FROM projects WHERE id = ?').bind(patch.project_id).first()) return json({ error: 'Project not found.' }, 400);
+      if ('project_id' in patch && patch.project_id !== before.projectId) return json({ error: 'Moving tasks between projects is not supported.' }, 400);
+      const relationError = await validateRelations(env, { meeting_id: before.meetingId, parent_id: before.parentId, sprint_id: before.sprintId, ...patch }, before.projectId, reviewMatch[1]);
+      if (relationError) return json({ error: relationError }, 400);
       const values = keys.map(key => patch[key]);
       const result = await env.DB.prepare(`UPDATE reviews SET ${keys.map(key => `${key} = ?`).join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(...values, reviewMatch[1]).run();
       if (!result.meta.changes) return json({ error: 'Review not found.' }, 404);
@@ -440,9 +397,9 @@ async function routeApi(request, env) {
 
   if (request.method === 'DELETE' && reviewMatch) {
     if (!await requireProject(env, user, await projectIdForReview(env, reviewMatch[1]), 'edit')) return accessDenied();
-    const doomed = await env.DB.prepare('SELECT title FROM reviews WHERE id = ?').bind(reviewMatch[1]).first();
+    const doomed = await env.DB.prepare('SELECT title, project_id AS projectId FROM reviews WHERE id = ?').bind(reviewMatch[1]).first();
     const result = await env.DB.prepare('DELETE FROM reviews WHERE id = ?').bind(reviewMatch[1]).run();
-    if (result.meta.changes && doomed) await notifyUsers(env, user.id, { type: 'review_deleted', title: 'Task deleted', body: user.name + ' deleted "' + doomed.title + '"' });
+    if (result.meta.changes && doomed) await notifyUsers(env, user.id, { projectId: doomed.projectId, type: 'review_deleted', title: 'Task deleted', body: user.name + ' deleted "' + doomed.title + '"' });
     return result.meta.changes ? json({ ok: true }) : json({ error: 'Review not found.' }, 404);
   }
 
@@ -512,7 +469,7 @@ async function routeApi(request, env) {
     if (!await requireProject(env, user, meeting.projectId, 'edit')) return accessDenied();
     if (!await env.DB.prepare('SELECT id FROM projects WHERE id = ?').bind(meeting.projectId).first()) return json({ error: 'Project not found.' }, 400);
     await env.DB.prepare('INSERT INTO meetings (id, project_id, title, date, ai, notes, item_count, attendees) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').bind(meeting.id, meeting.projectId, meeting.title, meeting.date, meeting.ai, meeting.notes, meeting.itemCount, JSON.stringify(meeting.attendees)).run();
-    await notifyUsers(env, user.id, { type: 'meeting_created', title: 'New meeting scheduled', body: `"${meeting.title}" on ${meeting.date}` });
+    await notifyUsers(env, user.id, { projectId: meeting.projectId, type: 'meeting_created', title: 'New meeting scheduled', body: `"${meeting.title}" on ${meeting.date}` });
     return json({ ...meeting, ai: Boolean(meeting.ai) }, 201);
   }
 
@@ -532,7 +489,7 @@ async function routeApi(request, env) {
     const result = await env.DB.prepare(`UPDATE meetings SET ${keys.map(key => `${key} = ?`).join(', ')} WHERE id = ?`).bind(...keys.map(key => patch[key]), meetingMatch[1]).run();
     if (!result.meta.changes) return json({ error: 'Meeting not found.' }, 404);
     const saved = await env.DB.prepare('SELECT id, title, date, ai, notes, project_id AS projectId, (SELECT COUNT(*) FROM reviews WHERE meeting_id = m.id AND archived = 0) AS itemCount, attendees FROM meetings m WHERE id = ?').bind(meetingMatch[1]).first();
-    await notifyUsers(env, user.id, { type: 'meeting_updated', title: 'Meeting updated', body: user.name + ' updated "' + (saved?.title || 'a meeting') + '"' });
+    await notifyUsers(env, user.id, { projectId: saved.projectId, type: 'meeting_updated', title: 'Meeting updated', body: user.name + ' updated "' + (saved?.title || 'a meeting') + '"' });
     return json({ ...saved, ai: Boolean(saved.ai), attendees: parseJson(saved.attendees, []) });
   }
   if (request.method === 'DELETE' && meetingMatch) {
@@ -544,7 +501,7 @@ async function routeApi(request, env) {
       env.DB.prepare('UPDATE reviews SET meeting_id = NULL WHERE meeting_id = ?').bind(meetingMatch[1]),
       env.DB.prepare('DELETE FROM meetings WHERE id = ?').bind(meetingMatch[1])
     ]);
-    if (result[1].meta.changes && doomed) await notifyUsers(env, user.id, { type: 'meeting_deleted', title: 'Meeting deleted', body: `"${doomed.title}" was removed` });
+    if (result[1].meta.changes && doomed) await notifyUsers(env, user.id, { projectId: meetingProject.projectId, type: 'meeting_deleted', title: 'Meeting deleted', body: `"${doomed.title}" was removed` });
     return result[1].meta.changes ? json({ ok: true }) : json({ error: 'Meeting not found.' }, 404);
   }
 
@@ -553,34 +510,29 @@ async function routeApi(request, env) {
 
 export default {
   async fetch(request, env) {
-    if (new URL(request.url).pathname.startsWith('/api/')) return secureResponse(await routeApi(request, env));
+    if (new URL(request.url).pathname.startsWith('/api/')) {
+      try { return secureResponse(await routeApi(request, env)); }
+      catch (error) {
+        const errorId = crypto.randomUUID();
+        console.error('API failure', { errorId, path: new URL(request.url).pathname, message: error?.message });
+        return secureResponse(json({ error: 'This action could not be completed. Please retry.', errorId }, 500));
+      }
+    }
     const pathname = new URL(request.url).pathname;
-    // Keep clients with a cached pre-deploy entry bundle from breaking when a
-    // Vite fingerprints lazy chunks and their CSS. A browser can retain an
-    // older index module briefly after a deploy, so keep the previous route
-    // assets resolvable during the rollout instead of letting one stale
-    // import take down the whole section.
-    const legacyAssetAliases = {
-      '/assets/Reviews-DXQop5KM.js': '/assets/Reviews-DimfEV7i.js',
-      '/assets/Reviews-CWXLhP15.js': '/assets/Reviews-DimfEV7i.js',
-      '/assets/workflow-BVUo_fz7.css': '/assets/workflow-3EA3HGuE.css',
-      '/assets/KanbanWorkspace-DvHzMlb6.js': '/assets/KanbanWorkspace-exjtLWuq.js',
-      '/assets/KanbanWorkspace-DUxWHsUO.js': '/assets/KanbanWorkspace-exjtLWuq.js',
-      '/assets/Reports-BbF7l5mE.js': '/assets/Reports-YRvqlTGd.js',
-      '/assets/Reports-CjsgjNh1.js': '/assets/Reports-YRvqlTGd.js',
-      '/assets/ArchivePage-ffFcbMS7.js': '/assets/ArchivePage-DHBVz1Qf.js',
-      '/assets/ArchivePage-CkBt80yt.js': '/assets/ArchivePage-DHBVz1Qf.js',
-      '/assets/index-CY9Vl-DC.css': '/assets/index-U-8iiyNV.css'
-    };
-    const assetPath = legacyAssetAliases[pathname];
-    const response = await env.ASSETS.fetch(assetPath ? new Request(new URL(assetPath, request.url), request) : request);
+    const response = await env.ASSETS.fetch(request);
     const headers = new Headers(response.headers);
+    if (pathname.startsWith('/assets/') && (headers.get('content-type') || '').includes('text/html')) {
+      // SPA fallback must never masquerade as an absent JavaScript/CSS chunk.
+      return secureResponse(new Response(request.method === 'HEAD' ? null : 'Asset not found. Reload the application to load its current version.', {
+        status:404, headers:{ 'content-type':'text/plain; charset=utf-8', 'cache-control':'no-store' }
+      }));
+    }
     // HTML is the manifest that points at Vite's hashed bundles. Never cache
     // it at the browser/edge so a deploy cannot leave users on an old bundle.
-    if (pathname === '/' || pathname.endsWith('.html')) {
+    if ((response.headers.get('content-type') || '').includes('text/html')) {
       headers.set('cache-control', 'no-store, no-cache, must-revalidate');
       headers.set('pragma', 'no-cache');
-    } else if (/\/assets\/[^/]+-[A-Za-z0-9_-]{6,}\.(?:css|js)$/.test(pathname)) {
+    } else if (response.ok && /\/assets\/[^/]+-[A-Za-z0-9_-]{6,}\.(?:css|js)$/.test(pathname)) {
       // Hashed Vite assets are immutable and safe to cache aggressively.
       headers.set('cache-control', 'public, max-age=31536000, immutable');
     } else {

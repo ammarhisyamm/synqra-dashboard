@@ -426,7 +426,7 @@
 }
 
 .my-work-list-heading h2,
-.my-work-group h3 {
+.my-work-group summary {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -437,7 +437,7 @@
 }
 
 .my-work-list-heading h2 span,
-.my-work-group h3 span:last-child {
+.my-work-group summary span:last-child {
   color: var(--ui-muted);
   font-weight: 400;
 }
@@ -446,7 +446,7 @@
   border-top: 1px solid var(--ui-border);
 }
 
-.my-work-group h3 {
+.my-work-group summary {
   min-height: 44px;
   padding: 12px 20px;
   background: var(--ui-subtle);
@@ -458,6 +458,14 @@
   font-size: 16px;
   line-height: 1;
 }
+.my-work-group summary { cursor:pointer; list-style:none; }
+.my-work-group summary::-webkit-details-marker { display:none; }
+.my-work-group:not([open]) .my-work-group-toggle { transform:rotate(-90deg); }
+.my-work-group summary:focus-visible { outline:2px solid var(--ui-focus); outline-offset:-4px; }
+.form-error { color:var(--ui-danger); font-size:13px; line-height:1.5; overflow-wrap:anywhere; }
+.reviews-page .review-row { cursor:pointer; }
+.reviews-page .review-row:hover { background:var(--ui-subtle); }
+.reviews-page .row-description { display:block; margin-top:4px; color:var(--ui-muted); font-size:12px; line-height:1.5; }
 
 .my-work-row {
   display: flex;
@@ -561,12 +569,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.detail-grid label:has(input[type='number'])::after {
-  content: 'Use 0.5 hour increments';
-  margin-top: -2px;
-  color: var(--ui-muted);
-  font-size: 11px;
-}
 
 .empty-workspace-card > p:not(.empty-workspace-kicker) {
   margin: 0;

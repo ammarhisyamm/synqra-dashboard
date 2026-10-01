@@ -1,8 +1,12 @@
-function parseDate(value) {
+export function parseDate(value) {
   if (!value) return null;
-  const candidate = new Date(typeof value === 'string' && value.length === 10 ? `${value}T12:00:00` : value);
+  // SQLite CURRENT_TIMESTAMP is UTC despite not including a timezone suffix.
+  const normalized = typeof value === 'string' && /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(\.\d+)?$/.test(value)
+    ? `${value.replace(' ', 'T')}Z` : value;
+  const candidate = new Date(typeof normalized === 'string' && normalized.length === 10 ? `${normalized}T12:00:00` : normalized);
   return Number.isNaN(candidate.getTime()) ? null : candidate;
 }
+export function localToday(now = new Date()) { return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`; }
 export function dateLabel(date) { const value = parseDate(date); return value ? new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(value) : '—'; }
 export function slashDate(date) { if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) return '—'; const [y, m, d] = date.split('-'); return `${m}/${d}/${y}`; }
 export function shortDate(date) { const value = parseDate(date); return value ? new Intl.DateTimeFormat('en-US', { day: 'numeric', month: 'short' }).format(value) : '—'; }

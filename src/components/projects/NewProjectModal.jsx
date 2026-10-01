@@ -7,11 +7,13 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 export function NewProjectModal({ onClose, onCreate }) {
   const [name, setName] = useState('');
   const [pending, setPending] = useState(false);
+  const [error, setError] = useState('');
   const submit = async event => {
     event.preventDefault();
     if (!name.trim() || pending) return;
     setPending(true);
-    try { await onCreate(name.trim()); } finally { setPending(false); }
+    setError('');
+    try { await onCreate(name.trim()); } catch (failure) { setError(failure.message); } finally { setPending(false); }
   };
-  return <Dialog open onOpenChange={open => { if (!open) onClose(); }}><DialogContent className="project-modal"><div className="project-modal-icon"><Plus size={28}/></div><DialogHeader><DialogTitle>New project</DialogTitle><DialogDescription>Create a new project to organize your feedback.</DialogDescription></DialogHeader><form onSubmit={submit}><TextField label="Project name" autoFocus value={name} onChange={event => setName(event.target.value)} placeholder="e.g. Marketplace Redesign" required/><DialogFooter><Button type="button" variant="ghost" onClick={onClose}>Cancel</Button><Button disabled={!name.trim() || pending}>{pending ? 'Creating…' : 'Create project'}</Button></DialogFooter></form></DialogContent></Dialog>;
+  return <Dialog open onOpenChange={open => { if (!open && !pending) onClose(); }}><DialogContent closeDisabled={pending} onEscapeKeyDown={event => { if (pending) event.preventDefault(); }} onPointerDownOutside={event => { if (pending) event.preventDefault(); }} className="project-modal"><div className="project-modal-icon"><Plus size={28}/></div><DialogHeader><DialogTitle>New project</DialogTitle><DialogDescription>Create a new project to organize your feedback.</DialogDescription></DialogHeader><form onSubmit={submit}><TextField label="Project name" autoFocus value={name} onChange={event => setName(event.target.value)} placeholder="e.g. Marketplace Redesign" required/>{error && <p className="form-error" role="alert">{error}</p>}<DialogFooter><Button disabled={pending} type="button" variant="ghost" onClick={onClose}>Cancel</Button><Button disabled={!name.trim() || pending}>{pending ? 'Creating…' : 'Create project'}</Button></DialogFooter></form></DialogContent></Dialog>;
 }

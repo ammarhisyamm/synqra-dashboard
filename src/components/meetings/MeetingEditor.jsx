@@ -1,13 +1,15 @@
+import { localToday } from '../../lib/dates';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, CalendarBlank, Check, FileText, Lightbulb, MagicWand, ArrowCounterClockwise as RotateCcw, Sparkle, Target, User, Users, X } from '@phosphor-icons/react';
 import { MeetingAiReview } from './MeetingAiReview';
 import { extractItemsLocally, generateActionItemsWithOrvix, hashNotes } from '../../api/ai';
 import { api } from '../../api/client';
 import { Wave } from '../Wave.jsx';
+import { TextField } from '../common/Field';
 import '../../workflow.css';
 
-const today = () => new Date().toISOString().slice(0, 10);
-const DRAFT_STORAGE_KEY = 'synqra-meeting-editor-draft';
+const today = () => localToday();
+const draftStorageKey = (user, projectId) => `synqra-meeting-editor-draft:${user?.id || 'anonymous'}:${projectId || 'none'}`;
 const templates = [
   { title: 'Blank Meeting', subtitle: 'Start from scratch', icon: FileText, notes: '' },
   { title: 'Meeting Notes', subtitle: 'Standard meeting notes', icon: FileText, notes: 'Yesterday:\n\nToday:\n\nBlockers:\n' },
@@ -15,11 +17,11 @@ const templates = [
   { title: 'Sprint Planning', subtitle: 'Goal, stories, risks', icon: Target, notes: 'Goal:\n\nStories:\n\nRisks:\n' }
 ];
 
-export function MeetingEditor({ user, team = [], onClose, onCreate, onToast }) {
+export function MeetingEditor({ projectId, user, team = [], onClose, onCreate, onToast }) {
   const [phase, setPhase] = useState('writing');
   const [form, setForm] = useState(() => {
     try {
-      const saved = JSON.parse(localStorage.getItem(DRAFT_STORAGE_KEY));
+      const saved = JSON.parse(localStorage.getItem(draftStorageKey(user, projectId)));
       const base = saved?.title || saved?.notes ? { title: saved.title || '', date: saved.date || today(), notes: saved.notes || '', attendees: Array.isArray(saved.attendees) ? saved.attendees : [] } : { title: '', date: today(), notes: '', attendees: [] };
       return base;
     } catch { return { title: '', date: today(), notes: '', attendees: [] }; }
@@ -28,6 +30,7 @@ export function MeetingEditor({ user, team = [], onClose, onCreate, onToast }) {
   const [manualName, setManualName] = useState('');
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviting, setInviting] = useState(false);
+  const [invitation, setInvitation] = useState(null);
   const participantsRef = useRef(null);
   const [items, setItems] = useState([]);
   const [brief, setBrief] = useState(null);
@@ -115,14 +118,15 @@ export function MeetingEditor({ user, team = [], onClose, onCreate, onToast }) {
     if (!email || !/^\S+@\S+\.\S+$/.test(email)) { onToast('Enter a valid email address'); return; }
     setInviting(true);
     try {
-      await api('/api/project-members', { method: 'POST', body: JSON.stringify({ email, role: 'viewer' }) });
+      const invited = await api('/api/project-members', { method: 'POST', body: JSON.stringify({ projectId, email, role: 'viewer' }) });
+      setInvitation(invited);
       const label = email.split('@')[0];
       setForm(prev => {
         const current = Array.isArray(prev.attendees) ? prev.attendees : [];
         return current.some(a => a.toLowerCase() === label.toLowerCase() || a.toLowerCase() === email) ? prev : { ...prev, attendees: [...current, label] };
       });
       setInviteEmail('');
-      onToast(`Invited ${email} — added to participants`);
+      onToast(invited.emailSent ? `Invitation sent to ${email}` : 'Invitation created. Copy the link to share it with your teammate.');
     } catch (err) { onToast(err.message); } finally { setInviting(false); }
   };
   useEffect(() => {
@@ -134,12 +138,13 @@ export function MeetingEditor({ user, team = [], onClose, onCreate, onToast }) {
     return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
   }, [participantsOpen]);
   const saveDraft = () => {
-    try { localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(form)); setSaved(true); onToast('Meeting draft saved'); }
+    try { localStorage.setItem(draftStorageKey(user, projectId), JSON.stringify(form)); setSaved(true); onToast('Meeting draft saved'); }
     catch { onToast('Meeting draft could not be saved'); }
   };
   const create = async payload => {
-    await onCreate(payload);
-    try { localStorage.removeItem(DRAFT_STORAGE_KEY); } catch {}
+    try { await onCreate(payload); }
+    catch (failure) { if (failure.failedItems) setItems(failure.failedItems.map(item => ({ ...item, keep: true }))); throw failure; }
+    try { localStorage.removeItem(draftStorageKey(user, projectId)); } catch {}
   };
 
   if (phase === 'ai') {
@@ -192,7 +197,7 @@ export function MeetingEditor({ user, team = [], onClose, onCreate, onToast }) {
 
       <div className="meeting-editor-heading">
         <input
-          className="meeting-title-input"
+          className="meeting-title-input field-input" aria-label="Meeting title"
           value={form.title}
           onChange={event => update('title', event.target.value)}
           placeholder="Untitled Meeting"
@@ -232,6 +237,13 @@ export function MeetingEditor({ user, team = [], onClose, onCreate, onToast }) {
                   <input type="email" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); inviteToProject(); } }} placeholder="email@contoh.com" aria-label="Invite email to project" />
                   <button type="button" className="secondary-button" disabled={inviting || !inviteEmail.trim()} onClick={inviteToProject}>{inviting ? '…' : 'Invite'}</button>
                 </div>
+                {invitation?.inviteUrl && <div className="participants-invitation">
+                  <TextField label="Meeting invitation link (expires in 7 days)" readOnly value={invitation.inviteUrl}/>
+                  <button type="button" className="secondary-button" onClick={async () => {
+                    try { await navigator.clipboard.writeText(invitation.inviteUrl); onToast('Invitation link copied'); }
+                    catch { onToast('Copy failed. Select and copy the link above.'); }
+                  }}>Copy invitation link</button>
+                </div>}
               </div>
             )}
           </span>
@@ -286,7 +298,7 @@ export function MeetingEditor({ user, team = [], onClose, onCreate, onToast }) {
             value={form.notes}
             onChange={event => update('notes', event.target.value)}
             placeholder="Start writing your meeting notes… (e.g. Action: Aria to polish login UX by Friday)"
-            rows="8"
+            rows="8" className="field-input" aria-label="Meeting notes"
           />
         </div>
 

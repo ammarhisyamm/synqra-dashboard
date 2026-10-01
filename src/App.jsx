@@ -20,6 +20,7 @@ import { NewProjectModal } from './components/projects/NewProjectModal';
 import { DeleteProjectModal } from './components/projects/DeleteProjectModal';
 import { CommandPalette } from './components/navigation/CommandPalette';
 import { AppSelect } from './components/common/AppSelect';
+import { TextField } from './components/common/Field';
 
 import { REPORT_COLORS, seed, loadData, statusFor, nextTaskKey, downloadReviewsCsv, elapsedLabel, makeHistoryModel, historyDateLabel, deduplicateNotifications, extractNotes } from './lib/helpers';
 import { ErrorPanel } from './components/common/ErrorPanel';
@@ -48,6 +49,8 @@ function EmptyWorkspaceOnboarding({ user, project, onCreateProject, onFinish, se
   const [step, setStep] = useState(project ? 'invite' : 'project');
   const [pending, setPending] = useState(false);
   const [inviting, setInviting] = useState(false);
+  const [error, setError] = useState('');
+  const [inviteUrl, setInviteUrl] = useState('');
 
   useEffect(() => {
     if (project && step === 'project') setStep('invite');
@@ -58,11 +61,12 @@ function EmptyWorkspaceOnboarding({ user, project, onCreateProject, onFinish, se
     const name = projectName.trim();
     if (!name || pending) return;
     setPending(true);
+    setError('');
     try {
       await onCreateProject(name);
       setProjectName('');
       setStep('invite');
-    } finally {
+    } catch (failure) { setError(failure.message); } finally {
       setPending(false);
     }
   };
@@ -73,7 +77,8 @@ function EmptyWorkspaceOnboarding({ user, project, onCreateProject, onFinish, se
     if (!email || inviting) return;
     setInviting(true);
     try {
-      const result = await api('/api/project-members', { method: 'POST', body: JSON.stringify({ email, role }) });
+      const result = await api('/api/project-members', { method: 'POST', body: JSON.stringify({ email, role, projectId: project.id }) });
+      setInviteUrl(result.inviteUrl || '');
       setInviteEmail('');
       if (onMembersChanged) onMembersChanged();
       setToast(result.emailSent ? `Invitation email sent to ${email}` : `Invite saved for ${email}`);
@@ -98,19 +103,17 @@ function EmptyWorkspaceOnboarding({ user, project, onCreateProject, onFinish, se
       </div>
 
       {step === 'project' ? <form className="onboarding-form" onSubmit={createProject}>
-        <label>Project name
-          <input autoFocus value={projectName} onChange={event => setProjectName(event.target.value)} placeholder="e.g. Acme Redesign" required/>
-        </label>
+        <TextField label="Project name" autoFocus value={projectName} onChange={event => setProjectName(event.target.value)} placeholder="e.g. Acme Redesign" required/>
+        {error && <p className="form-error" role="alert">{error}</p>}
         <button className="primary-button onboarding-primary" disabled={!projectName.trim() || pending}>{pending ? 'Creating...' : 'Create project'}</button>
       </form> : <form className="onboarding-form" onSubmit={invite}>
-        <label>Invite email
-          <input type="email" value={inviteEmail} onChange={event => setInviteEmail(event.target.value)} placeholder="teammate@example.com"/>
-        </label>
+        <TextField label="Invite email" type="email" value={inviteEmail} onChange={event => setInviteEmail(event.target.value)} placeholder="teammate@example.com"/>
         <div className="onboarding-invite-row">
           <AppSelect value={role} options={['editor', 'viewer']} onChange={setRole} ariaLabel="Invite role"/>
           <button className="secondary-button" disabled={!inviteEmail.trim() || inviting}><UserPlus size={16}/>{inviting ? 'Inviting...' : 'Invite'}</button>
         </div>
-        <button type="button" className="primary-button onboarding-primary" onClick={onFinish}>Finish setup</button>
+        {inviteUrl && <div className="invite-link"><TextField label="Invitation link" readOnly value={inviteUrl}/><button type="button" className="secondary-button" onClick={() => navigator.clipboard.writeText(inviteUrl).then(() => setToast('Invitation link copied')).catch(() => setToast('Select and copy the link manually'))}>Copy link</button></div>}
+        <button type="button" disabled={inviting} className="primary-button onboarding-primary" onClick={onFinish}>Finish setup</button>
       </form>}
     </div>
   </section>;
@@ -147,7 +150,27 @@ export function App() {
   const [notifications, setNotifications] = useState([]);
   const [team, setTeam] = useState([]);
   const [onboardingActive, setOnboardingActive] = useState(false);
-  const refreshTeam = () => { api('/api/team').then(data => setTeam(data.team || [])).catch(() => {}); };
+  const meetingCreation = useRef(null);
+  const refreshTeam = () => { api('/api/team?project_id=' + encodeURIComponent(data.project?.id || '')).then(result => setTeam(result.team || [])).catch(error => setToast(error.message)); };
+  useEffect(() => {
+    if (!user || !data.project?.id) { setTeam([]); return; }
+    let cancelled = false;
+    api('/api/team?project_id=' + encodeURIComponent(data.project.id)).then(result => { if (!cancelled) setTeam(result.team || []); }).catch(error => { if (!cancelled) { setTeam([]); setToast(error.message); } });
+    return () => { cancelled = true; };
+  }, [user?.id, data.project?.id]);
+  const loadWorkspace = async () => {
+    const url = new URL(window.location.href);
+    const token = url.searchParams.get('invite');
+    if (token) {
+      const accepted = await api('/api/project-members/accept', { method:'POST', body:JSON.stringify({ token }) });
+      url.searchParams.delete('invite'); url.searchParams.set('project', accepted.projectId);
+      window.history.replaceState(null, '', url);
+      setToast('Invitation accepted');
+    }
+    const remote = await api('/api/bootstrap?project=' + encodeURIComponent(url.searchParams.get('project') || ''));
+    const requested = url.searchParams.get('project');
+    return { ...remote, project: remote.projects.find(item => item.id === requested) || remote.project || null };
+  };
   const [commandOpen, setCommandOpen] = useState(false);
 
   useEffect(() => localStorage.setItem(STORAGE_KEY, JSON.stringify(data)), [data]);
@@ -166,8 +189,7 @@ export function App() {
           const { user: signedInUser } = await api('/api/auth/me');
           if (cancelled) return;
           setUser(signedInUser);
-          refreshTeam();
-          const remote = await api('/api/bootstrap');
+          const remote = await loadWorkspace();
           if (cancelled) return;
           const requestedProject = requestedProjectId && requestedProjectId !== 'default' ? remote.projects.find(item => item.id === requestedProjectId) : null;
           setData({ ...remote, project: requestedProject || remote.project || null });
@@ -215,6 +237,7 @@ export function App() {
   }, [page]);
 
   const activeProjectId = data.project?.id || null;
+  const readOnly = data.project?.role === 'viewer' && !['super_admin','admin'].includes(user?.role);
   const activeReviews = useMemo(() => activeProjectId ? (data.reviews || []).filter(r => !r.archived && (activeProjectId === 'default' ? (!r.projectId || r.projectId === 'default') : r.projectId === activeProjectId)) : [], [data.reviews, activeProjectId]);
   const activeMeetings = useMemo(() => activeProjectId ? (data.meetings || []).filter(meeting => activeProjectId === 'default' ? (!meeting.projectId || meeting.projectId === 'default') : meeting.projectId === activeProjectId) : [], [data.meetings, activeProjectId]);
   const activeWorkload = useMemo(() => {
@@ -231,6 +254,7 @@ export function App() {
   }, {})).map(([stage, count]) => ({ stage, count })).sort((a, b) => b.count - a.count), [activeReviews]);
   const activeSprints = useMemo(() => (data.sprints || []).filter(sprint => !sprint.projectId || sprint.projectId === activeProjectId), [data.sprints, activeProjectId]);
   const updateReview = async (id, patch, field) => {
+    if (readOnly) { setToast('This project is read-only. Ask an editor for access.'); return; }
     const previous = data.reviews.find(item => item.id === id);
     if (!previous) return;
     setData(prev => ({ ...prev, reviews: prev.reviews.map(r => r.id === id ? { ...r, ...patch } : r) }));
@@ -256,6 +280,7 @@ export function App() {
     }
   };
   const addReview = async (review) => {
+    if (readOnly) throw new Error('Editor access is required to create a task.');
     const saved = { id: crypto.randomUUID(), createdAt: new Date().toISOString().slice(0, 10), archived: false, projectId: data.project?.id || 'default', ...review };
     if (!/^AR-\d+$/.test(saved.key || '')) saved.key = nextTaskKey(data.reviews);
     setData(prev => ({ ...prev, reviews: [saved, ...prev.reviews] }));
@@ -301,13 +326,20 @@ export function App() {
     }
   };
   const showSuccess = (title, subtitle, ctaLabel, onCta) => setDialog({ success: true, icon: <CheckCircle2 size={24}/>, title, subtitle, ctaLabel, onCta });
+  const openReview = reference => {
+    const review = data.reviews.find(item => item.id === reference.id);
+    if (!review) { setToast('This task is no longer available. Refresh your workspace.'); return; }
+    const project = data.projects.find(item => item.id === review.projectId);
+    if (project) setData(previous => ({ ...previous, project }));
+    setSelectedReview(review);
+  };
   const archiveReview = (id) => {
     const target = data.reviews.find(r => r.id === id);
-    setDialog({ icon: <Archive size={24}/>, title: 'Archive this review?', subtitle: target ? `"${target.title}" will be moved to Archive. You can restore it anytime.` : 'This review will be moved to Archive.', confirmLabel: 'Archive', onConfirm: () => updateReview(id, { archived: true }) });
+    setDialog({ icon: <Archive size={24}/>, title: 'Archive this review?', subtitle: target ? `"${target.title}" will be moved to Archive. You can restore it anytime.` : 'This review will be moved to Archive.', confirmLabel: 'Archive', onConfirm: async () => { if (!await updateReview(id, { archived: true })) throw new Error('Archive failed. Please try again.'); } });
   };
   const restoreReview = (id) => {
     const target = data.reviews.find(r => r.id === id);
-    setDialog({ icon: <Undo2 size={24}/>, title: 'Restore this review?', subtitle: target ? `"${target.title}" will be moved back to the board.` : 'This review will be moved back to the board.', confirmLabel: 'Restore', onConfirm: () => updateReview(id, { archived: false }) });
+    setDialog({ icon: <Undo2 size={24}/>, title: 'Restore this review?', subtitle: target ? `"${target.title}" will be moved back to the board.` : 'This review will be moved back to the board.', confirmLabel: 'Restore', onConfirm: async () => { if (!await updateReview(id, { archived: false })) throw new Error('Restore failed. Please try again.'); } });
   };
   const addMeeting = async (meeting) => {
     const saved = { id: crypto.randomUUID(), itemCount: 0, projectId: activeProjectId, ...meeting };
@@ -331,6 +363,7 @@ export function App() {
       } catch (error) {
         if (target) setData(prev => ({ ...prev, meetings: [target, ...prev.meetings] }));
         setToast(error.message);
+        throw error;
       }
     } });
   };
@@ -341,19 +374,19 @@ export function App() {
     setToast('Project data exported');
   };
   const refreshMetadata = async () => { try { const result = await metadataApi.list(); setData(previous => ({ ...previous, metadata: result.metadata })); } catch (error) { setToast(error.message); } };
-  const refreshAll = () => { refreshTeam(); api('/api/bootstrap').then(remote => { setData(previous => { const selectedId = previous.project?.id; const selectedProject = selectedId ? remote.projects.find(item => item.id === selectedId) : null; return { ...remote, project: selectedProject || remote.project || null }; }); if (!(remote.projects || []).length) setOnboardingActive(true); setCloudReady(true); }).catch(error => setToast(error.message)); };
+  const refreshAll = () => { refreshTeam(); api('/api/bootstrap?project=' + encodeURIComponent(data.project?.id || '')).then(remote => { setData(previous => { const selectedId = previous.project?.id; const selectedProject = selectedId ? remote.projects.find(item => item.id === selectedId) : null; return { ...remote, project: selectedProject || remote.project || null }; }); if (!(remote.projects || []).length) setOnboardingActive(true); setCloudReady(true); }).catch(error => setToast(error.message)); };
   const signOut = async () => { try { await api('/api/auth/logout', { method: 'POST' }); } finally { setUser(null); setCloudReady(false); setData(seed); } };
   const saveProject = async settings => {
     try {
       const isDefaultProject = activeProjectId === 'default';
       const saved = await api(isDefaultProject ? '/api/project-settings' : `/api/projects/${activeProjectId}`, {
         method: 'PATCH',
-        body: JSON.stringify(isDefaultProject ? settings : { name: settings.name, description: settings.description })
+        body: JSON.stringify(settings)
       });
-      const project = isDefaultProject ? saved : { ...data.project, ...settings, initials: settings.name.slice(0, 1).toUpperCase() };
+      const project = { ...data.project, ...saved, ...settings, initials: settings.name.slice(0, 1).toUpperCase() };
       setData(prev => ({ ...prev, project, projects: (prev.projects || []).map(item => item.id === project.id ? { ...item, ...project } : item) }));
       setToast('Settings saved');
-    } catch (error) { setToast(error.message); }
+    } catch (error) { setToast(error.message); throw error; }
   };
   const refreshNotifications = async () => {
     try {
@@ -372,7 +405,7 @@ export function App() {
       if (skip) return;
       setSyncing(true);
       try {
-        const [remote, notificationResult] = await Promise.all([api('/api/bootstrap'), notificationsApi.list()]);
+        const [remote, notificationResult] = await Promise.all([api('/api/bootstrap?project=' + encodeURIComponent(data.project?.id || '')), notificationsApi.list()]);
         if (!active) return;
         setData(previous => {
           const selectedId = previous.project?.id;
@@ -407,19 +440,25 @@ export function App() {
       setModal(null); setProjectOpen(false); setPage('Overview'); setToast('Project deleted');
     } catch (error) { setToast(error.message); throw error; }
   };
-  const openNewMeeting = () => { setModal(null); setPage('Meeting Editor'); };
+  const openNewMeeting = () => { meetingCreation.current = null; setModal(null); setPage('Meeting Editor'); };
   const createMeetingFromEditor = async ({ meeting, items }) => {
     try {
-      const created = await addMeeting({ ...meeting, projectId: activeProjectId, itemCount: items.length });
+      const created = meetingCreation.current?.projectId === activeProjectId ? meetingCreation.current : await addMeeting({ ...meeting, projectId: activeProjectId, itemCount: items.length });
+      meetingCreation.current = { ...created, projectId: activeProjectId };
       const results = await Promise.allSettled(items.map(item => addReview({ title: item.title, description: item.description, area: item.area, priority: item.priority, stage: 'Planning', status: item.status || 'Open', assignee: item.assignee || '', assignees: item.assignee ? [item.assignee] : [], due: item.due, meetingId: created.id })));
       const createdCount = results.filter(result => result.status === 'fulfilled').length;
       const failedCount = results.length - createdCount;
       // itemCount is derived server-side (COUNT subquery); just reflect the true count locally.
-      setData(prev => ({ ...prev, meetings: prev.meetings.map(m => m.id === created.id ? { ...m, itemCount: createdCount } : m) }));
+      setData(prev => ({ ...prev, meetings: prev.meetings.map(m => m.id === created.id ? { ...m, itemCount: (m.itemCount || 0) + createdCount } : m) }));
+      if (failedCount) {
+        const failure = new Error(`${failedCount} task(s) could not be created. Only failed items remain selected; retry will reuse the saved meeting.`);
+        failure.failedItems = items.filter((_, index) => results[index].status === 'rejected');
+        throw failure;
+      }
+      meetingCreation.current = null;
       setPage('Meetings');
-      if (failedCount) setToast(`${failedCount} task could not be created. Please try again.`);
       showSuccess(`${createdCount} task${createdCount === 1 ? '' : 's'} created`, failedCount ? 'The meeting was saved, but some selected tasks need to be retried.' : 'The meeting and its selected action items are now synced to the project.', 'View board', () => setPage('Board'));
-    } catch { /* addMeeting already surfaced the error */ }
+    } catch (error) { throw error; }
   };
 
   if (user === undefined) {
@@ -428,7 +467,7 @@ export function App() {
     }
     return <AuthLoading/>;
   }
-  if (!user) return <AuthScreen onAuthenticated={signedInUser => { setUser(signedInUser); api('/api/bootstrap').then(remote => { setData(remote); setCloudReady(true); }).catch(() => setCloudReady(false)); }}/>;
+  if (!user) return <AuthScreen onAuthenticated={signedInUser => { setUser(signedInUser); loadWorkspace().then(remote => { setData(remote); setCloudReady(true); }).catch(error => { setCloudReady(false); setBootError(error.message); }); }}/>;
 
   const currentProject = data.project || { id: '', name: 'No project', initials: 'N' };
   const needsOnboarding = cloudReady && (onboardingActive || !(data.projects || []).length);
@@ -440,25 +479,26 @@ export function App() {
         <button className="icon-button mobile-menu" onClick={toggleSidebar} aria-label="Toggle menu"><Menu size={20}/></button>
         <label className="global-search" onClick={() => setCommandOpen(true)}><Search size={17}/><input value={query} onFocus={() => setCommandOpen(true)} onChange={e=>{setQuery(e.target.value);setCommandOpen(true)}} placeholder="Search…"/><kbd>⌘K</kbd></label>
         <div className="topbar-actions">
-          <button className="collaborator" onClick={() => setCollabOpen(true)}><Users size={16}/> Collaborator</button>
+          <button disabled={readOnly || !activeProjectId} className="collaborator" onClick={() => setCollabOpen(true)}><Users size={16}/> Collaborator</button>
           <button className="notification" aria-label="Notifications" onClick={()=>{setNotificationsOpen(open=>!open);if(!notifications.length)refreshNotifications()}}><Bell size={17}/>{data.unreadNotifications > 0 && <i/>}</button>
         </div>
       </header>
       {commandOpen && <CommandPalette query={query} setQuery={setQuery} reviews={activeReviews} projects={data.projects || []} activeProjectId={activeProjectId} onClose={() => setCommandOpen(false)} onNavigate={pageName => { setPage(pageName); setQuery(''); }} onNewMeeting={openNewMeeting} onNewReview={() => setModal('review')} onOpenReview={review => { setSelectedReview(review); setQuery(''); }} onSelectProject={selected => { setData(previous => ({ ...previous, project: selected })); setPage('Overview'); setQuery(''); }}/ >}
-      {notificationsOpen && <NotificationMenu notifications={notifications} onClose={()=>setNotificationsOpen(false)} onOpen={setSelectedReview} onRead={markNotificationRead} onReadAll={markAllNotificationsRead}/>} 
+      {notificationsOpen && <NotificationMenu notifications={notifications} onClose={()=>setNotificationsOpen(false)} onOpen={openReview} onRead={markNotificationRead} onReadAll={markAllNotificationsRead}/>}
       {projectOpen && <ProjectSwitcher project={currentProject} projects={data.projects || []} collapsed={collapsed} onSelect={selected => { setData(prev => ({ ...prev, project: selected })); setProjectOpen(false); setPage('Overview'); }} onNew={() => { setProjectOpen(false); setModal('project'); }} onClose={() => setProjectOpen(false)} />}
-      {collabOpen && <CollaboratorModal user={user} onClose={() => setCollabOpen(false)} onToast={setToast} onMembersChanged={refreshTeam} />}
+      {collabOpen && <CollaboratorModal user={user} projectId={activeProjectId} onClose={() => setCollabOpen(false)} onToast={setToast} onMembersChanged={refreshTeam} />}
       {needsOnboarding ? <EmptyWorkspaceOnboarding user={user} project={data.project} onCreateProject={createProject} onFinish={() => { setOnboardingActive(false); setPage('Overview'); }} setToast={setToast} onMembersChanged={refreshTeam} /> : <>
+      {readOnly && <p className="workspace-readonly-note" role="status">View-only access · You can browse this project, but an editor must make changes.</p>}
       <ErrorPanel compact key={page}>
       <Suspense fallback={<div className="empty-state"><Wave /> Loading page…</div>}>
-      {page === 'Overview' && <Dashboard reviews={activeReviews} meetings={activeMeetings} workload={activeWorkload} reportByStatus={activeReportByStatus} sprints={activeSprints} goTo={setPage} onSubmitReview={() => setModal('review')} onNewMeeting={openNewMeeting} />}
-      {page === 'My Work' && <MyWork reviews={activeReviews} user={user} onOpen={setSelectedReview} onCreateTask={() => setModal('review')} />}
-      {page === 'All Reviews' && <Reviews reviews={activeReviews} query={query} setQuery={setQuery} updateReview={updateReview} archiveReview={archiveReview} setModal={setModal} onOpen={setSelectedReview} teamList={team} sync={{ saving: savingField, saved: savedField, failed: failedField }} onRetry={failed => { setFailedField(null); updateReview(failed.id, failed.patch, failed.field); }} />}
-      {page === 'Meetings' && <Meetings meetings={activeMeetings} reviews={activeReviews} addMeeting={addMeeting} addReview={addReview} onDeleteMeeting={deleteMeeting} setToast={setToast} setModal={setModal} onNewMeeting={openNewMeeting} onTasksCreated={count => showSuccess(`${count} review items created`, 'Action items from the meeting notes are now on the board.', 'View board', () => setPage('Board'))} onOpen={setSelectedReview} />}
-      {page === 'Meeting Editor' && <MeetingEditor user={user} team={team} onClose={() => setPage('Meetings')} onToast={setToast} onCreate={createMeetingFromEditor} />}
-      {page === 'Board' && <KanbanWorkspace project={data.project} team={team} reviews={activeReviews} sprints={activeSprints} metadata={(data.metadata || []).filter(item => !item.projectId || item.projectId === activeProjectId)} projectId={activeProjectId} updateReview={updateReview} createSprint={addSprint} updateSprint={updateSprint} refreshMetadata={refreshMetadata} setModal={setModal} onOpen={setSelectedReview} requestConfirm={opts => setDialog(opts)} onToast={setToast} onProjectClick={() => setProjectOpen(!projectOpen)} />}
-      {page === 'Archive' && <ArchivePage reviews={(data.reviews || []).filter(r => r.archived)} restoreReview={restoreReview} goTo={setPage} />}
-      {page === 'Reports' && <Reports reviews={data.reviews} projects={data.projects || []} sprints={data.sprints || []} projectName={data.project?.name || currentProject.name} onRefresh={refreshAll} onOpen={setSelectedReview} updatedAt={lastSync} />}
+      {page === 'Overview' && <Dashboard readOnly={readOnly} reviews={activeReviews} meetings={activeMeetings} workload={activeWorkload} reportByStatus={activeReportByStatus} sprints={activeSprints} goTo={setPage} onSubmitReview={() => setModal('review')} onNewMeeting={openNewMeeting} />}
+      {page === 'My Work' && <MyWork readOnly={readOnly} reviews={activeReviews} user={user} onOpen={openReview} onCreateTask={() => setModal('review')} />}
+      {page === 'All Reviews' && <Reviews readOnly={readOnly} user={user} reviews={activeReviews} query={query} setQuery={setQuery} updateReview={updateReview} archiveReview={archiveReview} setModal={setModal} onOpen={openReview} teamList={team} sync={{ saving: savingField, saved: savedField, failed: failedField }} onRetry={failed => { setFailedField(null); updateReview(failed.id, failed.patch, failed.field); }} />}
+      {page === 'Meetings' && <Meetings readOnly={readOnly} meetings={activeMeetings} reviews={activeReviews} addMeeting={addMeeting} addReview={addReview} onDeleteMeeting={deleteMeeting} setToast={setToast} setModal={setModal} onNewMeeting={openNewMeeting} onTasksCreated={count => showSuccess(`${count} review items created`, 'Action items from the meeting notes are now on the board.', 'View board', () => setPage('Board'))} onOpen={openReview} />}
+      {page === 'Meeting Editor' && <MeetingEditor projectId={activeProjectId} user={user} team={team} onClose={() => setPage('Meetings')} onToast={setToast} onCreate={createMeetingFromEditor} />}
+      {page === 'Board' && <KanbanWorkspace readOnly={readOnly} project={data.project} team={team} reviews={activeReviews} sprints={activeSprints} metadata={(data.metadata || []).filter(item => !item.projectId || item.projectId === activeProjectId)} projectId={activeProjectId} updateReview={updateReview} createSprint={addSprint} updateSprint={updateSprint} refreshMetadata={refreshMetadata} setModal={setModal} onOpen={openReview} requestConfirm={opts => setDialog(opts)} onToast={setToast} onProjectClick={() => setProjectOpen(!projectOpen)} />}
+      {page === 'Archive' && <ArchivePage readOnly={readOnly} reviews={(data.reviews || []).filter(r => r.archived && r.projectId === activeProjectId)} restoreReview={restoreReview} goTo={setPage} />}
+      {page === 'Reports' && <Reports reviews={data.reviews} projects={data.projects || []} sprints={data.sprints || []} projectName={data.project?.name || currentProject.name} onRefresh={refreshAll} onOpen={openReview} updatedAt={lastSync} />}
       {page === 'Settings' && <SettingsPageEnhanced project={data.project} user={user} saveProject={saveProject} setToast={setToast} onDeleteProject={() => setModal('delete-project')} />}
       {page === 'Admin' && <AdminPageEnhanced user={user} setToast={setToast} requestConfirm={opts => setDialog(opts)} />}
       </Suspense>
@@ -468,11 +508,11 @@ export function App() {
     {toast && <div className="toast"><CheckCircle2 size={17}/>{toast}</div>}
     <ErrorPanel compact key={'modal-' + String(modal) + '-' + (selectedReview ? selectedReview.id : 'none')}>
     <Suspense fallback={null}>
-    {modal === 'review' && <ReviewModal meetings={activeMeetings} team={team} onClose={() => setModal(null)} onSave={(review) => { addReview(review); setModal(null); showSuccess('Review created', `"${review.title}" is now on the board.`, 'View All Reviews', () => setPage('All Reviews')); }} />}
+    {modal === 'review' && <ReviewModal meetings={activeMeetings} team={team} onClose={() => setModal(null)} onSave={async (review) => { await addReview(review); setModal(null); showSuccess('Review created', `"${review.title}" is now on the board.`, 'View All Reviews', () => setPage('All Reviews')); }} />}
     {modal === 'meeting' && <MeetingModal onClose={() => setModal(null)} onSave={async meeting => { await addMeeting(meeting); setModal(null); showSuccess('Meeting saved', `"${meeting.title}" has been added to Meetings.`, 'View Meetings', () => setPage('Meetings')); }} />}
     {modal === 'project' && <NewProjectModal onClose={() => setModal(null)} onCreate={createProject} />}
     {modal === 'delete-project' && data.project?.id && data.project.id !== 'default' && <DeleteProjectModal project={data.project} onClose={() => setModal(null)} onDelete={deleteProject} />}
-    {selectedReview && <ReviewDetailEnhanced review={selectedReview} meetings={activeMeetings} metadata={(data.metadata || []).filter(item => !item.projectId || item.projectId === activeProjectId)} sprints={activeSprints} user={user} team={team} onClose={() => setSelectedReview(null)} onActivity={refreshNotifications} onUpdated={saved => { setData(prev => ({...prev, reviews: prev.reviews.map(r => r.id === saved.id ? {...r, ...saved} : r)})); setSelectedReview(saved); }} onDeleted={id => { setData(prev => ({...prev, reviews: prev.reviews.filter(r => r.id !== id)})); setSelectedReview(null); showSuccess('Task deleted', 'The task has been permanently removed.', 'Done'); }} onToast={setToast} onRemoveRequest={doDelete => setDialog({ danger: true, icon: <Trash2 size={24}/>, title: 'Delete this review?', subtitle: 'This review and its comments will be permanently deleted.', confirmLabel: 'Delete review', onConfirm: doDelete })} />}
+    {selectedReview && <ReviewDetailEnhanced readOnly={data.projects.find(item => item.id === selectedReview.projectId)?.role === 'viewer' && !['super_admin','admin'].includes(user.role)} review={selectedReview} meetings={activeMeetings} metadata={(data.metadata || []).filter(item => !item.projectId || item.projectId === activeProjectId)} sprints={activeSprints} user={user} team={team} onClose={() => setSelectedReview(null)} onActivity={refreshNotifications} onUpdated={saved => { setData(prev => ({...prev, reviews: prev.reviews.map(r => r.id === saved.id ? {...r, ...saved} : r)})); setSelectedReview(saved); }} onDeleted={id => { setData(prev => ({...prev, reviews: prev.reviews.filter(r => r.id !== id)})); setSelectedReview(null); showSuccess('Task deleted', 'The task has been permanently removed.', 'Done'); }} onToast={setToast} onRemoveRequest={doDelete => setDialog({ danger: true, icon: <Trash2 size={24}/>, title: 'Delete this review?', subtitle: 'This review and its comments will be permanently deleted.', confirmLabel: 'Delete review', onConfirm: doDelete })} />}
     {dialog && <ActionDialog dialog={dialog} onClose={() => setDialog(null)} />}
     </Suspense>
     </ErrorPanel>

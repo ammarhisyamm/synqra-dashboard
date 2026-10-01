@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
+import * as Menu from '@radix-ui/react-dropdown-menu';
 import { CaretDown as ChevronDown, Check } from '@phosphor-icons/react';
+import './MultiCheckSelect.css';
 
 function initials(name) {
   const clean = String(name || '').trim();
@@ -9,15 +11,14 @@ function initials(name) {
   return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
 }
 
-export function MultiCheckSelect({ values = [], options = [], onChange, ariaLabel, placeholder = 'Select…', className = '', icon: Icon, prefix, renderOption, emptyLabel = 'No options' }) {
+export function MultiCheckSelect({ values = [], options = [], onChange, ariaLabel, placeholder = 'Select…', className = '', icon: Icon, prefix, renderOption, emptyLabel = 'No options', disabled = false }) {
   const [open, setOpen] = useState(false);
-  const containerRef = useRef(null);
   const selected = Array.isArray(values) ? values.map(String) : [];
 
   const items = options.map(option =>
     typeof option === 'string'
       ? { value: option, label: option }
-      : { value: option.value ?? option.id, label: option.label ?? option.name ?? String(option.value), color: option.color, hint: option.hint }
+      : { ...option, value: option.value ?? option.id, label: option.label ?? option.name ?? String(option.value) }
   );
 
   const toggle = value => {
@@ -26,20 +27,6 @@ export function MultiCheckSelect({ values = [], options = [], onChange, ariaLabe
     onChange(next);
   };
 
-  useEffect(() => {
-    if (!open) return;
-    const handleClickOutside = event => {
-      if (containerRef.current && !containerRef.current.contains(event.target)) setOpen(false);
-    };
-    const handleKeyDown = event => { if (event.key === 'Escape') setOpen(false); };
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [open ]);
-
   const label = selected.length === 0
     ? placeholder
     : selected.length === 1
@@ -47,14 +34,14 @@ export function MultiCheckSelect({ values = [], options = [], onChange, ariaLabe
       : `${selected.length} selected`;
 
   return (
-    <div className={`app-select app-multi-select ${className}`.trim()} ref={containerRef}>
+    <Menu.Root open={open} onOpenChange={setOpen}>
+    <div className={`app-select app-multi-select ${className}`.trim()}>
+      <Menu.Trigger asChild>
       <button
         type="button"
+        disabled={disabled}
         className={`app-select-trigger ${open ? 'open' : ''} ${selected.length ? 'has-value' : ''}`}
         aria-label={ariaLabel}
-        aria-expanded={open}
-        aria-haspopup="listbox"
-        onClick={() => setOpen(prev => !prev)}
       >
         {prefix}
         {Icon && <Icon size={15} className="app-select-icon" />}
@@ -62,11 +49,12 @@ export function MultiCheckSelect({ values = [], options = [], onChange, ariaLabe
         {selected.length > 1 && <span className="app-select-badge">{selected.length}</span>}
         <ChevronDown size={14} className={`app-select-chevron ${open ? 'rotated' : ''}`} />
       </button>
-      {open && (
-        <div className="app-select-menu app-multi-menu" role="listbox" aria-label={ariaLabel} aria-multiselectable="true">
+      </Menu.Trigger>
+      <Menu.Portal>
+        <Menu.Content className="app-select-menu app-multi-menu" align="start" sideOffset={8} collisionPadding={16} aria-label={ariaLabel}>
           <div className="app-multi-head">
             <span>{ariaLabel || placeholder}</span>
-            {selected.length > 0 && <button type="button" className="app-multi-clear" onClick={() => onChange([])}>Clear</button>}
+            {selected.length > 0 && <Menu.Item className="app-multi-clear" onSelect={() => onChange([])}>Clear</Menu.Item>}
           </div>
           {items.length === 0 ? (
             <span className="app-select-empty">{emptyLabel}</span>
@@ -74,13 +62,12 @@ export function MultiCheckSelect({ values = [], options = [], onChange, ariaLabe
             items.map(item => {
               const active = selected.includes(String(item.value));
               return (
-                <button
-                  type="button"
+                <Menu.CheckboxItem
                   key={item.value}
                   className={`app-select-item app-multi-item ${active ? 'selected' : ''}`}
-                  role="option"
-                  aria-selected={active}
-                  onClick={() => toggle(item.value)}
+                  checked={active}
+                  onCheckedChange={() => toggle(item.value)}
+                  onSelect={event => event.preventDefault()}
                 >
                   <span className={`app-multi-check${active ? ' checked' : ''}`} aria-hidden="true">
                     {active && <Check size={12} weight="bold" />}
@@ -92,13 +79,14 @@ export function MultiCheckSelect({ values = [], options = [], onChange, ariaLabe
                       {item.hint && <small>{item.hint}</small>}
                     </span>
                   )}
-                </button>
+                </Menu.CheckboxItem>
               );
             })
           )}
-        </div>
-      )}
+        </Menu.Content>
+      </Menu.Portal>
     </div>
+    </Menu.Root>
   );
 }
 

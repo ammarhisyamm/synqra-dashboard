@@ -196,8 +196,11 @@ h1,h2,h3,h4,strong,b,button,.breadcrumb-title,.side-label,.command-group-label,.
 /* Master field component contract (Field.jsx): every labeled field renders
    .field > .field-label + .field-input so typography never depends on
    where the field is mounted. */
-.field{display:grid;gap:7px;min-width:0}
-.field .field-label{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;color:var(--ui-text-secondary)}
+.field{display:grid;gap:8px;min-width:0}
+.field-control{display:grid;gap:8px;min-width:0}
+.ui-dialog-overlay[data-state]{position:fixed;inset:0;z-index:90;background:#111b3078}
+.ui-dialog-content[data-state]{position:fixed;left:50%;top:50%;translate:0 0;transform:translate(-50%,-50%);z-index:91;width:min(520px,calc(100vw - 32px));max-height:calc(100dvh - 32px);overflow-y:auto;box-sizing:border-box;padding:24px;background:var(--ui-surface);border:1px solid var(--ui-border);border-radius:var(--ui-radius-lg)}
+.field .field-label{display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:500;color:var(--ui-text-secondary)}
 .field .field-label svg{flex:none}
 .field-hint{color:var(--ui-muted);font-size:11px;font-weight:400}
 .field-input{display:block;width:100%;min-width:0;min-height:40px;box-sizing:border-box;border:1px solid var(--ui-border);border-radius:var(--ui-radius-sm);padding:9px 11px;color:var(--ui-text);background:var(--ui-surface);font-family:inherit;font-size:13px;font-weight:400}
@@ -217,7 +220,7 @@ input::placeholder,textarea::placeholder{color:var(--ui-placeholder);opacity:1;f
 .detail-grid input,.detail-grid select,.detail-section>label input,.detail-section>label select,.detail-description{width:100%;min-width:0;box-sizing:border-box}
 .detail-panel .app-select{width:100%;min-width:0}
 .detail-panel .app-select-trigger{width:100%;min-width:0;min-height:40px}
-.app-select-menu{width:var(--radix-select-trigger-width,100%);min-width:var(--radix-select-trigger-width,100%);max-width:min(360px,calc(100vw - 32px))}
+.app-select-menu{position:relative;inset:auto;margin:0;width:var(--radix-select-trigger-width,var(--radix-dropdown-menu-trigger-width));min-width:var(--radix-select-trigger-width,var(--radix-dropdown-menu-trigger-width));max-width:calc(100vw - 32px);max-height:min(320px,var(--radix-select-content-available-height,320px));z-index:100}
 .app-multi-select .app-select-menu{width:100%;min-width:100%;max-width:none}
 
 .kanban-workspace{padding-left:clamp(16px,3vw,32px);padding-right:clamp(16px,3vw,32px)}

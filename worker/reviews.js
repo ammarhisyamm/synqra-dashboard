@@ -14,7 +14,7 @@ export function normalizeReview(input, partial = false) {
   if (!partial || 'assignees' in input) {
     const list = (Array.isArray(input.assignees) ? input.assignees : []).map(name => safeText(name, 80)).filter(Boolean).slice(0, 8);
     review.assignees = JSON.stringify(list);
-    if (list.length) review.assignee = list[0];
+    if ('assignees' in input) review.assignee = list[0] || '';
     else if (!partial) review.assignee = review.assignee || '';
   }
   if (!partial || 'due' in input) review.due = /^\d{4}-\d{2}-\d{2}$/.test(input.due || '') ? input.due : null;
@@ -49,13 +49,16 @@ export async function reviewSnapshot(env, reviewId) {
   return env.DB.prepare("SELECT id, key, title, area, priority, stage, assignee, assignees, due, start_date AS startDate, description, status, submitted_by AS submittedBy, reporter, meeting_id AS meetingId, estimate_hours AS estimateHours, epic, feature, sprint, labels, project_id AS projectId, parent_id AS parentId, item_type AS itemType, sprint_id AS sprintId, created_at AS createdAt, updated_at AS updatedAt, archived FROM reviews WHERE id = ?").bind(reviewId).first();
 }
 
-export async function notifyUsers(env, excludeUserId, { type, title, body, reviewId = null }) {
+export async function notifyUsers(env, actorId, { type, title, body, reviewId = null, projectId = null }) {
   try {
     // Keep the actor in the feed too: the bell is an audit-style activity inbox,
     // so the person who made a change should see immediate confirmation there.
-    const recipients = await env.DB.prepare('SELECT id FROM users').all();
+    const scope = projectId || (reviewId ? await env.DB.prepare('SELECT project_id FROM reviews WHERE id=?').bind(reviewId).first('project_id') : null);
+    const recipients = scope
+      ? await env.DB.prepare('SELECT user_id AS id FROM project_memberships WHERE project_id=? UNION SELECT id FROM users WHERE id=?').bind(scope, actorId).all()
+      : { results: [{ id: actorId }] };
     if (!recipients.results.length) return;
-    await env.DB.batch(recipients.results.map(recipient => env.DB.prepare('INSERT INTO notifications (id, user_id, review_id, type, title, body) VALUES (?, ?, ?, ?, ?, ?)').bind(id(), recipient.id, reviewId, type, title, body)));
+    await env.DB.batch(recipients.results.map(recipient => env.DB.prepare('INSERT INTO notifications (id, user_id, review_id, project_id, type, title, body) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(id(), recipient.id, reviewId, scope, type, title, body)));
   } catch {
     // Notifications are non-blocking: an action must still succeed if delivery fails.
   }
@@ -63,7 +66,6 @@ export async function notifyUsers(env, excludeUserId, { type, title, body, revie
 export async function recordActivity(env, reviewId, userId, action, metadata = {}) {
   const review = await env.DB.prepare('SELECT title, assignee FROM reviews WHERE id = ?').bind(reviewId).first();
   const actor = await env.DB.prepare('SELECT name FROM users WHERE id = ?').bind(userId).first();
-  const recipients = await env.DB.prepare('SELECT id FROM users').all();
   const title = review?.title || 'Task update';
   const actionLabels = { created: 'Task created', updated: 'Task updated', commented: 'New comment', subtask_added: 'Subtask added', subtask_updated: 'Subtask updated', subtask_removed: 'Subtask removed', attachment_added: 'Attachment added', attachment_removed: 'Attachment removed' };
   const changes = Object.entries(metadata.changes || {})
@@ -71,8 +73,6 @@ export async function recordActivity(env, reviewId, userId, action, metadata = {
     .join(' · ');
   const detail = action === 'created' ? '' : changes || metadata.title || metadata.filename || (action === 'commented' ? 'A new comment was added.' : '');
   const body = `${actor?.name || 'Someone'} ${action === 'created' ? 'created' : action === 'commented' ? 'commented on' : 'updated'} “${title}”${detail ? ` · ${detail}` : ''}`;
-  await env.DB.batch([
-    env.DB.prepare('INSERT INTO review_activity (id, review_id, user_id, action, metadata) VALUES (?, ?, ?, ?, ?)').bind(id(), reviewId, userId, action, JSON.stringify(metadata)),
-    ...recipients.results.map(recipient => env.DB.prepare('INSERT INTO notifications (id, user_id, review_id, type, title, body) VALUES (?, ?, ?, ?, ?, ?)').bind(id(), recipient.id, reviewId, action, actionLabels[action] || 'Task activity', body))
-  ]);
+  await env.DB.prepare('INSERT INTO review_activity (id, review_id, user_id, action, metadata) VALUES (?, ?, ?, ?, ?)').bind(id(), reviewId, userId, action, JSON.stringify(metadata)).run();
+  await notifyUsers(env, userId, { reviewId, type: action, title: actionLabels[action] || 'Task activity', body });
 }

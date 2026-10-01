@@ -8,7 +8,12 @@ export class ErrorPanel extends Component {
     console.error('Unhandled Synqra runtime error:', error);
     this.setState({ errorId: crypto.randomUUID() });
   }
-  retry = () => this.setState({ error: null, errorId: null });
+  retry = () => {
+    // React.lazy caches rejected imports. Resetting the boundary cannot fetch
+    // an obsolete chunk after deployment; explicitly load the current manifest.
+    if (/dynamically imported|module script|loading chunk|preload/i.test(this.state.error?.message || '')) window.location.reload();
+    else this.setState({ error: null, errorId: null });
+  };
   goBack = () => {
     if (window.history.length > 1) window.history.back();
     else window.location.href = window.location.pathname;

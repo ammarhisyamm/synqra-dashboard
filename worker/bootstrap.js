@@ -1,15 +1,16 @@
 import { parseJson } from './utils.js';
 import { ensureWorkspaceSchema } from './schema.js';
 
-export async function bootstrap(env, userId) {
+export async function bootstrap(env, userId, requestedProjectId = null) {
   await ensureWorkspaceSchema(env);
   const user = await env.DB.prepare('SELECT role FROM users WHERE id = ?').bind(userId).first();
   const projectsResult = await env.DB.prepare("SELECT p.id, p.space_id AS spaceId, p.name, p.description, p.access_mode AS accessMode FROM projects p ORDER BY p.name").all();
-  const membershipsResult = await env.DB.prepare('SELECT project_id AS projectId FROM project_memberships WHERE user_id = ?').bind(userId).all();
+  const membershipsResult = await env.DB.prepare('SELECT project_id AS projectId, role FROM project_memberships WHERE user_id = ?').bind(userId).all();
   const membershipIds = new Set(membershipsResult.results.map(item => item.projectId));
   const projects = ['super_admin', 'admin'].includes(user?.role)
     ? projectsResult.results
-    : projectsResult.results.filter(item => membershipIds.has(item.id));
+    : projectsResult.results.filter(item => membershipIds.has(item.id) || (item.id === requestedProjectId && item.accessMode === 'link'));
+  for (const project of projects) project.role = ['super_admin','admin'].includes(user?.role) ? 'editor' : membershipsResult.results.find(item => item.projectId === project.id)?.role || 'viewer';
   const allowedProjectIds = new Set(projects.map(item => item.id));
   const [reviews, meetings, spaces, workflowStatuses, sprints, metadata, unread, workload, report] = await env.DB.batch([
     env.DB.prepare("SELECT id, key, title, area, priority, stage, assignee, assignees, due, start_date AS startDate, description, status, submitted_by AS submittedBy, reporter, meeting_id AS meetingId, estimate_hours AS estimateHours, epic, feature, sprint, labels, project_id AS projectId, parent_id AS parentId, item_type AS itemType, sprint_id AS sprintId, created_at AS createdAt, updated_at AS updatedAt, archived FROM reviews ORDER BY created_at DESC"),
@@ -18,7 +19,10 @@ export async function bootstrap(env, userId) {
     env.DB.prepare('SELECT id, project_id AS projectId, name, color, position, is_terminal AS isTerminal FROM workflow_statuses ORDER BY project_id, position'),
     env.DB.prepare('SELECT id, project_id AS projectId, name, goal, start_date AS startDate, end_date AS endDate, status FROM sprints ORDER BY start_date DESC'),
     env.DB.prepare("SELECT id, project_id AS projectId, type, name, parent_id AS parentId, color, COALESCE(status, CASE WHEN COALESCE(archived, 0) = 1 THEN 'archived' ELSE 'active' END) AS status, COALESCE(archived, 0) AS archived FROM project_metadata ORDER BY type, name"),
-    env.DB.prepare('SELECT COUNT(*) AS count FROM notifications WHERE user_id = ? AND read_at IS NULL').bind(userId),
+    env.DB.prepare(`SELECT COUNT(*) AS count FROM notifications n WHERE n.user_id = ? AND n.read_at IS NULL AND
+      (n.project_id IS NULL OR EXISTS (SELECT 1 FROM projects p WHERE p.id = n.project_id AND
+        (? IN ('super_admin','admin') OR p.access_mode = 'link' OR EXISTS
+          (SELECT 1 FROM project_memberships pm WHERE pm.project_id = p.id AND pm.user_id = ?))))`).bind(userId, user?.role || 'member', userId),
     env.DB.prepare("SELECT project_id AS projectId, COALESCE(NULLIF(assignee,''),'Unassigned') AS assignee, COUNT(*) AS count FROM reviews WHERE archived = 0 GROUP BY project_id, COALESCE(NULLIF(assignee,''),'Unassigned') ORDER BY count DESC"),
     env.DB.prepare("SELECT project_id AS projectId, stage, COUNT(*) AS count FROM reviews WHERE archived = 0 GROUP BY project_id, stage ORDER BY count DESC")
   ]);

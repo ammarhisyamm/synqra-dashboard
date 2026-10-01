@@ -2,7 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { statusFor } from '../src/lib/status.js';
 import { isOverdue, portfolioProjects, sprintStats, statusCounts, taskOverview, teamWorkload } from '../src/lib/reports.js';
-import { dateLabel, slashDate } from '../src/lib/dates.js';
+import { dateLabel, slashDate, parseDate, localToday } from '../src/lib/dates.js';
+import { isAssignedTo, makeHistoryModel } from '../src/lib/helpers.js';
+import { normalizeReview } from '../worker/reviews.js';
 
 const today = '2026-09-10';
 const reviews = [
@@ -47,4 +49,43 @@ test('date formatting handles valid and empty values', () => {
   assert.equal(slashDate('2026-09-10'), '09/10/2026');
   assert.equal(slashDate(''), '—');
   assert.equal(dateLabel('2026-09-10'), 'Sep 10');
+});
+
+test('SQLite timestamps are UTC and calendar dates stay local', () => {
+  assert.equal(parseDate('2026-10-01 02:38:00').toISOString(), '2026-10-01T02:38:00.000Z');
+  assert.equal(parseDate('invalid'), null);
+  assert.equal(localToday(new Date(2026, 9, 1, 0, 5)), '2026-10-01');
+});
+
+test('assignment matches primary and secondary assignees, without treating unassigned as mine', () => {
+  const user = { id: 'u1', name: 'QA User', email: 'qa@example.test' };
+  assert.equal(isAssignedTo({ assignee: ' QA USER ' }, user), true);
+  assert.equal(isAssignedTo({ assignees: ['qa@example.test'] }, user), true);
+  assert.equal(isAssignedTo({ assignee: '' }, user), false);
+});
+
+test('status history distinguishes waiting from active elapsed time', () => {
+  const history = [
+    { toStatus: 'Open', createdAt: '2026-10-01 00:00:00' },
+    { fromStatus: 'Open', toStatus: 'In Progress', createdAt: '2026-10-01 01:00:00' },
+    { fromStatus: 'In Progress', toStatus: 'Resolved', createdAt: '2026-10-01 02:00:00' }
+  ];
+  const model = makeHistoryModel(history, 'Resolved', history[0].createdAt, Date.parse('2026-10-01T03:00:00Z'));
+  assert.equal(model.totals.Open, 60);
+  assert.equal(model.activeMinutes, 60);
+  assert.equal(model.timeline[0].from, 'Created');
+});
+
+test('clearing all assignees also clears the primary assignee', () => {
+  const patch = normalizeReview({ assignees: [] }, true);
+  assert.equal(patch.assignee, '');
+  assert.equal(patch.assignees, '[]');
+  assert.equal(normalizeReview({ assignees: ['QA User'] }, true).assignee, 'QA User');
+});
+
+test('estimate API rejects invalid hours and preserves explicit zero/clear', () => {
+  assert.throws(() => normalizeReview({ estimateHours: -1 }, true), /Estimate/);
+  assert.throws(() => normalizeReview({ estimateHours: 'invalid' }, true), /Estimate/);
+  assert.equal(normalizeReview({ estimateHours: 0 }, true).estimate_hours, 0);
+  assert.equal(normalizeReview({ estimateHours: null }, true).estimate_hours, null);
 });

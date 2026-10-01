@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react';
 import { ArrowLeft, CheckSquare, Trash, Flag, Users, MagicWand, Plus, Check } from '@phosphor-icons/react';
 import { AREAS, PRIORITIES } from '../../constants/workflow';
 import { AppSelect } from '../common/AppSelect';
+import { TextField, TextAreaField } from '../common/Field';
+import { SelectField } from '../common/ui';
 import '../../workflow.css';
 
 const initials = name => (name || 'M').trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
@@ -9,6 +11,8 @@ const STATUS_OPTIONS = ['Open', 'In Progress', 'Review', 'Resolved', 'Rejected']
 
 export function MeetingAiReview({ user, team = [], meeting, items, brief, setItems, selectedCount, onBack, onCreate }) {
   const [editingId, setEditingId] = useState(null);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState('');
   const update = (id, key, value) => {
     setItems(previous => previous.map(item => (item.id === id ? { ...item, [key]: value } : item)));
   };
@@ -40,11 +44,15 @@ export function MeetingAiReview({ user, team = [], meeting, items, brief, setIte
     setItems(previous => [...previous, newItem]);
   };
 
-  const create = () => {
-    onCreate({
+  const create = async () => {
+    if (pending || !selectedCount) return;
+    if (items.some(item => item.keep && !item.title.trim())) { setError('Every selected task needs a title.'); return; }
+    setPending(true); setError('');
+    try { await onCreate({
       meeting: { ...meeting, ai: true, itemCount: selectedCount },
       items: items.filter(item => item.keep)
-    });
+    }); } catch (failure) { setError(failure.message); }
+    finally { setPending(false); }
   };
 
   const allSelected = items.length > 0 && items.every(item => item.keep);
@@ -79,7 +87,7 @@ export function MeetingAiReview({ user, team = [], meeting, items, brief, setIte
           </div>
         </div>
         <div className="ai-review-head-actions">
-          <button className="text-button" onClick={() => toggleAll(!allSelected)}>
+          <button className="text-button" aria-pressed={allSelected} onClick={() => toggleAll(!allSelected)}>
             <Check size={14} /> {allSelected ? 'Deselect All' : 'Select All'}
           </button>
           <button className="secondary-button" onClick={() => addNewItem()}>
@@ -133,7 +141,7 @@ export function MeetingAiReview({ user, team = [], meeting, items, brief, setIte
                         {groupItems.map(item => (
                           <tr key={item.id} className={item.keep ? '' : 'discarded'}>
                             <td>
-                              <label className="ai-task-check">
+                              <div className="ai-task-check">
                                 <input type="checkbox" checked={item.keep} onChange={event => update(item.id, 'keep', event.target.checked)} aria-label={`Include ${item.title}`} />
                                 {editingId === item.id ? (
                                   <input
@@ -141,14 +149,13 @@ export function MeetingAiReview({ user, team = [], meeting, items, brief, setIte
                                     value={item.title}
                                     autoFocus
                                     onChange={event => update(item.id, 'title', event.target.value)}
-                                    onBlur={() => setEditingId(null)}
                                     onKeyDown={event => { if (event.key === 'Enter' || event.key === 'Escape') setEditingId(null); }}
                                     aria-label="Task title"
                                   />
                                 ) : (
                                   <button type="button" className="ai-task-title" onClick={() => setEditingId(item.id)} title="Click to edit">{item.title}</button>
                                 )}
-                              </label>
+                              </div>
                             </td>
                             <td>
                               <AppSelect
@@ -201,13 +208,14 @@ export function MeetingAiReview({ user, team = [], meeting, items, brief, setIte
                         const item = groupItems.find(i => i.id === editingId);
                         return (
                           <>
-                            <textarea value={item.description} onChange={event => update(item.id, 'description', event.target.value)} placeholder="Add a description or acceptance criteria…" rows="2" aria-label="Task description" />
+                            <TextAreaField label="Task description" value={item.description || ''} onChange={event => update(item.id, 'description', event.target.value)} placeholder="Add a description or acceptance criteria…" rows={2} />
                             <div className="ai-task-edit-row">
-                              <label>Assignee<input value={item.assignee} onChange={event => update(item.id, 'assignee', event.target.value)} placeholder={user?.name || 'Assignee'} /></label>
-                              <label>Due<input type="date" value={item.due} onChange={event => update(item.id, 'due', event.target.value)} /></label>
-                              <div className="ai-select-field"><Flag size={14} /><AppSelect value={item.priority} options={PRIORITIES} onChange={val => update(item.id, 'priority', val)} ariaLabel="Priority" /></div>
-                              <div className="ai-select-field"><Users size={14} /><AppSelect value={item.area} options={AREAS} onChange={val => update(item.id, 'area', val)} ariaLabel="Area" /></div>
+                              <SelectField label="Assignee" value={item.assignee || ''} options={[{value:'',label:'Unassigned'}, ...team.map(member => ({value:member.name,label:member.name}))]} onChange={value => update(item.id, 'assignee', value)} />
+                              <TextField label="Due" type="date" value={item.due || ''} onChange={event => update(item.id, 'due', event.target.value)} />
+                              <SelectField label="Priority" icon={Flag} value={item.priority} options={PRIORITIES} onChange={value => update(item.id, 'priority', value)} />
+                              <SelectField label="Team" icon={Users} value={item.area} options={AREAS} onChange={value => update(item.id, 'area', value)} />
                             </div>
+                            <button type="button" className="secondary-button" onClick={() => setEditingId(null)}>Done editing</button>
                           </>
                         );
                       })()}
@@ -221,11 +229,12 @@ export function MeetingAiReview({ user, team = [], meeting, items, brief, setIte
       </div>
 
       <div className="ai-review-footer">
+        {error && <p className="form-error" role="alert">{error}</p>}
         <span>
           <strong>{selectedCount}</strong> items selected to create as tasks
         </span>
-        <button className="primary-button" disabled={!selectedCount} onClick={create}>
-          Create {selectedCount} item{selectedCount === 1 ? '' : 's'} <ArrowLeft style={{ transform: 'rotate(180deg)' }} size={16}/>
+        <button className="primary-button" disabled={!selectedCount || pending} onClick={create}>
+          {pending ? 'Creating…' : `Create ${selectedCount} item${selectedCount === 1 ? '' : 's'}`} <ArrowLeft style={{ transform: 'rotate(180deg)' }} size={16}/>
         </button>
       </div>
     </section>

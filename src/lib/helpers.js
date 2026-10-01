@@ -1,4 +1,5 @@
-import { STORAGE_KEY } from '../constants/workflow';
+import { STORAGE_KEY } from '../constants/workflow.js';
+import { parseDate } from './dates.js';
 
 export const REPORT_COLORS = {
   accent: '#111b30',
@@ -56,6 +57,11 @@ export function statusFor(review) {
   if (review.stage === 'In Progress') return 'In Progress';
   return 'Open';
 }
+export function isAssignedTo(review, user) {
+  const candidates = [user?.id, user?.name, user?.email, user?.username].filter(Boolean).map(value => String(value).trim().toLowerCase());
+  return [review.assignee, ...(Array.isArray(review.assignees) ? review.assignees : [])].filter(Boolean)
+    .some(value => candidates.includes(String(value).trim().toLowerCase()));
+}
 export function nextTaskKey(reviews) {
   const numbers = reviews.map(r => { const match = /^AR-(\d+)$/.exec(r.key || ''); return match ? Number(match[1]) : 0; });
   return `AR-${Math.max(0, ...numbers) + 1}`;
@@ -76,7 +82,7 @@ export function elapsedLabel(minutes) {
   return [days ? `${days}d` : '', hours ? `${hours}h` : '', mins ? `${mins}m` : ''].filter(Boolean).join(' ') || '<1m';
 }
 export function makeHistoryModel(history, currentStatus, createdAt, now) {
-  const timestamp = value => { const parsed = new Date(value).getTime(); return Number.isFinite(parsed) ? parsed : now; };
+  const timestamp = value => parseDate(value)?.getTime() ?? now;
   const events = history?.length ? [...history].sort((a, b) => timestamp(a.createdAt) - timestamp(b.createdAt)) : [{ id: 'initial', fromStatus: null, toStatus: currentStatus, createdAt, name: 'System' }];
   const timeline = events.map((event, index) => {
     const start = timestamp(event.createdAt); const end = events[index + 1] ? timestamp(events[index + 1].createdAt) : now;
@@ -84,10 +90,11 @@ export function makeHistoryModel(history, currentStatus, createdAt, now) {
     return { ...event, from: event.fromStatus || 'Created', minutes, spent: elapsedLabel(minutes) };
   });
   const totals = timeline.reduce((result, item) => { result[item.toStatus] = (result[item.toStatus] || 0) + item.minutes; return result; }, {});
-  const activeMinutes = Math.max(0, (now - timestamp(createdAt)) / 60000);
+  // Waiting in Open is elapsed time, not time spent actively working.
+  const activeMinutes = (totals['In Progress'] || 0) + (totals.Review || 0);
   return { timeline, totals, activeMinutes };
 }
-export function historyDateLabel(value) { const date = new Date(value); return Number.isFinite(date.getTime()) ? date.toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }) : '—'; }
+export function historyDateLabel(value) { const date = parseDate(value); return date ? date.toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }) : '—'; }
 
 export function deduplicateNotifications(current, incoming) {
   if (!incoming || !Array.isArray(incoming)) return current;

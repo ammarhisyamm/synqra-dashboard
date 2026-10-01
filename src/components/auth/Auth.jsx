@@ -12,6 +12,8 @@ import { AppSelect } from '../common/AppSelect';
 import { TextField } from '../common/Field';
 import { api } from '../../api/client';
 import { relativeDate } from '../../lib/dates';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '../ui/dialog';
+import './auth-components.css';
 
 export function AuthLoading() { return <div className="auth-shell"><div className="auth-card auth-loading"><Wave style={{ fontSize: 24 }} /><strong>Checking your session…</strong></div></div>; }
 export function AuthScreen({ onAuthenticated }) {
@@ -21,32 +23,48 @@ export function AuthScreen({ onAuthenticated }) {
   return <div className="auth-shell"><section className="auth-card"><div className="auth-brand"><img className="synqra-logo auth-logo" src="/logo-synqra.png" alt="Synqra — Powered by MULIA"/></div><h1>{mode === 'login' ? 'Welcome back' : 'Create your workspace'}</h1><p>{mode === 'login' ? 'Sign in to continue to your project reviews.' : 'Your first account becomes the workspace super admin.'}</p><form onSubmit={submit}>{mode === 'register' && <TextField label="Name" value={form.name} onChange={e=>update('name',e.target.value)} autoComplete="name" required/>}{mode === 'login' ? <TextField label="Username or email" value={form.identifier} onChange={e=>update('identifier',e.target.value)} autoComplete="username" required/> : <TextField label="Email" type="email" value={form.email} onChange={e=>update('email',e.target.value)} autoComplete="email" required/>}<TextField label="Password" type="password" hint="At least 8 characters." value={form.password} onChange={e=>update('password',e.target.value)} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} minLength="8" required/>{error && <div className="auth-error">{error}</div>}<button className="primary-button" disabled={pending}>{pending ? 'Please wait…' : mode === 'login' ? 'Sign in' : 'Create account'} <ArrowRight size={16}/></button></form><button className="auth-toggle" onClick={()=>{setMode(mode === 'login' ? 'register' : 'login');setError('');}}>{mode === 'login' ? 'New to Synqra? Create an account' : 'Already have an account? Sign in'}</button></section></div>;
 }
 
-export function CollaboratorModal({ user, onClose, onToast, onMembersChanged }) {
-  const changed = () => { if (onMembersChanged) onMembersChanged(); };
-  useEffect(() => { const onKey = e => { if (e.key === 'Escape') onClose(); }; window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey); }, [onClose]);
+export function CollaboratorModal({ user, projectId, onClose, onToast, onMembersChanged }) {
   const [members, setMembers] = useState(null);
   const [email, setEmail] = useState('');
   const [role, setRole] = useState('viewer');
   const [pending, setPending] = useState(false);
-  const load = () => api('/api/project-members').then(data => setMembers(data.members)).catch(error => onToast(error.message));
-  useEffect(() => { load(); }, []);
-  const invite = async event => {
+  const [error, setError] = useState('');
+  const [inviteUrl, setInviteUrl] = useState('');
+  const load = async () => {
+    const data = await api('/api/project-members?project_id=' + encodeURIComponent(projectId));
+    setMembers(data.members || []);
+  };
+  useEffect(() => { load().catch(failure => setError(failure.message)); }, [projectId]);
+  const run = async action => {
+    if (pending) return;
+    setPending(true); setError('');
+    try { await action(); await load(); onMembersChanged?.(); }
+    catch (failure) { setError(failure.message); }
+    finally { setPending(false); }
+  };
+  const invite = event => {
     event.preventDefault();
-    const value = email.trim();
-    if (!value || pending) return;
-    setPending(true);
-    try {
-      const result = await api('/api/project-members', { method: 'POST', body: JSON.stringify({ email: value, role }) });
-      setEmail('');
-      await load();
-      changed();
-      onToast(result.emailSent ? `Invitation email sent to ${value}` : `Invite saved for ${value} — email service not configured yet`);
-    } catch (error) { onToast(error.message); } finally { setPending(false); }
+    run(async () => {
+      const result = await api('/api/project-members', { method: 'POST', body: JSON.stringify({ projectId, email: email.trim(), role }) });
+      setEmail(''); setInviteUrl(result.inviteUrl || '');
+      onToast(result.emailSent ? 'Invitation email sent' : 'Invitation created. Copy the link below to share it.');
+    });
   };
-  const remove = async member => {
-    try { await api(`/api/project-members/${member.id}`, { method: 'DELETE' }); await load(); changed(); }
-    catch (error) { onToast(error.message); }
-  };
-  const updateRole = async (member, nextRole) => { try { await api(`/api/project-members/${member.id}`, { method: 'PATCH', body: JSON.stringify({ role: nextRole }) }); await load(); onToast(`${member.email} is now ${nextRole}`); } catch (error) { onToast(error.message); } };
-  return <div className="modal-backdrop" onMouseDown={onClose}><section className="collab-modal" role="dialog" aria-modal="true" aria-labelledby="collaborator-dialog-title" onMouseDown={e => e.stopPropagation()}><button type="button" className="modal-close" onClick={onClose} aria-label="Close collaborator dialog"><X size={19}/></button><span className="collab-icon"><Plus size={22}/></span><h2 id="collaborator-dialog-title">Collaborator</h2><p className="collab-subtitle">Undang anggota dan atur akses tiap orang: Editor atau Viewer.</p><form className="collab-invite-row" onSubmit={invite}><label className="collab-email"><EnvelopeSimple size={16}/><input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Masukkan alamat email" required/></label><AppSelect value={role} options={['viewer','editor']} onChange={setRole} ariaLabel="Invite role"/><button className="primary-button" disabled={pending || !email.trim()}><UserPlus size={16}/> Undang</button></form><p className="collab-note"><strong>Editor</strong> dapat menambah &amp; mengubah review item · <strong>Viewer</strong> hanya bisa melihat.</p><div className="collab-owner"><span className="collab-crown"><Crown size={16}/></span><div><strong>{user.name}</strong><small>{user.email}</small></div><span className="owner-pill">Owner</span></div>{members === null ? <div className="empty-state"><Wave /> Loading members…</div> : members.length ? <div className="collab-list">{members.map(member => <div className="collab-row" key={member.id}><div className="avatar">{member.email.slice(0, 2).toUpperCase()}</div><div><strong>{member.email}</strong><small>Invited {relativeDate(member.createdAt)}</small></div><AppSelect value={member.role} options={['viewer','editor']} onChange={nextRole => updateRole(member, nextRole)} ariaLabel={`Role for ${member.email}`}/><button type="button" className="row-action" onClick={() => remove(member)} aria-label={`Remove ${member.email}`}><Trash2 size={15}/></button></div>)}</div> : <p className="collab-empty">Belum ada anggota yang diundang.</p>}</section></div>;
+  return <Dialog open onOpenChange={open => { if (!open && !pending) onClose(); }}><DialogContent className="collab-modal" onEscapeKeyDown={event => { if (pending) event.preventDefault(); }} onPointerDownOutside={event => { if (pending) event.preventDefault(); }}>
+    <DialogTitle>Collaborator</DialogTitle>
+    <DialogDescription>Invite people to this project. Editors can change tasks; viewers can only read.</DialogDescription>
+    <form className="collab-invite-row" onSubmit={invite}>
+      <TextField label="Email" type="email" value={email} onChange={event => setEmail(event.target.value)} required disabled={pending}/>
+      <AppSelect value={role} options={['viewer','editor']} onChange={setRole} ariaLabel="Invite role" disabled={pending}/>
+      <button className="primary-button" disabled={pending || !email.trim()}><UserPlus size={16}/>{pending ? 'Please wait…' : 'Invite'}</button>
+    </form>
+    {error && <div role="alert" className="form-error">{error}<button className="text-button" disabled={pending} onClick={() => run(async () => {})}>Retry loading members</button></div>}
+    {inviteUrl && <div className="invite-link"><TextField label="Invitation link (expires in 7 days)" value={inviteUrl} readOnly/><button className="secondary-button" onClick={() => navigator.clipboard.writeText(inviteUrl).then(() => onToast('Invitation link copied')).catch(() => setError('Copy failed. Select the link and copy it manually.'))}>Copy link</button></div>}
+    <div className="collab-owner"><span className="collab-crown"><Crown size={16}/></span><div><strong>{user.name}</strong><small>{user.email}</small></div><span className="owner-pill">You</span></div>
+    {members === null ? <p>Loading members…</p> : members.length ? <div className="collab-list">{members.map(member => <div className="collab-row" key={member.id}>
+      <div className="avatar">{member.email.slice(0, 2).toUpperCase()}</div><div><strong>{member.email}</strong><small>{member.status === 'accepted' ? 'Joined' : 'Invited'} {relativeDate(member.createdAt)}</small></div>
+      <AppSelect disabled={pending} value={member.role} options={['viewer','editor']} onChange={nextRole => run(() => api('/api/project-members/' + member.id, { method:'PATCH', body:JSON.stringify({ projectId, role:nextRole }) }))} ariaLabel={'Role for ' + member.email}/>
+      <button type="button" disabled={pending} className="row-action" onClick={() => run(() => api('/api/project-members/' + member.id + '?project_id=' + encodeURIComponent(projectId), { method:'DELETE' }))} aria-label={'Remove ' + member.email}><Trash2 size={15}/></button>
+    </div>)}</div> : <p className="collab-empty">No invitations yet.</p>}
+  </DialogContent></Dialog>;
 }
