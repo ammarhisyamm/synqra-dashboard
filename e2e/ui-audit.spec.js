@@ -117,6 +117,25 @@ test('failed task creation stays open, keeps input, never shows success', async 
   await expect(page.getByRole('heading', { name: 'Review created' })).toHaveCount(0);
 });
 
+test('create task dialog stays centered in the viewport', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await fixture(page);
+  await navigate(page, 'My Work');
+  await page.getByRole('button', { name: 'Create Task', exact: true }).click();
+
+  const modal = page.getByRole('dialog', { name: 'Create task' });
+  await expect(modal).toBeVisible();
+  const box = await modal.boundingBox();
+  const viewport = page.viewportSize();
+  expect(box).not.toBeNull();
+  expect(Math.abs((box.x + box.width / 2) - viewport.width / 2)).toBeLessThanOrEqual(1);
+  expect(Math.abs((box.y + box.height / 2) - viewport.height / 2)).toBeLessThanOrEqual(1);
+  await expect.poll(() => modal.evaluate(element => {
+    const styles = getComputedStyle(element);
+    return { position: styles.position, left: styles.left, top: styles.top, transform: styles.transform };
+  })).toMatchObject({ position: 'fixed', left: '720px', top: '450px' });
+});
+
 test('failed detail save has an inline error and retry action', async ({ page }) => {
   await fixture(page, { failPatch: true });
   await openDetail(page);

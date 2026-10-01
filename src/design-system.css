@@ -199,7 +199,24 @@ h1,h2,h3,h4,strong,b,button,.breadcrumb-title,.side-label,.command-group-label,.
 .field{display:grid;gap:8px;min-width:0}
 .field-control{display:grid;gap:8px;min-width:0}
 .ui-dialog-overlay[data-state]{position:fixed;inset:0;z-index:90;background:#111b3078}
-.ui-dialog-content[data-state]{position:fixed;left:50%;top:50%;translate:0 0;transform:translate(-50%,-50%);z-index:91;width:min(520px,calc(100vw - 32px));max-height:calc(100dvh - 32px);overflow-y:auto;box-sizing:border-box;padding:24px;background:var(--ui-surface);border:1px solid var(--ui-border);border-radius:var(--ui-radius-lg)}
+.ui-dialog-content[data-state]{
+  /* Keep the dialog centered independently from Tailwind's translate
+     utilities and any legacy modal positioning rules. */
+  position:fixed!important;
+  inset:50% auto auto 50%!important;
+  margin:0!important;
+  translate:none!important;
+  transform:translate(-50%,-50%)!important;
+  z-index:91;
+  width:min(520px,calc(100vw - 32px));
+  max-height:calc(100dvh - 32px);
+  overflow-y:auto;
+  box-sizing:border-box;
+  padding:24px;
+  background:var(--ui-surface);
+  border:1px solid var(--ui-border);
+  border-radius:var(--ui-radius-lg)
+}
 .field .field-label{display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:500;color:var(--ui-text-secondary)}
 .field .field-label svg{flex:none}
 .field-hint{color:var(--ui-muted);font-size:11px;font-weight:400}
