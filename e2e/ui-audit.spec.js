@@ -193,6 +193,24 @@ test('Kanban drag-and-drop persists a task stage through the update API', async 
   expect(state.errors).toEqual([]);
 });
 
+test('Kanban filter menu keeps option labels visible and shares the menu surface', async ({ page }) => {
+  await fixture(page);
+  await navigate(page, 'Board');
+
+  await page.getByRole('button', { name: 'Filter by status', exact: true }).click();
+  const menu = page.getByRole('menu', { name: 'Filter by status', exact: true });
+  await expect(menu).toBeVisible();
+  const box = await menu.boundingBox();
+  const viewport = page.viewportSize();
+  expect(box).not.toBeNull();
+  expect(box.width).toBeGreaterThanOrEqual(220);
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
+  for (const option of ['Open', 'In Progress', 'Review', 'Resolved', 'Rejected']) {
+    await expect(menu.getByRole('menuitemcheckbox', { name: option, exact: true })).toBeVisible();
+  }
+});
+
 test('empty My Work provides one clear call to action', async ({ page }) => {
   await fixture(page, { empty: true });
   await navigate(page, 'My Work');

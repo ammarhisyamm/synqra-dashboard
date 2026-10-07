@@ -251,8 +251,11 @@ input::placeholder,textarea::placeholder{color:var(--ui-placeholder);opacity:1;f
 .detail-grid input,.detail-grid select,.detail-section>label input,.detail-section>label select,.detail-description{width:100%;min-width:0;box-sizing:border-box}
 .detail-panel .app-select{width:100%;min-width:0}
 .detail-panel .app-select-trigger{width:100%;min-width:0;min-height:40px}
-.app-select-menu{position:relative;inset:auto;margin:0;width:var(--radix-select-trigger-width,var(--radix-dropdown-menu-trigger-width));min-width:var(--radix-select-trigger-width,var(--radix-dropdown-menu-trigger-width));max-width:calc(100vw - 32px);max-height:min(320px,var(--radix-select-content-available-height,320px));z-index:100}
-.app-multi-select .app-select-menu{width:100%;min-width:100%;max-width:none}
+.app-select-menu{box-sizing:border-box;margin:2px 0 0;width:var(--radix-select-trigger-width,var(--radix-dropdown-menu-trigger-width,160px));min-width:var(--radix-select-trigger-width,var(--radix-dropdown-menu-trigger-width,160px));max-width:calc(100vw - 32px);max-height:min(320px,var(--radix-select-content-available-height,var(--radix-dropdown-menu-content-available-height,320px)));z-index:100}
+/* Multi-select menus need enough room for real option labels. The Radix
+   dropdown is portalled, so descendant width rules cannot size it reliably. */
+.app-multi-menu{width:max(220px,var(--radix-dropdown-menu-trigger-width,0px));min-width:220px;max-width:calc(100vw - 32px);}
+.app-multi-head>span{white-space:nowrap}
 
 .kanban-workspace{padding-left:clamp(16px,3vw,32px);padding-right:clamp(16px,3vw,32px)}
 .kanban-header-bar,.kanban-nav-tabs-bar{box-sizing:border-box}

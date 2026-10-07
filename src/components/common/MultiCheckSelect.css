@@ -1,12 +1,14 @@
 .app-multi-menu {
-  width: var(--radix-dropdown-menu-trigger-width);
-  min-width: var(--radix-dropdown-menu-trigger-width);
+  box-sizing: border-box;
+  width: max(220px, var(--radix-dropdown-menu-trigger-width, 0px));
+  min-width: 220px;
   max-width: calc(100vw - 32px);
   max-height: min(320px, var(--radix-dropdown-menu-content-available-height));
   overflow-y: auto;
   z-index: 100;
 }
 .app-multi-head { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px; color:var(--ui-muted); font-size:12px; }
+.app-multi-head > span { white-space:nowrap; }
 .app-multi-clear { padding:4px 8px; border-radius:4px; cursor:pointer; color:var(--ui-text-secondary); }
 .app-multi-clear[data-highlighted] { background:var(--ui-subtle); outline:none; }
 .app-multi-menu .app-multi-item { display:flex; align-items:center; justify-content:flex-start; gap:8px; min-height:40px; padding:8px; cursor:pointer; outline:none; }
