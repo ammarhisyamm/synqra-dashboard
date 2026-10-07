@@ -140,8 +140,22 @@ test('create task dialog stays centered in the viewport', async ({ page }) => {
   expect(Math.abs((box.y + box.height / 2) - viewport.height / 2)).toBeLessThanOrEqual(1);
   await expect.poll(() => modal.evaluate(element => {
     const styles = getComputedStyle(element);
-    return { position: styles.position, left: styles.left, top: styles.top, transform: styles.transform };
-  })).toMatchObject({ position: 'fixed', left: '720px', top: '450px' });
+    const layer = element.closest('.ui-dialog-layer');
+    const layerStyles = layer ? getComputedStyle(layer) : null;
+    return {
+      position: styles.position,
+      transform: styles.transform,
+      layerPosition: layerStyles?.position,
+      layerInset: layerStyles?.inset,
+      layerDisplay: layerStyles?.display,
+    };
+  })).toMatchObject({
+    position: 'relative',
+    transform: 'none',
+    layerPosition: 'fixed',
+    layerInset: '0px',
+    layerDisplay: 'grid',
+  });
 });
 
 test('failed detail save has an inline error and retry action', async ({ page }) => {

@@ -14,10 +14,10 @@ function DialogOverlay({ className, ...props }) {
 
 function DialogContent({ className, children, showClose = true, closeDisabled = false, ...props }) {
   const returnFocus = useRef(document.activeElement);
-  return <DialogPortal><DialogOverlay /><DialogPrimitive.Content onCloseAutoFocus={event => { if (returnFocus.current?.isConnected) { event.preventDefault(); returnFocus.current.focus(); } }} className={cn('ui-dialog-content ui-focus-ring fixed left-1/2 top-1/2 z-[91] grid w-[calc(100%-32px)] max-w-[520px] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-[var(--radius)] border border-border bg-card p-6 text-card-foreground shadow-xl', className)} {...props}>
+  return <DialogPortal><div className="ui-dialog-layer"><DialogOverlay /><DialogPrimitive.Content onCloseAutoFocus={event => { if (returnFocus.current?.isConnected) { event.preventDefault(); returnFocus.current.focus(); } }} className={cn('ui-dialog-content ui-focus-ring relative z-[91] grid w-[calc(100%-32px)] max-w-[520px] gap-4 rounded-[var(--radius)] border border-border bg-card p-6 text-card-foreground shadow-xl', className)} {...props}>
     {children}
     {showClose && <DialogPrimitive.Close disabled={closeDisabled} aria-label="Close dialog" className="ui-focus-ring absolute right-4 top-4 grid size-8 place-items-center rounded-[6px] text-muted-foreground hover:bg-muted hover:text-foreground"><X size={17} /></DialogPrimitive.Close>}
-  </DialogPrimitive.Content></DialogPortal>;
+  </DialogPrimitive.Content></div></DialogPortal>;
 }
 
 function DialogHeader({ className, ...props }) { return <div data-slot="dialog-header" className={cn('flex flex-col gap-2 text-left', className)} {...props} />; }
