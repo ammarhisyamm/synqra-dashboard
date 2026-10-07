@@ -12,9 +12,9 @@ function DialogOverlay({ className, ...props }) {
   return <DialogPrimitive.Overlay className={cn('ui-dialog-overlay fixed inset-0 z-[90] bg-[#111b3078]', className)} {...props} />;
 }
 
-function DialogContent({ className, children, showClose = true, closeDisabled = false, ...props }) {
+function DialogContent({ className, children, showClose = true, closeDisabled = false, style, ...props }) {
   const returnFocus = useRef(document.activeElement);
-  return <DialogPortal><div className="ui-dialog-layer"><DialogOverlay /><DialogPrimitive.Content onCloseAutoFocus={event => { if (returnFocus.current?.isConnected) { event.preventDefault(); returnFocus.current.focus(); } }} className={cn('ui-dialog-content ui-focus-ring relative z-[91] grid w-[calc(100%-32px)] max-w-[520px] gap-4 rounded-[var(--radius)] border border-border bg-card p-6 text-card-foreground shadow-xl', className)} {...props}>
+  return <DialogPortal><div className="ui-dialog-layer"><DialogOverlay /><DialogPrimitive.Content onCloseAutoFocus={event => { if (returnFocus.current?.isConnected) { event.preventDefault(); returnFocus.current.focus(); } }} className={cn('ui-dialog-content ui-focus-ring relative z-[91] grid w-[calc(100%-32px)] max-w-[520px] gap-4 rounded-[var(--radius)] border border-border bg-card p-6 text-card-foreground shadow-xl', className)} style={{ ...style, position: 'relative', inset: 'auto', transform: 'none', translate: '0 0' }} {...props}>
     {children}
     {showClose && <DialogPrimitive.Close disabled={closeDisabled} aria-label="Close dialog" className="ui-focus-ring absolute right-4 top-4 grid size-8 place-items-center rounded-[6px] text-muted-foreground hover:bg-muted hover:text-foreground"><X size={17} /></DialogPrimitive.Close>}
   </DialogPrimitive.Content></div></DialogPortal>;

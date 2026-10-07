@@ -219,7 +219,7 @@ h1,h2,h3,h4,strong,b,button,.breadcrumb-title,.side-label,.command-group-label,.
   position:relative!important;
   inset:auto!important;
   margin:0!important;
-  translate:none!important;
+  translate:0 0!important;
   transform:none!important;
   z-index:91;
   width:min(520px,calc(100vw - 32px));
