@@ -198,12 +198,20 @@ h1,h2,h3,h4,strong,b,button,.breadcrumb-title,.side-label,.command-group-label,.
    where the field is mounted. */
 .field{display:grid;gap:8px;min-width:0}
 .field-control{display:grid;gap:8px;min-width:0}
-.ui-dialog-overlay[data-state]{position:fixed;inset:0;z-index:90;background:#111b3078}
-.ui-dialog-content[data-state]{
+.ui-dialog-overlay{
+  position:fixed!important;
+  inset:0!important;
+  z-index:90;
+  background:#111b3078
+}
+.ui-dialog-content{
   /* Keep the dialog centered independently from Tailwind's translate
      utilities and any legacy modal positioning rules. */
   position:fixed!important;
-  inset:50% auto auto 50%!important;
+  top:50%!important;
+  left:50%!important;
+  right:auto!important;
+  bottom:auto!important;
   margin:0!important;
   translate:none!important;
   transform:translate(-50%,-50%)!important;
