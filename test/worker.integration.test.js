@@ -19,8 +19,8 @@ test('real Worker → D1/R2: onboarding, invitations, task lifecycle and isolati
   assert.match(stale.headers.get('cache-control'), /no-store/);
   assert.doesNotMatch(stale.headers.get('content-type'), /text\/html/);
   const suffix = crypto.randomUUID().slice(0, 8);
-  async function request(account, path, body, method = body ? 'POST' : 'GET', status = 200) {
-    const response = await fetch(base + path, { method, headers: { ...(account?.cookie ? { Cookie: account.cookie } : {}), Origin: base, ...(body && !(body instanceof FormData) ? { 'content-type': 'application/json' } : {}) }, body: body ? body instanceof FormData ? body : JSON.stringify(body) : undefined });
+  async function request(account, path, body, method = body ? 'POST' : 'GET', status = 200, origin = base) {
+    const response = await fetch(base + path, { method, headers: { ...(account?.cookie ? { Cookie: account.cookie } : {}), Origin: origin, ...(body && !(body instanceof FormData) ? { 'content-type': 'application/json' } : {}) }, body: body ? body instanceof FormData ? body : JSON.stringify(body) : undefined });
     const result = await response.json();
     assert.equal(response.status, status, `${method} ${path}: ${result.error || 'unexpected status'}`);
     return { ...result, cookie: response.headers.get('set-cookie')?.split(';')[0] };
@@ -76,6 +76,8 @@ test('real Worker → D1/R2: onboarding, invitations, task lifecycle and isolati
   await request(owner, `/api/reviews/${task.id}`, { estimateHours: -1 }, 'PATCH', 400);
   const updated = await request(owner, `/api/reviews/${task.id}`, { status: 'In Progress', assignees: [], estimateHours: 4.5 }, 'PATCH');
   assert.equal(updated.assignee, ''); assert.equal(updated.estimateHours, 4.5);
+  const proxiedUpdate = await request(owner, `/api/reviews/${task.id}`, { stage: 'Review' }, 'PATCH', 200, 'https://synqra-eight.vercel.app');
+  assert.equal(proxiedUpdate.stage, 'Review');
   await request(owner, `/api/reviews/${task.id}/comments`, { body: 'QA comment' }, 'POST', 201);
   const subtask = await request(owner, `/api/reviews/${task.id}/subtasks`, { title: 'QA subtask' }, 'POST', 201);
   await request(owner, `/api/reviews/${task.id}/subtasks/${subtask.id}`, { completed: true }, 'PATCH');

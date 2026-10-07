@@ -14,6 +14,24 @@ const securityHeaders = {
   'referrer-policy': 'strict-origin-when-cross-origin',
   'permissions-policy': 'camera=(), microphone=(), geolocation=()'
 };
+const localAppOrigins = new Set([
+  'http://localhost:5173',
+  'http://127.0.0.1:5173'
+]);
+function isAllowedMutationOrigin(request, env) {
+  const origin = request.headers.get('Origin');
+  if (!origin) return true;
+  const configuredOrigins = String(env.ALLOWED_ORIGINS || '')
+    .split(',')
+    .map(value => value.trim())
+    .filter(Boolean);
+  const allowedOrigins = new Set([
+    new URL(request.url).origin,
+    ...localAppOrigins,
+    ...configuredOrigins
+  ]);
+  return allowedOrigins.has(origin);
+}
 const accessDenied = () => json({ error: 'You do not have access to this project.' }, 403);
 async function requireProject(env, user, projectId, permission = 'view') {
   return canAccessProject(env, user, projectId || 'default', permission);
@@ -77,8 +95,11 @@ async function routeApi(request, env) {
   const user = await sessionUser(request, env);
   if (!user) return json({ error: 'Sign in required.' }, 401);
   if (MUTATING_METHODS.has(request.method)) {
-    const origin = request.headers.get('Origin');
-    if (origin && origin !== new URL(request.url).origin) return json({ error: 'Cross-origin requests are not allowed.' }, 403);
+    // The production UI is served by Vercel and proxies /api/* to this Worker.
+    // In that setup the browser Origin is the Vercel origin while request.url is
+    // the Worker origin. Validate against an explicit allowlist instead of
+    // comparing those two unrelated origins directly.
+    if (!isAllowedMutationOrigin(request, env)) return json({ error: 'Cross-origin requests are not allowed.' }, 403);
   }
   await ensureWorkspaceSchema(env);
   const peopleResponse = await handleProjectPeople(request, env, user);

@@ -177,6 +177,22 @@ test('My Work groups collapse and empty state does not duplicate sections', asyn
   await page.locator('.my-work-group summary').press('Enter');
   await expect(page.getByText(title, { exact: true })).toBeVisible();
 });
+
+test('Kanban drag-and-drop persists a task stage through the update API', async ({ page }) => {
+  const state = await fixture(page);
+  await navigate(page, 'Board');
+
+  const card = page.locator('.kanban-work-card').filter({ hasText: title });
+  const reviewStage = page.locator('.kanban-stage').filter({ has: page.locator('header strong', { hasText: 'Review' }) });
+  await expect(card).toBeVisible();
+  await expect(reviewStage).toBeVisible();
+
+  await card.dragTo(reviewStage);
+  await expect.poll(() => state.changes.some(patch => patch.stage === 'Review')).toBe(true);
+  await expect(reviewStage.locator('.kanban-work-card').filter({ hasText: title })).toBeVisible();
+  expect(state.errors).toEqual([]);
+});
+
 test('empty My Work provides one clear call to action', async ({ page }) => {
   await fixture(page, { empty: true });
   await navigate(page, 'My Work');
