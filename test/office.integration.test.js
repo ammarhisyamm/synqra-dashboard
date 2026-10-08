@@ -1,0 +1,115 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { TOTP } from 'otpauth';
+import { execFileSync } from 'node:child_process';
+const base=process.env.WORKER_TEST_URL;
+test('office flows: MFA replay/recovery, sessions, preferences, idempotent creation, search and feedback',{ skip:!base,timeout:60000 },async()=>{
+  assert.ok(['localhost','127.0.0.1'].includes(new URL(base).hostname));
+  const suffix=crypto.randomUUID().slice(0,8);const password='Office-test-'+crypto.randomUUID();
+  let clientIp=suffix;
+  async function request(cookie,path,body,method=body?'POST':'GET',expected=200){
+    const response=await fetch(base+path,{ method,headers:{ Origin:base,'cf-connecting-ip':clientIp,...(cookie?{ Cookie:cookie }:{}),...(body?{ 'content-type':'application/json' }:{}) },body:body?JSON.stringify(body):undefined });
+    const data=await response.json();assert.equal(response.status,expected,`${path}: ${data.error}`);return { ...data,cookie:response.headers.get('set-cookie')?.split(';')[0] };
+  }
+  const email=`office-${suffix}@example.test`;
+  const register=await request(null,'/api/auth/register',{ name:'Office '+suffix,email,password },'POST',201);const cookie=register.cookie;
+  const second=await request(null,'/api/auth/login',{ identifier:email,password });
+  assert.equal((await request(cookie,'/api/account/security')).activeSessions,2);
+  await request(cookie,'/api/account/sessions/revoke',{});
+  await request(second.cookie,'/api/auth/me',null,'GET',401);
+  const setup=await request(cookie,'/api/account/mfa/setup',{ password });
+  const code=new TOTP({ secret:setup.secret }).generate();
+  const enabled=await request(cookie,'/api/account/mfa/enable',{ password,code });
+  assert.equal(enabled.recoveryCodes.length,8);
+  await request(null,'/api/auth/login',{ identifier:email,password },'POST',401);
+  await request(null,'/api/auth/login',{ identifier:email,password,code },'POST',401);
+  const mfaLogin=await request(null,'/api/auth/login',{ identifier:email,password,code:enabled.recoveryCodes[0] });
+  assert.ok(mfaLogin.user);
+  await request(null,'/api/auth/login',{ identifier:email,password,code:enabled.recoveryCodes[0] },'POST',401);
+  await request(cookie,'/api/account/preferences',{ activity:false,reminders:true,mentions:true },'PATCH');
+  assert.equal((await request(cookie,'/api/account/preferences')).preferences.activity,0);
+  await request(cookie,'/api/account/preferences',{ activity:'yes' },'PATCH',400);
+  const project=await request(cookie,'/api/projects',{ name:'Office '+suffix },'POST',201);
+  const outsider=await request(null,'/api/auth/register',{name:'Outside '+suffix,email:`outside-${suffix}@example.test`,password},'POST',201);
+  assert.equal(outsider.user.role,'member');
+  const meetingInput={ id:crypto.randomUUID(),projectId:project.id,title:'Office sync',date:'2026-10-08' };
+  const first=await request(cookie,'/api/meetings',meetingInput,'POST',201);
+  const repeat=await request(cookie,'/api/meetings',meetingInput,'POST',201);assert.equal(first.id,repeat.id);
+  await request(cookie,'/api/meetings',{ ...meetingInput,title:'Changed' },'POST',409);
+  const task={ id:crypto.randomUUID(),projectId:project.id,title:'Unique searchable '+suffix,status:'Open',stage:'Planning',area:'Design',priority:'Minor',assignees:[register.user.name],due:'2026-10-08' };
+  const task1=await request(cookie,'/api/reviews',task,'POST',201);const task2=await request(cookie,'/api/reviews',task,'POST',201);assert.equal(task1.id,task2.id);
+  assert.equal((await request(cookie,'/api/notifications')).notifications.filter(item=>item.reviewId===task1.id && item.type==='created').length,0,'Muted activity must stay muted; audit is still persisted');
+  const search=await request(cookie,'/api/work/search?q='+suffix+'&limit=1');assert.equal(search.items.length,1);assert.equal(search.total,1);
+  assert.equal((await request(outsider.cookie,'/api/work/search?q='+suffix+'&project='+project.id)).total,0);
+  await request(outsider.cookie,`/api/reviews/${task1.id}/details`,null,'GET',403);
+  await request(cookie,`/api/reviews/${task1.id}`,{estimateHours:0},'PATCH');
+  const audit=await request(cookie,`/api/reviews/${task1.id}/details`);
+  assert.ok(audit.activity.some(item=>item.metadata?.changes?.estimate_hours?.to===0));
+  await request(cookie,`/api/reviews/${task1.id}`,{estimateHours:0},'PATCH');
+  assert.equal((await request(cookie,`/api/reviews/${task1.id}/details`)).activity.length,audit.activity.length,'No-op saves must not invent activity');
+  await request(cookie,'/api/reviews',{ ...task,title:'Wrong duplicate' },'POST',409);
+  const concurrent={...task,id:crypto.randomUUID(),title:'Concurrent '+suffix};
+  const twins=await Promise.all([request(cookie,'/api/reviews',concurrent,'POST',201),request(cookie,'/api/reviews',concurrent,'POST',201)]);
+  assert.equal(twins[0].id,twins[1].id);
+  const concurrentMeeting={...meetingInput,id:crypto.randomUUID(),title:'Concurrent meeting'};
+  const meetings=await Promise.all([request(cookie,'/api/meetings',concurrentMeeting,'POST',201),request(cookie,'/api/meetings',concurrentMeeting,'POST',201)]);
+  assert.equal(meetings[0].id,meetings[1].id);
+  await request(cookie,'/api/feedback',{ category:'bug',body:'A disposable test feedback item' },'POST',201);
+  await request(cookie,'/api/feedback',{ category:'spam',body:'No' },'POST',400);
+  await request(cookie,'/api/admin/operations',null,'GET',403);
+  await request(cookie,'/api/telemetry',{ code:'render_failure',body:'This content must never be stored' },'POST',202);
+  await request(cookie,'/api/telemetry',{ code:'raw_private_message' },'POST',400);
+  await request(cookie,'/api/account/password',{ password,newPassword:'Changed-office-password!',code:enabled.recoveryCodes[1] });
+  await request(mfaLogin.cookie,'/api/auth/me',null,'GET',401);
+  await request(null,'/api/auth/login',{ identifier:email,password,code:enabled.recoveryCodes[2] },'POST',401);
+  const changed=await request(null,'/api/auth/login',{ identifier:email,password:'Changed-office-password!',code:enabled.recoveryCodes[2] });assert.ok(changed.user);
+  await request(cookie,'/api/account/mfa/disable',{ password:'Changed-office-password!',code:enabled.recoveryCodes[3] });
+  await request(null,'/api/auth/login',{ identifier:email,password:'Changed-office-password!' });
+  // Recovery authorization, one-use links, expiry and session invalidation.
+  await request(cookie,'/api/admin/password-reset',{ userId:register.user.id },'POST',403);
+  const root=await request(null,'/api/auth/register',{ name:'Recovery admin '+suffix,email:`recovery-${suffix}@example.test`,password },'POST',201);
+  const directory=process.env.WORKER_TEST_DB_DIR;
+  assert.ok(directory?.startsWith('/tmp/synqra-qa-'));
+  const sql=command=>execFileSync(process.execPath,['node_modules/wrangler/bin/wrangler.js','d1','execute','synqra-dashboard-data','--local','--persist-to',directory,'--command',command],{ stdio:'pipe' });
+  assert.match(root.user.id,/^[a-f0-9-]{36}$/);
+  sql(`UPDATE users SET role='super_admin' WHERE id='${root.user.id}'`);
+  await request(root.cookie,'/api/admin/password-reset',{ userId:root.user.id },'POST',403);
+  const reset=await request(root.cookie,'/api/admin/password-reset',{ userId:register.user.id },'POST',201);
+  const token=new URLSearchParams(new URL(reset.resetUrl).hash.slice(1)).get('reset');
+  assert.match(token,/^[a-f0-9]{64}$/);
+  await request(null,'/api/auth/password-reset',{ token,password:'short' },'POST',400);
+  await request(null,'/api/auth/password-reset',{ token,password:'Recovered-office-password!' });
+  await request(cookie,'/api/auth/me',null,'GET',401);
+  await request(null,'/api/auth/password-reset',{ token,password:'Different-office-password!' },'POST',400);
+  const recovered=await request(null,'/api/auth/login',{ identifier:email,password:'Recovered-office-password!' });
+  const expired=await request(root.cookie,'/api/admin/password-reset',{ userId:register.user.id },'POST',201);
+  sql(`UPDATE password_resets SET expires_at=datetime('now','-1 minute') WHERE user_id='${register.user.id}'`);
+  await request(null,'/api/auth/password-reset',{ token:new URLSearchParams(new URL(expired.resetUrl).hash.slice(1)).get('reset'),password:'Another-office-password!' },'POST',400);
+  await request(null,'/api/auth/register',{ name:'Too long',email:`long-${suffix}@example.test`,password:'x'.repeat(129) },'POST',400);
+  // Owner management works without workspace-wide admin rights.
+  await request(recovered.cookie,`/api/projects/${project.id}`,{ name:'Renamed '+suffix },'PATCH');
+  // Real scheduled delivery is deduplicated across invocations.
+  sql(`UPDATE reviews SET due=date('now') WHERE id='${task1.id}'`);
+  const trigger=async()=>{assert.equal((await fetch(base+'/__scheduled?cron='+encodeURIComponent('*/10 * * * *'))).status,200);};
+  await trigger();
+  let count=0;
+  for(let attempt=0;attempt<20;attempt++){
+    count=(await request(recovered.cookie,'/api/notifications')).notifications.filter(item=>item.reviewId===task1.id && item.type==='due_soon').length;
+    if(count)break;await new Promise(resolve=>setTimeout(resolve,100));
+  }
+  assert.equal(count,1);
+  await trigger();
+  assert.equal((await request(recovered.cookie,'/api/notifications')).notifications.filter(item=>item.reviewId===task1.id && item.type==='due_soon').length,1);
+  await request(recovered.cookie,`/api/projects/${project.id}`,null,'DELETE');
+  const setupAgain=await request(recovered.cookie,'/api/account/mfa/setup',{password:'Recovered-office-password!'});
+  // The recovery verification models a new device/network; do not exhaust
+  // the independent login throttling case with dozens of synthetic attempts.
+  clientIp=suffix+'-recovery';
+  const enabledAgain=await request(recovered.cookie,'/api/account/mfa/enable',{password:'Recovered-office-password!',code:new TOTP({secret:setupAgain.secret}).generate()});
+  const protectedReset=await request(root.cookie,'/api/admin/password-reset',{userId:register.user.id},'POST',201);
+  const protectedToken=new URLSearchParams(new URL(protectedReset.resetUrl).hash.slice(1)).get('reset');
+  await request(null,'/api/auth/password-reset',{token:protectedToken,password:'MFA-protected-password!'},'POST',403);
+  await request(null,'/api/auth/password-reset',{token:protectedToken,password:'MFA-protected-password!',code:enabledAgain.recoveryCodes[0]});
+  await request(null,'/api/auth/login',{identifier:email,password:'MFA-protected-password!'},'POST',401);
+  assert.ok((await request(null,'/api/auth/login',{identifier:email,password:'MFA-protected-password!',code:enabledAgain.recoveryCodes[1]})).user);
+});

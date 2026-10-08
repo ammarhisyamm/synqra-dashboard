@@ -24,10 +24,10 @@ export async function handleProjectPeople(request, env, user) {
   const body = request.method === 'GET' || request.method === 'DELETE' ? null : await readBody(request);
   const projectId = safeText(body?.projectId || url.searchParams.get('project_id'), 80);
   if (!projectId) return path === '/api/team' ? json({ team: [{ id: user.id, name: user.name, email: user.email, source: 'user' }] }) : json({ error: 'Choose a project first.' }, 400);
-  const project = await env.DB.prepare('SELECT id, name FROM projects WHERE id=?').bind(projectId).first();
+  const project = await env.DB.prepare('SELECT id, name,created_by AS createdBy FROM projects WHERE id=?').bind(projectId).first();
   if (!project || !await canAccessProject(env, user, projectId, 'view')) return json({ error: 'Project access required.' }, 403);
   if (path === '/api/team' && request.method === 'GET') {
-    const users = await env.DB.prepare('SELECT u.id,u.name,u.email FROM users u JOIN project_memberships p ON p.user_id=u.id WHERE p.project_id=? ORDER BY u.name').bind(projectId).all();
+    const users = await env.DB.prepare('SELECT u.id,u.name,u.email,u.username FROM users u JOIN project_memberships p ON p.user_id=u.id WHERE p.project_id=? ORDER BY u.name').bind(projectId).all();
     const team = users.results.map(person => ({ ...person, source: 'user' }));
     if (!team.some(person => person.id === user.id)) team.push({ id: user.id, name: user.name, email: user.email, source: 'user' });
     return json({ team });
@@ -47,7 +47,7 @@ export async function handleProjectPeople(request, env, user) {
     const member = { id: existing?.id || id(), projectId, email, role: body.role, status: 'invited' };
     const token = crypto.randomUUID().replaceAll('-','') + crypto.randomUUID().replaceAll('-','');
     await env.DB.prepare("INSERT INTO project_invitations(id,project_id,email,role,status,token_hash,invited_by) VALUES (?,?,?,?,?,?,?) ON CONFLICT(project_id,email) DO UPDATE SET role=excluded.role, status='invited', token_hash=excluded.token_hash, invited_by=excluded.invited_by, created_at=CURRENT_TIMESTAMP").bind(member.id,projectId,email,member.role,'invited',await digest(token),user.id).run();
-    const link = new URL('/',url.origin); link.searchParams.set('project', projectId); link.searchParams.set('invite', token);
+    const link = new URL('/',env.APP_ORIGIN || url.origin); link.searchParams.set('project', projectId); link.searchParams.set('invite', token);
     const result = await sendInviteEmail(env,request,{ to: email, inviterName: user.name, role: member.role, inviteUrl: link.href });
     await notifyUsers(env, user.id, { projectId, type:'member_invited', title:'Project invitation created', body:`${user.name} invited ${email} as ${member.role}` });
     return json({ ...member, inviteUrl: link.href, emailSent: result.sent, emailReason: result.reason }, 201);
@@ -58,6 +58,7 @@ export async function handleProjectPeople(request, env, user) {
     if (!member) return json({ error: 'Member not found in this project.' }, 404);
     const account = await env.DB.prepare('SELECT id FROM users WHERE email=?').bind(member.email).first();
     if (account?.id === user.id) return json({ error: 'You cannot remove your own project access.' }, 400);
+    if (account?.id === project.createdBy) return json({ error:'The project owner’s access is protected.' },400);
     if (request.method === 'PATCH') {
       if (!['viewer','editor'].includes(body?.role)) return json({ error: 'Choose Viewer or Editor.' }, 400);
       const statements = [env.DB.prepare('UPDATE project_invitations SET role=? WHERE id=?').bind(body.role,member.id)];

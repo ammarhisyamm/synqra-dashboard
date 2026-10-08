@@ -34,4 +34,4 @@ export function authRateLimited(request, limit = 10, windowMs = 60_000) {
 }
 export const tooManyRequests = () => Response.json({ error: 'Too many attempts. Please wait a minute and try again.' }, { status: 429, headers: { 'cache-control': 'no-store', 'retry-after': '60' } });
 
-export const MIN_PASSWORD_LENGTH = 8;
+export const MIN_PASSWORD_LENGTH = 12;

@@ -9,3 +9,6 @@ test-results/
 playwright-report/
 .vercel
 .env*
+*.sqlaes
+*-restore.sql
+infra/notetaker/private/

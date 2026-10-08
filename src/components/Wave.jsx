@@ -3,7 +3,6 @@ const WAVE_BAR_HEIGHTS = ['50%', '75%', '100%', '75%', '50%'];
 function Wave({ className = '', style, ...props }) {
   return (
     <>
-      <style>{`@keyframes loading-ui-wave { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(0.6); } }`}</style>
       <span
         role="status"
         className={`wave ${className}`.trim()}

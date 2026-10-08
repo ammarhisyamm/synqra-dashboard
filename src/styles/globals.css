@@ -3,6 +3,8 @@
    changing the approved Synqra appearance during the incremental migration. */
 @import "tailwindcss/theme.css";
 @import "tailwindcss/utilities.css";
+@keyframes loading-ui-wave { 0%,100% { transform:scaleY(1); } 50% { transform:scaleY(0.6); } }
+@media (prefers-reduced-motion:reduce) { .wave > span { animation:none !important; } }
 
 @theme inline {
   --color-background: var(--background);

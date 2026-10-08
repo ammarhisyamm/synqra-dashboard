@@ -1,17 +1,22 @@
 import { Component } from 'react';
 import { ArrowCounterClockwise as RotateCcw } from '@phosphor-icons/react';
+import { reportFailure } from '../../api/telemetry';
 
 export class ErrorPanel extends Component {
   state = { error: null, errorId: null };
   static getDerivedStateFromError(error) { return { error }; }
   componentDidCatch(error) {
-    console.error('Unhandled Synqra runtime error:', error);
+    reportFailure(/dynamically imported|module script|loading chunk|preload/i.test(error?.message || '') ? 'chunk_failure' : 'render_failure');
     this.setState({ errorId: crypto.randomUUID() });
   }
   retry = () => {
     // React.lazy caches rejected imports. Resetting the boundary cannot fetch
     // an obsolete chunk after deployment; explicitly load the current manifest.
-    if (/dynamically imported|module script|loading chunk|preload/i.test(this.state.error?.message || '')) window.location.reload();
+    if (/dynamically imported|module script|loading chunk|preload|asset manifest/i.test(this.state.error?.message || '')) {
+      const url=new URL(window.location.href);
+      url.searchParams.set('__synqra_retry',crypto.randomUUID());
+      window.location.replace(url.href);
+    }
     else this.setState({ error: null, errorId: null });
   };
   goBack = () => {

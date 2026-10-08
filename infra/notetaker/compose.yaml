@@ -1,0 +1,97 @@
+name: synqra-notetaker
+services:
+  postgres:
+    image: postgres@sha256:3645570cccdfa447589da9f57dd740faa29b30938e861289a5574b6ca6b03826
+    env_file: private/database.env
+    environment:
+      POSTGRES_DB: vexa
+      POSTGRES_USER: vexa
+    volumes:
+      - database:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U vexa -d vexa]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+  storage:
+    # SeaweedFS 4.48, Apache-2.0. The upstream MinIO community repo is archived.
+    # Its S3 API is consumed via Vexa's existing MINIO_* client configuration.
+    image: chrislusf/seaweedfs@sha256:4e61d15fd35994cb1e43e1e553dff106794841fd9a99ade2fc8c8bfce4d7872d
+    command: [mini, -dir=/data, -ip=storage, -ip.bind=0.0.0.0, -s3.port=9000, -s3.config=/etc/seaweedfs/s3.json, -bucket=vexa]
+    volumes:
+      - recordings:/data
+      - ./private/s3.json:/etc/seaweedfs/s3.json:ro
+    restart: unless-stopped
+  whisper:
+    # Pinned legacy CPU server used by the reviewed Vexa Lite recipe.
+    image: fedirz/faster-whisper-server@sha256:760e5e43d427dc6cfbbc4731934b908b7de9c7e6d5309c6a1f0c8c923a5b6030
+    environment:
+      WHISPER__MODEL: Systran/faster-whisper-tiny
+      WHISPER__INFERENCE_DEVICE: cpu
+      WHISPER__TTL: '-1'
+    volumes:
+      - whisper-models:/root/.cache/huggingface
+    restart: unless-stopped
+  vexa:
+    # Reviewed release v0.12.27; no Docker socket or host Claude credentials.
+    image: vexaai/vexa-lite@sha256:945628e54d843cf6286a823ca8e226f2b3c48eb948ad2f895e64eb867b7a0d55
+    env_file: private/engine.env
+    environment:
+      DB_HOST: postgres
+      DB_PORT: '5432'
+      DB_NAME: vexa
+      DB_USER: vexa
+      MINIO_ENDPOINT: storage:9000
+      MINIO_BUCKET: vexa
+      MINIO_SECURE: 'false'
+      TRANSCRIPTION_SERVICE_URL: http://whisper:8000
+      TRANSCRIPTION_SERVICE_TOKEN: ''
+      TRANSCRIPTION_MODEL: whisper-1
+      HOST_CLAUDE_CREDENTIALS: ''
+      ANTHROPIC_API_KEY: ''
+      ANTHROPIC_AUTH_TOKEN: ''
+      CLAUDE_CODE_OAUTH_TOKEN: ''
+    depends_on:
+      postgres:
+        condition: service_healthy
+      storage:
+        condition: service_started
+      whisper:
+        condition: service_started
+    shm_size: 2gb
+    volumes:
+      - redis:/var/lib/redis
+      - provider-keys:/run/vexa
+    healthcheck:
+      test: [CMD, curl, -fsS, 'http://127.0.0.1:8056/health']
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    restart: unless-stopped
+  gateway:
+    image: nginx@sha256:0985e772fb9f729e6fa0980da05fca5d9c468e870eed43071545afa9d2e27d94
+    env_file: private/summary.env
+    volumes:
+      - ./gateway.conf.template:/etc/nginx/templates/default.conf.template:ro
+    ports:
+      - 127.0.0.1:8056:8056
+      - 127.0.0.1:8057:8057
+    depends_on:
+      vexa:
+        condition: service_healthy
+    restart: unless-stopped
+  ollama:
+    profiles: [local-ai]
+    image: ollama/ollama@sha256:69f27594d8127cb43db1edcafa5e2d3cd8f88bdbc54a2cf3ceb11b8d138a24b1
+    volumes:
+      - ollama-models:/root/.ollama
+    restart: unless-stopped
+volumes:
+  database:
+  recordings:
+  redis:
+  provider-keys:
+  whisper-models:
+  ollama-models:

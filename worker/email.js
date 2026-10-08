@@ -9,6 +9,7 @@ export async function sendInviteEmail(env, request, { to, inviterName, role = 'v
     const from = env.EMAIL_FROM || 'Synqra <onboarding@resend.dev>';
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
+      signal: AbortSignal.timeout(10000),
       headers: { 'Authorization': `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         from,

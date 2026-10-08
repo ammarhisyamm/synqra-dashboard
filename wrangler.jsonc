@@ -4,8 +4,16 @@
   "main": "worker.js",
   "compatibility_date": "2026-09-10",
   "vars": {
-    "ALLOWED_ORIGINS": "https://synqra-eight.vercel.app"
+    "ALLOWED_ORIGINS": "https://synqra-eight.vercel.app",
+    "APP_ORIGIN": "https://synqra-eight.vercel.app",
+    "APP_ENV": "production"
   },
+  "triggers": { "crons": ["*/10 * * * *"] },
+  "ratelimits": [
+    { "name": "AUTH_RATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 20, "period": 60 } },
+    { "name": "TELEMETRY_RATE_LIMITER", "namespace_id": "1002", "simple": { "limit": 5, "period": 60 } },
+    { "name": "AI_RATE_LIMITER", "namespace_id": "1003", "simple": { "limit": 10, "period": 60 } }
+  ],
   "observability": {
     "enabled": true,
     "logs": { "enabled": true, "head_sampling_rate": 1 },
@@ -29,6 +37,27 @@
     {
       "binding": "ATTACHMENTS",
       "bucket_name": "synqra-dashboard-attachments"
+    },
+    {
+      "binding": "ATTACHMENT_BACKUPS",
+      "bucket_name": "synqra-dashboard-attachment-backups"
     }
-  ]
+  ],
+  "env": {
+    "staging": {
+      "name": "synqra-staging",
+      "vars": {
+        "APP_ENV": "staging",
+        "APP_ORIGIN": "https://synqra-staging.ammarhisyam151.workers.dev",
+        "ALLOWED_ORIGINS": "https://synqra-staging.ammarhisyam151.workers.dev"
+      },
+      "d1_databases": [{ "binding":"DB", "database_name":"synqra-staging-data", "database_id":"cee5bc08-e132-4180-b62d-c9bc2c296e18", "migrations_dir":"migrations" }],
+      "r2_buckets": [{ "binding":"ATTACHMENTS", "bucket_name":"synqra-staging-attachments" },{ "binding":"ATTACHMENT_BACKUPS", "bucket_name":"synqra-staging-attachment-backups" }],
+      "ratelimits": [
+        { "name":"AUTH_RATE_LIMITER", "namespace_id":"2001", "simple": { "limit":20,"period":60 } },
+        { "name":"TELEMETRY_RATE_LIMITER", "namespace_id":"2002", "simple": { "limit":5,"period":60 } },
+        { "name":"AI_RATE_LIMITER", "namespace_id":"2003", "simple": { "limit":10,"period":60 } }
+      ]
+    }
+  }
 }

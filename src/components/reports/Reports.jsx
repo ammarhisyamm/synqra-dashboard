@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowRight, CaretDown as ChevronDown, ChartPieSlice, Clock, ListChecks, Lightning, ArrowCounterClockwise as RotateCcw, TrendUp, Users, Warning as TriangleAlert, CheckCircle as CheckCircle2, XCircle } from '@phosphor-icons/react';
-import { REPORT_COLORS, statusFor } from '../../lib/helpers';
+import { REPORT_COLORS, statusFor, downloadReviewsCsv } from '../../lib/helpers';
 import { activeReviews, isResolved, portfolioProjects, taskOverview, sprintTasks, sprintStats, statusCounts, priorityCounts, teamWorkload, hoursTotals, formatHours } from '../../lib/reports';
 import { localToday, slashDate } from '../../lib/dates';
 import { reportsApi } from '../../api/reports';
@@ -126,13 +126,15 @@ export function Reports({ reviews, projects, sprints, projectName, onRefresh, on
   const ragCounts = { 'On Track': 0, 'At Risk': 0, Delayed: 0 };
   portfolio.forEach(p => { ragCounts[p.status] += 1; });
   const activeTab = tabs.find(t => t.id === tab);
+  const filteredReviews = tab==='portfolio' ? activeReviews(reviews) : tab==='tasks' ? taskRows : teamReviews;
 
   const reportProjectOptions = projectList.map(p => ({ value: p.id, label: p.name }));
   const reportAssigneeOptions = [{ value: '', label: 'Semua User' }, ...owners.map(o => ({ value: o, label: o }))];
   const reportBurnOptions = projectSprints.map(s => ({ value: s.id, label: s.name }));
 
   return <section className="page reports-page">
-    <PageHeading title="Reports" description={activeTab.desc} action={<div className="heading-actions"><span className="refresh-stamp">{updatedSecs == null ? 'Not synced yet' : updatedSecs < 5 ? 'Updated just now' : `Updated ${updatedSecs}s ago`}</span><button className="ghost-button" onClick={onRefresh}><RotateCcw size={15}/> Refresh</button></div>} />
+    <p className="report-definition">Progress = completed / active tasks. Archived tasks are excluded. Estimated hours are not actual time; shared estimates are split equally across assignees in workload.</p>
+    <PageHeading title="Reports" description={activeTab.desc} action={<div className="heading-actions"><button className="secondary-button" onClick={()=>downloadReviewsCsv(filteredReviews)}>Export filtered tasks</button><span className="refresh-stamp">{updatedSecs == null ? 'Not synced yet' : updatedSecs < 5 ? 'Updated just now' : `Updated ${updatedSecs}s ago`}</span><button className="ghost-button" onClick={onRefresh}><RotateCcw size={15}/> Refresh</button></div>} />
     <div className="report-tabs">{tabs.map(t => <button key={t.id} className={tab === t.id ? 'active' : ''} onClick={() => setTab(t.id)}>{t.label}</button>)}</div>
     {tab === 'portfolio' && <>
       <div className="review-kpis report-kpis"><MetricCard label="Total Projects" value={portfolio.length}/><MetricCard label="On Track" value={ragCounts['On Track']}/><MetricCard label="At Risk" value={ragCounts['At Risk']}/><MetricCard label="Delayed" value={ragCounts.Delayed}/></div>

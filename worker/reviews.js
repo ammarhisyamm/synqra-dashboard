@@ -54,28 +54,27 @@ export async function reviewSnapshot(env, reviewId) {
 
 export async function notifyUsers(env, actorId, { type, title, body, reviewId = null, projectId = null }) {
   try {
-    // Keep the actor in the feed too: the bell is an audit-style activity inbox,
-    // so the person who made a change should see immediate confirmation there.
+    // The audit trail is independent of bell preferences, including the actor.
     const scope = projectId || (reviewId ? await env.DB.prepare('SELECT project_id FROM reviews WHERE id=?').bind(reviewId).first('project_id') : null);
     const recipients = scope
-      ? await env.DB.prepare('SELECT user_id AS id FROM project_memberships WHERE project_id=? UNION SELECT id FROM users WHERE id=?').bind(scope, actorId).all()
-      : { results: [{ id: actorId }] };
+      ? await env.DB.prepare('SELECT p.user_id AS id FROM project_memberships p LEFT JOIN user_preferences pref ON pref.user_id=p.user_id WHERE p.project_id=? AND COALESCE(pref.activity,1)=1 UNION SELECT u.id FROM users u LEFT JOIN user_preferences pref ON pref.user_id=u.id WHERE u.id=? AND COALESCE(pref.activity,1)=1').bind(scope, actorId).all()
+      : await env.DB.prepare('SELECT u.id FROM users u LEFT JOIN user_preferences pref ON pref.user_id=u.id WHERE u.id=? AND COALESCE(pref.activity,1)=1').bind(actorId).all();
     if (!recipients.results.length) return;
     await env.DB.batch(recipients.results.map(recipient => env.DB.prepare('INSERT INTO notifications (id, user_id, review_id, project_id, type, title, body) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(id(), recipient.id, reviewId, scope, type, title, body)));
   } catch {
     // Notifications are non-blocking: an action must still succeed if delivery fails.
   }
 }
-export async function recordActivity(env, reviewId, userId, action, metadata = {}) {
+export async function recordActivity(env, reviewId, userId, action, metadata = {}, alreadyRecorded = false) {
   const review = await env.DB.prepare('SELECT title, assignee FROM reviews WHERE id = ?').bind(reviewId).first();
   const actor = await env.DB.prepare('SELECT name FROM users WHERE id = ?').bind(userId).first();
   const title = review?.title || 'Task update';
   const actionLabels = { created: 'Task created', updated: 'Task updated', commented: 'New comment', subtask_added: 'Subtask added', subtask_updated: 'Subtask updated', subtask_removed: 'Subtask removed', attachment_added: 'Attachment added', attachment_removed: 'Attachment removed' };
   const changes = Object.entries(metadata.changes || {})
-    .map(([field, change]) => `${field.replaceAll('_', ' ')}: ${change.from || 'None'} → ${change.to || 'None'}`)
+    .map(([field, change]) => `${field.replaceAll('_', ' ')}: ${change.from ?? 'None'} → ${change.to ?? 'None'}`)
     .join(' · ');
   const detail = action === 'created' ? '' : changes || metadata.title || metadata.filename || (action === 'commented' ? 'A new comment was added.' : '');
   const body = `${actor?.name || 'Someone'} ${action === 'created' ? 'created' : action === 'commented' ? 'commented on' : 'updated'} “${title}”${detail ? ` · ${detail}` : ''}`;
-  await env.DB.prepare('INSERT INTO review_activity (id, review_id, user_id, action, metadata) VALUES (?, ?, ?, ?, ?)').bind(id(), reviewId, userId, action, JSON.stringify(metadata)).run();
+  if(!alreadyRecorded)await env.DB.prepare('INSERT INTO review_activity (id, review_id, user_id, action, metadata) VALUES (?, ?, ?, ?, ?)').bind(id(), reviewId, userId, action, JSON.stringify(metadata)).run();
   await notifyUsers(env, userId, { reviewId, type: action, title: actionLabels[action] || 'Task activity', body });
 }

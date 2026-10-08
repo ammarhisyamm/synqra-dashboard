@@ -19,6 +19,10 @@ async function fixture(page, { empty = false, failCreate = false, failPatch = fa
     const method = request.method();
     const payload = method !== 'GET' ? request.postDataJSON() : {};
     const send = (body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+    if (path === '/api/telemetry') return send({ ok:true },202);
+    if (path === '/api/account/security') return send({ activeSessions:1,mfaEnabled:false,mfaAvailable:false });
+    if (path === '/api/account/preferences') return send({ preferences:{ activity:1,reminders:1,mentions:1 } });
+    if (path === '/api/admin/operations') return send({ errors:[],feedback:[],cleanup:{ pending:0 } });
     if (path === '/api/auth/me') return send({ user: readOnly ? { ...user, role:'member' } : user });
     if (path === '/api/bootstrap') return send(data);
     if (path === '/api/team') return send({ team: [user, { name: 'Ammar Hisyam', email: 'ammar@example.test' }, { name: 'Erlangga', email: 'erlangga@example.test' }] });
@@ -31,6 +35,7 @@ async function fixture(page, { empty = false, failCreate = false, failPatch = fa
     }
     if (path === '/api/ai/generate') return send({ items: [{ id: 'generated-qa', title: 'Improve login', description: 'Improve responsive layout', priority: 'Major', area: 'Engineering', assignee: '', status: 'Open', due: '', keep: true }], brief: { source: 'test', summary: 'UI improvements' } });
     if (path === '/api/meetings' && method === 'POST') { const item = { id: 'new-meeting', ...payload }; data.meetings.push(item); return send(item, 201); }
+    if (/\/meetings\/[^/]+\/capture$/.test(path) && method === 'GET') return send({capture:null,summary:'',shares:[],configured:false,localAiConfigured:false});
     if (path === '/api/reviews' && method === 'POST') {
       if (failCreate) return send({ error: 'QA simulated create failure' }, 500);
       const item = { ...baseTask, ...payload, id: payload.id || 'new-task' }; data.reviews.push(item); return send(item, 201);
@@ -101,6 +106,17 @@ test('detail before Board: aligned people menu, keyboard Escape, saved estimate 
   await drawer.getByLabel('New comment').fill('Looks good');
   await drawer.getByRole('button', { name: 'Comment', exact: true }).click();
   await expect(drawer.getByText('Looks good', { exact: true })).toBeVisible();
+  expect(state.errors).toEqual([]);
+});
+
+test('task deep link opens authorized details and missing links fail without crashing the workspace',async({page})=>{
+  const state=await fixture(page);
+  await page.goto('/?project='+project.id+'&review='+baseTask.id);
+  await expect(page.getByRole('dialog',{name:'Task details'})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Copy task link'})).toBeVisible();
+  await page.goto('/?project='+project.id+'&review=missing-task');
+  await expect(page.getByText('This task is no longer available. Refresh your workspace.',{exact:true})).toBeVisible();
+  await expect(page.getByRole('dialog',{name:'Task details'})).toHaveCount(0);
   expect(state.errors).toEqual([]);
 });
 
@@ -280,8 +296,8 @@ test('project delete confirmation is responsive and preserves input after failur
 test('failed lazy route import can recover through an explicit reload', async ({ page }) => {
   await fixture(page);
   let failed = false;
-  await page.route('**/src/components/reviews/Reviews.jsx*', route => {
-    if (!failed) { failed = true; return route.abort('failed'); }
+  await page.route(/\/(?:src\/components\/reviews\/Reviews\.jsx|assets\/Reviews-[^/]+\.js)(?:\?.*)?$/, route => {
+    if (!failed) { failed = true; return route.fulfill({status:404,contentType:'text/javascript',headers:{'cache-control':'no-store'},body:'// Missing stale chunk'}); }
     return route.continue();
   });
   await page.locator('.sidebar').getByRole('button', { name:'All Reviews', exact:true }).click();

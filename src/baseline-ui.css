@@ -792,3 +792,4 @@
     scroll-behavior: auto !important;
   }
 }
+.report-definition { color: var(--ui-muted); line-height: 1.6; margin: 0 0 16px; font-size: 12px; }

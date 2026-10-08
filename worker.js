@@ -7,6 +7,11 @@ import { bootstrap } from './worker/bootstrap.js';
 import { handleAiGenerate } from './worker/ai.js';
 import { handleProjectPeople } from './worker/project-people.js';
 import { calendarDate, dateRange } from './worker/validation.js';
+import { handleSecurity, verifyMfa, handlePasswordReset } from './worker/security.js';
+import { handleOperations, releaseInfo, cleanupStatement, drainFileCleanup, maintenance, recordOperationalEvent, notifyMentions } from './worker/operations.js';
+import { handleSearch } from './worker/search.js';
+import { creationReceipt } from './worker/idempotency.js';
+import { handleNotetaker, handlePublicMeeting, syncNotetakers, activeProjectCapture } from './worker/notetaker.js';
 
 const MUTATING_METHODS = new Set(['POST', 'PATCH', 'DELETE', 'PUT']);
 const securityHeaders = {
@@ -68,6 +73,11 @@ async function metadataParentError(env, parentId, projectId, type) {
 async function canCreateProject(env, user) {
   return user.role !== 'viewer';
 }
+async function canManageProject(env,user,projectId) {
+  if (['admin','super_admin'].includes(user.role)) return true;
+  const owner = await env.DB.prepare('SELECT created_by FROM projects WHERE id=?').bind(projectId).first('created_by');
+  return owner===user.id && await requireProject(env,user,projectId,'edit');
+}
 async function visibleProjectRows(env, user, rows) {
   if (['super_admin', 'admin'].includes(user.role)) return rows;
   const visible = await Promise.all(rows.map(async row => ({ row, allowed: await requireProject(env, user, row.projectId, 'view') })));
@@ -81,6 +91,15 @@ function secureResponse(response) {
 
 async function routeApi(request, env) {
   const path = new URL(request.url).pathname;
+  if (path === '/api/health' && request.method === 'GET') {
+    // Readiness must prove the deployed schema, not merely database reachability.
+    await env.DB.batch([env.DB.prepare('SELECT created_by FROM projects LIMIT 0'),env.DB.prepare('SELECT token_hash FROM password_resets LIMIT 0'),env.DB.prepare('SELECT object_key FROM file_cleanup LIMIT 0'),env.DB.prepare('SELECT status FROM meeting_captures LIMIT 0'),env.DB.prepare('SELECT token_hash FROM meeting_shares LIMIT 0')]);
+    return json({ ok:true,...releaseInfo(env) });
+  }
+  if (path.startsWith('/api/auth/') && request.method === 'POST' && env.AUTH_RATE_LIMITER) {
+    const key = request.headers.get('cf-connecting-ip') || 'unknown';
+    if (!(await env.AUTH_RATE_LIMITER.limit({ key })).success) return tooManyRequests();
+  }
   if (MUTATING_METHODS.has(request.method)) {
     // The production UI is served by Vercel and proxies /api/* to this Worker.
     // In that setup the browser Origin is the Vercel origin while request.url is
@@ -88,17 +107,21 @@ async function routeApi(request, env) {
     // comparing those two unrelated origins directly.
     if (!isAllowedMutationOrigin(request, env)) return json({ error: 'Cross-origin requests are not allowed.' }, 403);
   }
+  if (path==='/api/auth/password-reset' && request.method==='POST') return handlePasswordReset(request,env);
+  const sharedMeeting = await handlePublicMeeting(request,env);
+  if (sharedMeeting) return sharedMeeting;
   if (request.method === 'POST' && path === '/api/auth/register') {
     if (authRateLimited(request)) return tooManyRequests();
     const body = await readBody(request); if (!body) return json({ error: 'Invalid JSON.' }, 400);
     const email = safeText(body.email, 254).toLowerCase(); const name = safeText(body.name, 80) || email.split('@')[0]; const username = safeText(body.username, 40).toLowerCase() || email.split('@')[0].replace(/[^a-z0-9_-]/g, ''); const password = typeof body.password === 'string' ? body.password : '';
     if (!/^\S+@\S+\.\S+$/.test(email)) return json({ error: 'Enter a valid email address.' }, 400);
     if (!/^[a-z0-9_-]{3,40}$/.test(username)) return json({ error: 'Use a username with 3–40 letters, numbers, hyphens, or underscores.' }, 400);
-    if (password.length < MIN_PASSWORD_LENGTH) return json({ error: `Use at least ${MIN_PASSWORD_LENGTH} characters for your password.` }, 400);
+    if (password.length < MIN_PASSWORD_LENGTH || password.length > 128) return json({ error: `Use ${MIN_PASSWORD_LENGTH}–128 characters for your password.` }, 400);
     const existing = await env.DB.prepare('SELECT id FROM users WHERE email = ? OR username = ?').bind(email, username).first();
     if (existing) return json({ error: 'An account with that email already exists.' }, 409);
-    const count = await env.DB.prepare('SELECT COUNT(*) AS count FROM users').first('count');
-    const user = { id: id(), email, name, role: Number(count) === 0 ? 'super_admin' : 'member' };
+    // Public registration must never grant workspace-wide administrator access.
+    // Initial admins are provisioned through a verified, operator-only process.
+    const user = { id: id(), email, name, role:'member' };
     user.username = username;
     await env.DB.prepare('INSERT INTO users (id, email, username, name, password_hash, role) VALUES (?, ?, ?, ?, ?, ?)').bind(user.id, user.email, user.username, user.name, await passwordHash(password), user.role).run();
     return signedIn(user, await createSession(user, env), 201);
@@ -109,6 +132,7 @@ async function routeApi(request, env) {
     const identifier = safeText(body.identifier || body.email, 254).toLowerCase(); const password = typeof body.password === 'string' ? body.password : '';
     const user = await env.DB.prepare('SELECT id, email, username, name, role, password_hash FROM users WHERE email = ? OR username = ?').bind(identifier, identifier).first();
     if (!user || !(await passwordMatches(password, user.password_hash))) return json({ error: 'Username, email, or password is incorrect.' }, 401);
+    if (!await verifyMfa(env,user.id,body.code)) return json({ error:'Enter a valid authenticator or recovery code.',mfaRequired:true },401);
     return signedIn(user, await createSession(user, env));
   }
   if (request.method === 'POST' && path === '/api/auth/logout') {
@@ -122,9 +146,16 @@ async function routeApi(request, env) {
   const user = await sessionUser(request, env);
   if (!user) return json({ error: 'Sign in required.' }, 401);
   await ensureWorkspaceSchema(env);
+  const notetakerResponse = await handleNotetaker(request,env,user);
+  if (notetakerResponse) return notetakerResponse;
+  const officeResponse = await handleSecurity(request,env,user) || await handlePasswordReset(request,env,user) || await handleOperations(request,env,user) || await handleSearch(request,env,user);
+  if (officeResponse) return officeResponse;
   const peopleResponse = await handleProjectPeople(request, env, user);
   if (peopleResponse) return peopleResponse;
-  if (request.method === 'POST' && path === '/api/ai/generate') return handleAiGenerate(request, env);
+  if (request.method === 'POST' && path === '/api/ai/generate') {
+    if (env.AI_RATE_LIMITER && !(await env.AI_RATE_LIMITER.limit({ key:user.id })).success) return tooManyRequests();
+    return handleAiGenerate(request, env);
+  }
   if (request.method === 'GET' && path === '/api/admin/users') {
     if (!['super_admin', 'admin'].includes(user.role)) return json({ error: 'Admin access required.' }, 403);
     const result = await env.DB.prepare('SELECT id, email, username, name, role, created_at AS createdAt FROM users ORDER BY CASE role WHEN \'super_admin\' THEN 0 WHEN \'admin\' THEN 1 ELSE 2 END, name').all();
@@ -178,7 +209,7 @@ async function routeApi(request, env) {
     const body = await readBody(request); if (!body) return json({ error: 'Invalid JSON.' }, 400);
     const email = safeText(body.email, 254).toLowerCase(); const name = safeText(body.name, 80); const password = typeof body.password === 'string' ? body.password : '';
     const username = safeText(body.username, 40).toLowerCase() || email.split('@')[0].replace(/[^a-z0-9_-]/g, '');
-    if (!/^\S+@\S+\.\S+$/.test(email) || !name || !/^[a-z0-9_-]{3,40}$/.test(username) || password.length < MIN_PASSWORD_LENGTH) return json({ error: `Name, valid email, username, and a password of at least ${MIN_PASSWORD_LENGTH} characters are required.` }, 400);
+    if (!/^\S+@\S+\.\S+$/.test(email) || !name || !/^[a-z0-9_-]{3,40}$/.test(username) || password.length < MIN_PASSWORD_LENGTH || password.length > 128) return json({ error: `Name, valid email, username, and a password of ${MIN_PASSWORD_LENGTH}–128 characters are required.` }, 400);
     if (await env.DB.prepare('SELECT id FROM users WHERE email = ? OR username = ?').bind(email, username).first()) return json({ error: 'An account with that email or username already exists.' }, 409);
     const admin = { id: id(), email, username, name, role: 'admin' };
     await env.DB.prepare('INSERT INTO users (id, email, username, name, password_hash, role) VALUES (?, ?, ?, ?, ?, ?)').bind(admin.id, email, username, name, await passwordHash(password), admin.role).run();
@@ -212,18 +243,19 @@ async function routeApi(request, env) {
   if (request.method === 'POST' && path === '/api/projects') {
     if (!await canCreateProject(env, user)) return json({ error: 'Project creation is not available for this account.' }, 403);
     const body = await readBody(request); const name = safeText(body?.name, 120); if (!name) return json({ error: 'Project name is required.' }, 400);
-    const project = { id: id(), name, description: safeText(body.description, 2000), spaceId: safeText(body.spaceId, 80) || 'default', accessMode: 'invite' };
-    try { await env.DB.prepare('INSERT INTO projects (id, space_id, name, description, access_mode) VALUES (?, ?, ?, ?, ?)').bind(project.id, project.spaceId, project.name, project.description, project.accessMode).run(); await env.DB.prepare("INSERT INTO project_memberships (project_id, user_id, role) VALUES (?, ?, 'editor')").bind(project.id, user.id).run(); await notifyUsers(env, user.id, { projectId: project.id, type: 'project_created', title: 'Project created', body: user.name + ' created ' + project.name }); return json(project, 201); } catch { return json({ error: 'Space or project already exists.' }, 409); }
+    const project = { id: id(), name, description: safeText(body.description, 2000), spaceId: safeText(body.spaceId, 80) || 'default', accessMode: 'invite',createdBy:user.id };
+    try { await env.DB.batch([env.DB.prepare('INSERT INTO projects (id, space_id, name, description, access_mode,created_by) VALUES (?, ?, ?, ?, ?, ?)').bind(project.id, project.spaceId, project.name, project.description, project.accessMode,user.id), env.DB.prepare("INSERT INTO project_memberships (project_id, user_id, role) VALUES (?, ?, 'editor')").bind(project.id, user.id)]); await notifyUsers(env, user.id, { projectId: project.id, type: 'project_created', title: 'Project created', body: user.name + ' created ' + project.name }); return json(project, 201); } catch { return json({ error: 'Space or project already exists.' }, 409); }
   }
   const projectMatch = path.match(/^\/api\/projects\/([a-zA-Z0-9-]+)$/);
   if (request.method === 'DELETE' && projectMatch) {
-    if (!['super_admin', 'admin'].includes(user.role)) return json({ error: 'Admin access required.' }, 403);
+    if (!await canManageProject(env,user,projectMatch[1])) return json({ error:'Project owner or admin access required.' },403);
     if (projectMatch[1] === 'default') return json({ error: 'The default project is protected.' }, 400);
     const project = await env.DB.prepare('SELECT id FROM projects WHERE id = ?').bind(projectMatch[1]).first();
     if (!project) return json({ error: 'Project not found.' }, 404);
+    if (await activeProjectCapture(env,projectMatch[1])) return json({error:'Stop and sync all meeting bots before deleting this project.'},409);
     const attachments = await env.DB.prepare('SELECT object_key AS objectKey FROM review_attachments WHERE review_id IN (SELECT id FROM reviews WHERE project_id = ?)').bind(projectMatch[1]).all();
-    if (env.ATTACHMENTS && attachments.results.length) await Promise.all(attachments.results.map(item => env.ATTACHMENTS.delete(item.objectKey)));
     await env.DB.batch([
+      ...attachments.results.map(item => cleanupStatement(env,item.objectKey)),
       env.DB.prepare('DELETE FROM notifications WHERE review_id IN (SELECT id FROM reviews WHERE project_id = ?)').bind(projectMatch[1]),
       env.DB.prepare('DELETE FROM review_comments WHERE review_id IN (SELECT id FROM reviews WHERE project_id = ?)').bind(projectMatch[1]),
       env.DB.prepare('DELETE FROM review_activity WHERE review_id IN (SELECT id FROM reviews WHERE project_id = ?)').bind(projectMatch[1]),
@@ -236,11 +268,12 @@ async function routeApi(request, env) {
       env.DB.prepare('DELETE FROM sprints WHERE project_id = ?').bind(projectMatch[1]),
       env.DB.prepare('DELETE FROM projects WHERE id = ?').bind(projectMatch[1])
     ]);
+    await drainFileCleanup(env).catch(() => recordOperationalEvent(env,'maintenance','cleanup_retry'));
     await notifyUsers(env, user.id, { type: 'project_deleted', title: 'Project deleted', body: user.name + ' deleted a project and its workspace data' });
     return json({ ok: true });
   }
   if (request.method === 'PATCH' && projectMatch) {
-    if (!['super_admin', 'admin'].includes(user.role)) return json({ error: 'Admin access required.' }, 403);
+    if (!await canManageProject(env,user,projectMatch[1])) return json({ error:'Project owner or admin access required.' },403);
     const body = await readBody(request); const fields = {}; if ('name' in (body || {})) fields.name = safeText(body.name, 120); if ('description' in (body || {})) fields.description = safeText(body.description, 2000);
     if ('name' in fields && !fields.name) return json({ error: 'Project name is required.' }, 400);
     if ('accessMode' in (body || {})) { if (!['invite', 'link'].includes(body.accessMode)) return json({ error: 'Invalid access mode.' }, 400); fields.access_mode = body.accessMode; }
@@ -277,11 +310,11 @@ async function routeApi(request, env) {
     // resolvedAt = earliest status_history move to Resolved, else updated_at when already resolved.
     const sprintId = new URL(request.url).searchParams.get('sprint_id') || '';
     if (!sprintId) return json({ error: 'sprint_id is required.' }, 400);
-    const sprint = await env.DB.prepare('SELECT id, name, start_date AS startDate, end_date AS endDate, status FROM sprints WHERE id = ?').bind(sprintId).first();
+    const sprint = await env.DB.prepare('SELECT id, project_id AS projectId, name, start_date AS startDate, end_date AS endDate, status FROM sprints WHERE id = ?').bind(sprintId).first();
     if (!sprint) return json({ error: 'Sprint not found.' }, 404);
     const sprintProject = await env.DB.prepare('SELECT project_id AS projectId FROM sprints WHERE id = ?').bind(sprintId).first();
     if (!await requireProject(env, user, sprintProject?.projectId, 'view')) return accessDenied();
-    const tasks = await env.DB.prepare("SELECT id, created_at AS createdAt, updated_at AS updatedAt, stage, status, archived FROM reviews WHERE archived = 0 AND (sprint_id = ? OR sprint = ?)").bind(sprint.id, sprint.name).all();
+    const tasks = await env.DB.prepare("SELECT id, created_at AS createdAt, updated_at AS updatedAt, stage, status, archived FROM reviews WHERE project_id=? AND archived = 0 AND (sprint_id = ? OR ((sprint_id IS NULL OR sprint_id='') AND sprint = ?))").bind(sprint.projectId, sprint.id, sprint.name).all();
     const ids = tasks.results.map(t => t.id);
     let resolvedAt = {};
     if (ids.length) {
@@ -384,7 +417,13 @@ async function routeApi(request, env) {
       const relationError = await validateRelations(env, review, review.project_id);
       if (relationError) return json({ error: relationError }, 400);
       const base = { id: reviewId, ...review, submitted_by: review.submitted_by || user.name, archived: 0 };
-      const insertRow = key => env.DB.prepare('INSERT INTO reviews (id, key, title, area, priority, stage, assignee, assignees, due, start_date, description, status, submitted_by, meeting_id, reporter, estimate_hours, epic, feature, sprint, labels, project_id, parent_id, item_type, sprint_id, archived) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(base.id, key, base.title, base.area, base.priority, base.stage, base.assignee, base.assignees ?? JSON.stringify(base.assignee ? [base.assignee] : []), base.due, base.start_date ?? null, base.description, base.status, base.submitted_by, base.meeting_id, base.reporter || user.name, base.estimate_hours ?? null, base.epic || '', base.feature || '', base.sprint || '', base.labels || '[]', base.project_id || 'default', base.parent_id || null, base.item_type || 'task', base.sprint_id || null, base.archived).run();
+      const receipt = await creationReceipt(env,user,'task',reviewId,review);
+      if (receipt.response) return receipt.response;
+      if (receipt.replay) {
+        const saved = await reviewSnapshot(env,reviewId);
+        return saved ? json({ ...saved,labels:parseJson(saved.labels,[]),assignees:parseJson(saved.assignees,[]) },201) : json({ error:'This task has been deleted. Create it with a new ID.' },410);
+      }
+      const insertRow = key => env.DB.batch([receipt.statement,env.DB.prepare('INSERT INTO reviews (id, key, title, area, priority, stage, assignee, assignees, due, start_date, description, status, submitted_by, meeting_id, reporter, estimate_hours, epic, feature, sprint, labels, project_id, parent_id, item_type, sprint_id, archived) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(base.id, key, base.title, base.area, base.priority, base.stage, base.assignee, base.assignees ?? JSON.stringify(base.assignee ? [base.assignee] : []), base.due, base.start_date ?? null, base.description, base.status, base.submitted_by, base.meeting_id, base.reporter || user.name, base.estimate_hours ?? null, base.epic || '', base.feature || '', base.sprint || '', base.labels || '[]', base.project_id || 'default', base.parent_id || null, base.item_type || 'task', base.sprint_id || null, base.archived),env.DB.prepare('INSERT INTO review_status_history(id,review_id,from_status,to_status,user_id) VALUES(?,?,?,?,?)').bind(id(),base.id,null,base.status,user.id),env.DB.prepare('INSERT INTO review_activity(id,review_id,user_id,action,metadata) VALUES(?,?,?,?,?)').bind(id(),base.id,user.id,'created',JSON.stringify({title:base.title}))]);
       // Retry on key collision: MAX()+1 races under concurrency, key is UNIQUE.
       let lastError = null;
       for (let attempt = 0; attempt < 5; attempt++) {
@@ -395,12 +434,14 @@ async function routeApi(request, env) {
           break;
         } catch (error) {
           if (!String(error?.message || '').toLowerCase().includes('unique')) throw error;
+          const raced=await creationReceipt(env,user,'task',reviewId,review);
+          if(raced.response)return raced.response;
+          if(raced.replay){const saved=await reviewSnapshot(env,reviewId);return saved?json({...saved,labels:parseJson(saved.labels,[]),assignees:parseJson(saved.assignees,[])},201):json({error:'This task was deleted. Use a new creation ID.'},410);}
           lastError = error;
         }
       }
       if (lastError) return json({ error: 'Could not assign a task key, please retry.' }, 409);
-      await env.DB.prepare('INSERT INTO review_status_history (id, review_id, from_status, to_status, user_id) VALUES (?, ?, ?, ?, ?)').bind(id(), base.id, null, base.status, user.id).run();
-      await recordActivity(env, base.id, user.id, 'created', { title: base.title });
+      await recordActivity(env, base.id, user.id, 'created', { title: base.title },true).catch(()=>recordOperationalEvent(env,'api','activity_delivery_failed'));
       const saved = await reviewSnapshot(env, base.id);
       return json({ ...saved, labels: parseJson(saved.labels, []), assignees: parseJson(saved.assignees, []) }, 201);
     } catch (error) { return json({ error: error.message }, 400); }
@@ -432,6 +473,7 @@ async function routeApi(request, env) {
     if (!exists) return json({ error: 'Review not found.' }, 404);
     await env.DB.prepare('INSERT INTO review_comments (id, review_id, user_id, body) VALUES (?, ?, ?, ?)').bind(comment.id, commentMatch[1], user.id, text).run();
     await recordActivity(env, commentMatch[1], user.id, 'commented', {});
+    await notifyMentions(env,await projectIdForReview(env,commentMatch[1]),commentMatch[1],user.id,text);
     return json({ ...comment, name: user.name, email: user.email }, 201);
   }
   const reviewMatch = path.match(/^\/api\/reviews\/([a-zA-Z0-9-]+)$/);
@@ -447,12 +489,22 @@ async function routeApi(request, env) {
       const relationError = await validateRelations(env, { meeting_id: before.meetingId, parent_id: before.parentId, sprint_id: before.sprintId, start_date: before.startDate, due: before.due, ...patch }, before.projectId, reviewMatch[1]);
       if (relationError) return json({ error: relationError }, 400);
       const values = keys.map(key => patch[key]);
-      const result = await env.DB.prepare(`UPDATE reviews SET ${keys.map(key => `${key} = ?`).join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(...values, reviewMatch[1]).run();
-      if (!result.meta.changes) return json({ error: 'Review not found.' }, 404);
+      const aliases = { start_date:'startDate',submitted_by:'submittedBy',meeting_id:'meetingId',estimate_hours:'estimateHours',project_id:'projectId',parent_id:'parentId',item_type:'itemType',sprint_id:'sprintId' };
+      const changes = Object.fromEntries(keys.map(key => [key, { from:before[aliases[key] || key],to:patch[key] }]).filter(([,change]) => change.from !== change.to));
+      const changedKeys=Object.keys(changes);
+      if(!changedKeys.length)return json({ ...before,labels:parseJson(before.labels,[]),assignees:parseJson(before.assignees,[]) });
+      const metadata={fields:changedKeys,changes};
+      // Compare changed fields and persist audit/history in the same transaction.
+      // changes() refers to the immediately preceding statement in this batch.
+      const statements=[
+        env.DB.prepare(`UPDATE reviews SET ${keys.map(key=>`${key} = ?`).join(', ')},updated_at=CURRENT_TIMESTAMP WHERE id=? AND ${keys.map(key=>`${key} IS ?`).join(' AND ')}`).bind(...values,reviewMatch[1],...keys.map(key=>before[aliases[key] || key] ?? null)),
+        env.DB.prepare('INSERT INTO review_activity(id,review_id,user_id,action,metadata) SELECT ?,?,?,?,? WHERE changes()=1').bind(id(),reviewMatch[1],user.id,'updated',JSON.stringify(metadata))
+      ];
+      if('status' in changes)statements.push(env.DB.prepare('INSERT INTO review_status_history(id,review_id,from_status,to_status,user_id) SELECT ?,?,?,?,? WHERE changes()=1').bind(id(),reviewMatch[1],before.status,patch.status,user.id));
+      const result=await env.DB.batch(statements);
+      if(!result[0].meta.changes)return json({ error:'This task changed while you were editing it. Reload its details and try again.' },409);
       const saved = await reviewSnapshot(env, reviewMatch[1]);
-      if ('status' in patch && patch.status !== before.status) await env.DB.prepare('INSERT INTO review_status_history (id, review_id, from_status, to_status, user_id) VALUES (?, ?, ?, ?, ?)').bind(id(), reviewMatch[1], before.status, patch.status, user.id).run();
-      const changes = Object.fromEntries(keys.map(key => [key, { from: before[key], to: saved[key] }]));
-      await recordActivity(env, reviewMatch[1], user.id, 'updated', { fields: keys, changes });
+      await recordActivity(env, reviewMatch[1], user.id, 'updated', metadata,true).catch(()=>recordOperationalEvent(env,'api','activity_delivery_failed'));
       return json({ ...saved, labels: parseJson(saved.labels, []), assignees: parseJson(saved.assignees, []) });
     } catch (error) { return json({ error: error.message }, 400); }
   }
@@ -461,8 +513,9 @@ async function routeApi(request, env) {
     if (!await requireProject(env, user, await projectIdForReview(env, reviewMatch[1]), 'edit')) return accessDenied();
     const doomed = await env.DB.prepare('SELECT title, project_id AS projectId FROM reviews WHERE id = ?').bind(reviewMatch[1]).first();
     const attachments = await env.DB.prepare('SELECT object_key AS objectKey FROM review_attachments WHERE review_id = ?').bind(reviewMatch[1]).all();
-    if (env.ATTACHMENTS && attachments.results.length) await Promise.all(attachments.results.map(item => env.ATTACHMENTS.delete(item.objectKey)));
-    const result = await env.DB.prepare('DELETE FROM reviews WHERE id = ?').bind(reviewMatch[1]).run();
+    const deletion = await env.DB.batch([...attachments.results.map(item => cleanupStatement(env,item.objectKey)),env.DB.prepare('DELETE FROM reviews WHERE id = ?').bind(reviewMatch[1])]);
+    const result = deletion[deletion.length-1];
+    await drainFileCleanup(env).catch(() => recordOperationalEvent(env,'maintenance','cleanup_retry'));
     if (result.meta.changes && doomed) await notifyUsers(env, user.id, { projectId: doomed.projectId, type: 'review_deleted', title: 'Task deleted', body: user.name + ' deleted "' + doomed.title + '"' });
     return result.meta.changes ? json({ ok: true }) : json({ error: 'Review not found.' }, 404);
   }
@@ -507,9 +560,15 @@ async function routeApi(request, env) {
     if (file.size > MAX_ATTACHMENT_BYTES) return json({ error: 'Files must be 50 MB or smaller.' }, 413);
     if (!await env.DB.prepare('SELECT id FROM reviews WHERE id = ?').bind(attachmentPostMatch[1]).first()) return json({ error: 'Review not found.' }, 404);
     const filename = safeText(file.name, 180) || 'attachment'; const key = `${attachmentPostMatch[1]}/${id()}-${filename.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+    // Reserve cleanup before R2 upload: a process failure cannot leave an
+    // untracked object. Successful linking cancels cleanup atomically.
+    await cleanupStatement(env,key,3600).run();
     await env.ATTACHMENTS.put(key, file.stream(), { httpMetadata: { contentType: file.type || 'application/octet-stream' } });
     const item = { id: id(), filename, contentType: file.type || 'application/octet-stream', size: file.size };
-    await env.DB.prepare('INSERT INTO review_attachments (id, review_id, user_id, object_key, filename, content_type, size) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(item.id, attachmentPostMatch[1], user.id, key, item.filename, item.contentType, item.size).run();
+    await env.DB.batch([
+      env.DB.prepare('INSERT INTO review_attachments (id, review_id, user_id, object_key, filename, content_type, size) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(item.id, attachmentPostMatch[1], user.id, key, item.filename, item.contentType, item.size),
+      env.DB.prepare('DELETE FROM file_cleanup WHERE object_key=?').bind(key)
+    ]);
     await recordActivity(env, attachmentPostMatch[1], user.id, 'attachment_added', { filename });
     return json(item, 201);
   }
@@ -524,7 +583,9 @@ async function routeApi(request, env) {
   if (attachmentMatch && request.method === 'DELETE') {
     if (!env.ATTACHMENTS) return json({ error: 'R2 attachments are not configured.' }, 503);
     const item = await env.DB.prepare('SELECT object_key AS objectKey, review_id AS reviewId FROM review_attachments WHERE id = ?').bind(attachmentMatch[1]).first();
-    if (!item) return json({ error: 'Attachment not found.' }, 404); if (!await requireProject(env, user, await projectIdForReview(env, item.reviewId), 'edit')) return accessDenied(); await env.ATTACHMENTS.delete(item.objectKey); await env.DB.prepare('DELETE FROM review_attachments WHERE id = ?').bind(attachmentMatch[1]).run(); await recordActivity(env, item.reviewId, user.id, 'attachment_removed', {}); return json({ ok: true });
+    if (!item) return json({ error: 'Attachment not found.' }, 404); if (!await requireProject(env, user, await projectIdForReview(env, item.reviewId), 'edit')) return accessDenied();
+    await env.DB.batch([cleanupStatement(env,item.objectKey),env.DB.prepare('DELETE FROM review_attachments WHERE id = ?').bind(attachmentMatch[1])]);
+    await drainFileCleanup(env).catch(() => recordOperationalEvent(env,'maintenance','cleanup_retry')); await recordActivity(env, item.reviewId, user.id, 'attachment_removed', {}); return json({ ok: true });
   }
 
   if (request.method === 'POST' && path === '/api/meetings') {
@@ -536,7 +597,21 @@ async function routeApi(request, env) {
     const meeting = { id: body.id && /^[a-zA-Z0-9-]{8,80}$/.test(body.id) ? body.id : id(), title, date, projectId: safeText(body.projectId, 80) || 'default', notes: safeText(body.notes, 5000), ai: body.ai ? 1 : 0, itemCount: 0, attendees: Array.isArray(body.attendees) ? body.attendees.map(x => safeText(x, 120)).filter(Boolean).slice(0, 30) : [] };
     if (!await requireProject(env, user, meeting.projectId, 'edit')) return accessDenied();
     if (!await env.DB.prepare('SELECT id FROM projects WHERE id = ?').bind(meeting.projectId).first()) return json({ error: 'Project not found.' }, 400);
-    await env.DB.prepare('INSERT INTO meetings (id, project_id, title, date, ai, notes, item_count, attendees) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').bind(meeting.id, meeting.projectId, meeting.title, meeting.date, meeting.ai, meeting.notes, meeting.itemCount, JSON.stringify(meeting.attendees)).run();
+    const receipt = await creationReceipt(env,user,'meeting',meeting.id,meeting);
+    if (receipt.response) return receipt.response;
+    if (receipt.replay) {
+      const saved = await env.DB.prepare('SELECT id,title,date,ai,notes,project_id AS projectId,attendees FROM meetings WHERE id=?').bind(meeting.id).first();
+      return saved ? json({ ...saved,ai:!!saved.ai,attendees:parseJson(saved.attendees,[]) },201) : json({ error:'This meeting has been deleted. Create it with a new ID.' },410);
+    }
+    try {
+    await env.DB.batch([receipt.statement,env.DB.prepare('INSERT INTO meetings (id, project_id, title, date, ai, notes, item_count, attendees) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').bind(meeting.id, meeting.projectId, meeting.title, meeting.date, meeting.ai, meeting.notes, meeting.itemCount, JSON.stringify(meeting.attendees))]);
+    } catch(error) {
+      const raced=await creationReceipt(env,user,'meeting',meeting.id,meeting);
+      if(raced.response)return raced.response;
+      if(!raced.replay)throw error;
+      const saved=await env.DB.prepare('SELECT id,title,date,ai,notes,project_id AS projectId,attendees FROM meetings WHERE id=?').bind(meeting.id).first();
+      return saved?json({...saved,ai:!!saved.ai,attendees:parseJson(saved.attendees,[])},201):json({error:'This meeting was deleted. Use a new creation ID.'},410);
+    }
     await notifyUsers(env, user.id, { projectId: meeting.projectId, type: 'meeting_created', title: 'New meeting scheduled', body: `"${meeting.title}" on ${meeting.date}` });
     return json({ ...meeting, ai: Boolean(meeting.ai) }, 201);
   }
@@ -564,6 +639,8 @@ async function routeApi(request, env) {
     const meetingProject = await env.DB.prepare('SELECT project_id AS projectId FROM meetings WHERE id = ?').bind(meetingMatch[1]).first();
     if (!meetingProject) return json({ error: 'Meeting not found.' }, 404);
     if (!await requireProject(env, user, meetingProject.projectId, 'edit')) return accessDenied();
+    const capture = await env.DB.prepare("SELECT 1 FROM meeting_captures WHERE meeting_id=? AND status NOT IN ('completed','failed')").bind(meetingMatch[1]).first();
+    if (capture) return json({error:'Stop the meeting bot and sync its completed status before deleting this meeting.'},409);
     const doomed = await env.DB.prepare('SELECT title FROM meetings WHERE id = ?').bind(meetingMatch[1]).first();
     const result = await env.DB.batch([
       env.DB.prepare('UPDATE reviews SET meeting_id = NULL WHERE meeting_id = ?').bind(meetingMatch[1]),
@@ -577,12 +654,17 @@ async function routeApi(request, env) {
 }
 
 export default {
-  async fetch(request, env) {
+  async scheduled(controller,env,ctx) {
+    ctx.waitUntil(maintenance(env).catch(() => recordOperationalEvent(env,'maintenance','job_failure')));
+    ctx.waitUntil(syncNotetakers(env).catch(() => recordOperationalEvent(env,'notetaker','poll_failure')));
+  },
+  async fetch(request, env, ctx) {
     if (new URL(request.url).pathname.startsWith('/api/')) {
       try { return secureResponse(await routeApi(request, env)); }
       catch (error) {
+        if (error.message?.includes('Stop the meeting bot before deleting this meeting')) return secureResponse(json({error:'Stop the meeting bot and sync its final status before deleting this meeting or project.'},409));
         const errorId = crypto.randomUUID();
-        console.error('API failure', { errorId, path: new URL(request.url).pathname, message: error?.message });
+        ctx.waitUntil(recordOperationalEvent(env,'api','unhandled_500'));
         return secureResponse(json({ error: 'This action could not be completed. Please retry.', errorId }, 500));
       }
     }
@@ -600,6 +682,8 @@ export default {
     if ((response.headers.get('content-type') || '').includes('text/html')) {
       headers.set('cache-control', 'no-store, no-cache, must-revalidate');
       headers.set('pragma', 'no-cache');
+    } else if (pathname==='/asset-manifest.json' || pathname==='/release.json') {
+      headers.set('cache-control','no-store');
     } else if (response.ok && /\/assets\/[^/]+-[A-Za-z0-9_-]{6,}\.(?:css|js)$/.test(pathname)) {
       // Hashed Vite assets are immutable and safe to cache aggressively.
       headers.set('cache-control', 'public, max-age=31536000, immutable');
@@ -607,7 +691,10 @@ export default {
       headers.set('cache-control', 'public, max-age=3600, must-revalidate');
     }
     Object.entries(securityHeaders).forEach(([name, value]) => headers.set(name, value));
-    headers.set('content-security-policy', "default-src 'self'; img-src 'self' data:; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
-    return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+    const isHtml=(headers.get('content-type') || '').includes('text/html');
+    const nonce=isHtml?crypto.randomUUID().replaceAll('-',''):'';
+    headers.set('content-security-policy', `default-src 'self'; img-src 'self' data:; style-src 'self' https://fonts.googleapis.com ${nonce?`'nonce-${nonce}'`:''}; style-src-attr 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'`);
+    const result=new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+    return isHtml && request.method!=='HEAD'?new HTMLRewriter().on('meta[name="synqra-style-nonce"]',{element(element){element.setAttribute('content',nonce);}}).transform(result):result;
   }
 };

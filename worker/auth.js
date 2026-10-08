@@ -6,9 +6,14 @@ export async function passwordHash(password, salt = crypto.getRandomValues(new U
   return `${bytesToBase64(salt)}.${bytesToBase64(new Uint8Array(bits))}`;
 }
 export async function passwordMatches(password, stored) {
+  if (typeof stored !== 'string' || typeof password !== 'string' || password.length>128) return false;
   const [salt, hash] = stored.split('.');
   if (!salt || !hash) return false;
-  return (await passwordHash(password, base64ToBytes(salt))) === stored;
+  let actual;
+  try { actual = await passwordHash(password, base64ToBytes(salt)); } catch { return false; }
+  if (actual.length!==stored.length) return false;
+  let diff=0; for (let i=0;i<actual.length;i++) diff |= actual.charCodeAt(i)^stored.charCodeAt(i);
+  return diff===0;
 }
 export async function sessionUser(request, env) {
   const token = cookieValue(request, sessionCookie);

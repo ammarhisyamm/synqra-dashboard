@@ -1,25 +1,42 @@
-import { useEffect, useState } from 'react';
-import { ArrowRight, Eye, GearSix as Settings2, Link as Link2, Lock, Trash as Trash2, Warning as TriangleAlert, Users } from '@phosphor-icons/react';
-import { PageHeading } from '../common/ui';
-import { TextField, TextAreaField } from '../common/Field';
+import { useEffect,useState } from 'react';
+import { PageHeading,SelectField } from '../common/ui';
+import { TextField,TextAreaField } from '../common/Field';
+import { Button } from '../ui/button';
+import { AccountSettings,SettingsSection } from './AccountSettings';
+import './settings.css';
 
-export function SettingsPageEnhanced({ project, user, saveProject, setToast, onDeleteProject }) {
-  const [form, setForm] = useState({ name: project.name, description: project.description || '', accessMode: project.accessMode || 'link' });
-  const [saving, setSaving] = useState(false);
-  const [justSaved, setJustSaved] = useState(false);
-  const [error, setError] = useState('');
-  const dirty = form.name !== (project.name || '') || form.description !== (project.description || '') || form.accessMode !== (project.accessMode || 'link');
-  useEffect(() => { setJustSaved(false); }, [form.name, form.description, form.accessMode]);
-  const save = async () => {
-    if (!dirty || saving) return;
-    if (!form.name.trim()) { setError('Project name cannot be empty.'); return; }
-    setError('');
-    setSaving(true);
-    try { await saveProject({ ...form, name: form.name.trim() }); setJustSaved(true); }
-    catch (failure) { setError(failure.message); }
-    finally { setSaving(false); }
-  };
-  useEffect(() => setForm({ name: project.name, description: project.description || '', accessMode: project.accessMode || 'link' }), [project.name, project.description, project.accessMode]);
-  const shareLink = `${window.location.origin}/?project=${project.id || 'default'}`;
-  return <section className="page settings-page"><PageHeading title="Settings"/><div className="settings-card"><section><div className="settings-section-head"><span><Settings2 size={20}/></span><div><h2>General</h2><p>Manage your project details.</p></div></div><TextField label="Project name" value={form.name} onChange={event => setForm({ ...form, name: event.target.value })}/><TextAreaField label="Description" rows={4} value={form.description} onChange={event => setForm({ ...form, description: event.target.value })} placeholder="Optional project description"/></section><section><div className="settings-section-head"><span><Users size={20}/></span><div><h2>Sharing & access</h2><p>Control who can view this project.</p></div></div><button aria-pressed={form.accessMode === 'invite'} className={form.accessMode === 'invite' ? 'access-option selected' : 'access-option'} onClick={() => setForm({ ...form, accessMode: 'invite' })}><Lock size={18}/><span><strong>Invite only</strong><small>Only people you invite by email can access this project.</small></span></button><button aria-pressed={form.accessMode === 'link'} className={form.accessMode === 'link' ? 'access-option selected' : 'access-option'} onClick={() => setForm({ ...form, accessMode: 'link' })}><Link2 size={18}/><span><strong>Anyone with the link</strong><small>Anyone who has the link can view this project in read-only mode.</small></span></button>{form.accessMode === 'link' && <div className="share-link"><Eye size={15}/><input readOnly value={shareLink}/><button onClick={() => { navigator.clipboard?.writeText(shareLink).then(() => setToast('Project link copied')).catch(() => setToast('Could not copy link. Select and copy it manually.')); }}>Copy</button></div>}{error && <p className="form-error" role="alert">{error}</p>}<button className="primary-button settings-save" disabled={!['super_admin','admin'].includes(user.role) || !dirty || saving} onClick={save}>{saving ? 'Saving…' : justSaved && !dirty ? 'Saved ✓' : 'Save changes'}</button></section><section className="danger-section"><div className="settings-section-head"><span><TriangleAlert size={20}/></span><div><h2 className="danger-title">Danger zone</h2><p>Permanently delete this project and all associated feedback.</p></div></div><button className="danger-button" disabled={project.id === 'default' || !['super_admin','admin'].includes(user.role)} onClick={onDeleteProject}><Trash2 size={15}/> {project.id === 'default' ? 'Default project is protected' : 'Delete project'}</button></section></div></section>;
+export function SettingsPageEnhanced({ project,user,saveProject,setToast,onDeleteProject }) {
+  const [form,setForm]=useState({ name:project.name,description:project.description || '',accessMode:project.accessMode || 'invite' });
+  const [saving,setSaving]=useState(false);const [error,setError]=useState('');const [message,setMessage]=useState('');
+  const canManage=['super_admin','admin'].includes(user.role) || (project.createdBy===user.id && project.role!=='viewer');
+  const dirty=form.name!==project.name || form.description!==(project.description || '') || form.accessMode!==(project.accessMode || 'invite');
+  useEffect(()=>{setForm({ name:project.name,description:project.description || '',accessMode:project.accessMode || 'invite' });setError('');setMessage('');},[project.id,project.name,project.description,project.accessMode]);
+  async function save(event){
+    event.preventDefault();if(saving || !canManage)return;
+    if(!form.name.trim()){setError('Project name cannot be empty.');return;}
+    setSaving(true);setError('');setMessage('');
+    try{await saveProject({ ...form,name:form.name.trim() });setMessage('Project settings saved.');}
+    catch(failure){setError(failure.message);}finally{setSaving(false);}
+  }
+  const shareLink=`${window.location.origin}/?project=${encodeURIComponent(project.id)}`;
+  return <section className="page settings-page"><PageHeading title="Settings"/>
+    <div className="office-grid">
+      <SettingsSection title="Project settings" description="Owners and administrators manage project details and sharing.">
+        {!canManage && <p>This project's settings are read only for your account.</p>}
+        <form className="office-form" onSubmit={save}>
+          <TextField label="Project name" disabled={!canManage || saving} value={form.name} onChange={event=>setForm(previous=>({ ...previous,name:event.target.value }))} maxLength={120} required/>
+          <TextAreaField label="Description" disabled={!canManage || saving} value={form.description} onChange={event=>setForm(previous=>({ ...previous,description:event.target.value }))} maxLength={2000} placeholder="Optional project description"/>
+          <SelectField label="Project access" disabled={!canManage || saving} value={form.accessMode} options={[{ value:'invite',label:'Invite only' },{ value:'link',label:'Signed-in users with the link · View only' }]} onChange={value=>setForm(previous=>({ ...previous,accessMode:value }))}/>
+          <p>Invite-only projects are private. Link sharing grants read-only access to signed-in users who open this project link.</p>
+          <Button disabled={!canManage || !dirty || saving}>{saving?'Saving…':'Save changes'}</Button>
+        </form>
+        {form.accessMode==='link' && <div className="office-form"><TextField label="Read-only project link" value={shareLink} readOnly/><Button variant="secondary" onClick={async()=>{try{await navigator.clipboard.writeText(shareLink);setToast('Project link copied');}catch{setToast('Could not copy. Select the link and copy it manually.');}}}>Copy link</Button></div>}
+        {error && <p role="alert">{error}</p>}{message && <p role="status">{message}</p>}
+      </SettingsSection>
+      <SettingsSection title="Danger zone" description="Deletion permanently removes this project, its tasks, meetings, comments, and files. Archive individual tasks when you need to preserve their history.">
+        <Button variant="destructive" disabled={!canManage || project.id==='default'} onClick={onDeleteProject}>{project.id==='default'?'Default project is protected':'Delete project'}</Button>
+      </SettingsSection>
+    </div>
+    <AccountSettings user={user}/>
+  </section>;
 }

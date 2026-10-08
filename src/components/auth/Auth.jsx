@@ -17,10 +17,36 @@ import './auth-components.css';
 
 export function AuthLoading() { return <div className="auth-shell"><div className="auth-card auth-loading"><Wave style={{ fontSize: 24 }} /><strong>Checking your session…</strong></div></div>; }
 export function AuthScreen({ onAuthenticated }) {
-  const [mode, setMode] = useState('login'); const [form, setForm] = useState({ name:'', email:'', identifier:'', password:'' }); const [error, setError] = useState(''); const [pending, setPending] = useState(false);
-  const update = (key, value) => setForm(prev => ({ ...prev, [key]: value }));
-  const submit = async event => { event.preventDefault(); if (pending) return; setPending(true); setError(''); try { const payload = mode === 'login' ? { identifier: form.identifier, password: form.password } : { name: form.name, email: form.email, password: form.password }; const result = await api(`/api/auth/${mode === 'login' ? 'login' : 'register'}`, { method:'POST', body:JSON.stringify(payload) }); onAuthenticated(result.user); } catch (err) { setError(err.message); } finally { setPending(false); } };
-  return <div className="auth-shell"><section className="auth-card"><div className="auth-brand"><img className="synqra-logo auth-logo" src="/logo-synqra.png" alt="Synqra — Powered by MULIA"/></div><h1>{mode === 'login' ? 'Welcome back' : 'Create your workspace'}</h1><p>{mode === 'login' ? 'Sign in to continue to your project reviews.' : 'Create your account, then set up your first project.'}</p><form onSubmit={submit}>{mode === 'register' && <TextField label="Name" value={form.name} onChange={e=>update('name',e.target.value)} autoComplete="name" required/>}{mode === 'login' ? <TextField label="Username or email" value={form.identifier} onChange={e=>update('identifier',e.target.value)} autoComplete="username" required/> : <TextField label="Email" type="email" value={form.email} onChange={e=>update('email',e.target.value)} autoComplete="email" required/>}<TextField label="Password" type="password" hint="At least 8 characters." value={form.password} onChange={e=>update('password',e.target.value)} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} minLength="8" required/>{error && <div role="alert" className="auth-error">{error}</div>}<button className="primary-button" disabled={pending}>{pending ? 'Please wait…' : mode === 'login' ? 'Sign in' : 'Create account'} <ArrowRight size={16}/></button></form><button disabled={pending} className="auth-toggle" onClick={()=>{setMode(mode === 'login' ? 'register' : 'login');setError('');}}>{mode === 'login' ? 'New to Synqra? Create an account' : 'Already have an account? Sign in'}</button></section></div>;
+  const resetToken=new URLSearchParams(window.location.hash.slice(1)).get('reset') || '';
+  const [mode,setMode]=useState(resetToken?'reset':'login');
+  const [form,setForm]=useState({ name:'',email:'',identifier:'',password:'',code:'' });
+  const [error,setError]=useState('');const [message,setMessage]=useState('');const [pending,setPending]=useState(false);
+  const update=(key,value)=>setForm(previous=>({ ...previous,[key]:value }));
+  async function submit(event){
+    event.preventDefault();if(pending)return;setPending(true);setError('');
+    try{
+      const payload=mode==='login'?{ identifier:form.identifier,password:form.password,code:form.code }:mode==='reset'?{ token:resetToken,password:form.password,code:form.code }:{ name:form.name,email:form.email,password:form.password };
+      const result=await api('/api/auth/'+(mode==='reset'?'password-reset':mode==='login'?'login':'register'),{ method:'POST',body:JSON.stringify(payload) });
+      if(mode==='reset'){window.history.replaceState(null,'',window.location.pathname+window.location.search);setMode('login');setForm(previous=>({ ...previous,password:'',code:'' }));setMessage('Password reset. Sign in with your new password.');}
+      else onAuthenticated(result.user);
+    }catch(failure){setError(failure.message);}finally{setPending(false);}
+  }
+  return <div className="auth-shell"><section className="auth-card">
+    <div className="auth-brand"><img className="synqra-logo auth-logo" src="/logo-synqra.png" alt="Synqra — Powered by MULIA"/></div>
+    <h1>{mode==='login'?'Welcome back':mode==='reset'?'Reset your password':'Create your workspace'}</h1>
+    <p>{mode==='login'?'Sign in to continue to your project reviews.':mode==='reset'?'This one-use reset link expires after 15 minutes. MFA remains enabled.':'Create your account, then set up your first project.'}</p>
+    <form onSubmit={submit}>
+      {mode==='register' && <TextField label="Name" value={form.name} onChange={event=>update('name',event.target.value)} autoComplete="name" required/>}
+      {mode==='login' && <TextField label="Username or email" value={form.identifier} onChange={event=>update('identifier',event.target.value)} autoComplete="username" required/>}
+      {mode==='register' && <TextField label="Email" type="email" value={form.email} onChange={event=>update('email',event.target.value)} autoComplete="email" required/>}
+      <TextField label="Password" type="password" hint={mode==='login'?'Your existing account password.':'Use 12–128 characters.'} value={form.password} onChange={event=>update('password',event.target.value)} autoComplete={mode==='login'?'current-password':'new-password'} minLength={mode==='login'?8:12} maxLength={128} required/>
+      {mode!=='register' && <TextField label="Authenticator or recovery code (if enabled)" value={form.code} onChange={event=>update('code',event.target.value)} autoComplete="one-time-code" maxLength={16}/>}
+      {error && <div role="alert" className="auth-error">{error}</div>}{message && <p role="status">{message}</p>}
+      <button className="primary-button" disabled={pending}>{pending?'Please wait…':mode==='login'?'Sign in':mode==='reset'?'Reset password':'Create account'} <ArrowRight size={16}/></button>
+    </form>
+    {mode!=='reset' && <button disabled={pending} className="auth-toggle" onClick={()=>{setMode(mode==='login'?'register':'login');setError('');setMessage('');}}>{mode==='login'?'New to Synqra? Create an account':'Already have an account? Sign in'}</button>}
+    {mode==='login' && <p>Forgot your password? Contact your workspace administrator for a verified reset link. Email recovery is not connected yet.</p>}
+  </section></div>;
 }
 
 export function CollaboratorModal({ user, projectId, onClose, onToast, onMembersChanged }) {

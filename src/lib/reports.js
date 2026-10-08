@@ -7,7 +7,8 @@
 // NOTE: synqra has no actual-hours time tracking yet, so velocity/reporting
 // uses estimate_hours sums. Add `actual_hours` + a timelog table to reach 1:1.
 export const isResolved = r => r.status === 'Resolved' || r.stage === 'Completed';
-export const isOverdue = (r, today) => !r.archived && !isResolved(r) && r.due && r.due < today;
+export const isClosed = r => isResolved(r) || r.status==='Rejected';
+export const isOverdue = (r, today) => !r.archived && !isClosed(r) && r.due && r.due < today;
 export const activeReviews = reviews => reviews.filter(r => !r.archived);
 
 export function projectOf(review, projects, fallbackName) {
@@ -40,13 +41,13 @@ export function portfolioProjects(reviews, projects, fallbackName, today) {
 export function taskOverview(reviews, today) {
   const items = activeReviews(reviews);
   const done = items.filter(isResolved);
-  const inProgress = items.filter(r => !isResolved(r) && (r.stage === 'In Progress' || r.status === 'In Progress' || r.status === 'Review'));
+  const inProgress = items.filter(r => !isClosed(r) && (r.stage === 'In Progress' || r.status === 'In Progress' || r.status === 'Review'));
   const overdue = items.filter(r => isOverdue(r, today));
   return { total: items.length, done: done.length, inProgress: inProgress.length, overdue: overdue.length, progress: items.length ? done.length / items.length : 0 };
 }
 
 export function sprintTasks(reviews, sprint) {
-  return activeReviews(reviews).filter(r => (sprint.id && r.sprintId === sprint.id) || (sprint.name && r.sprint === sprint.name));
+  return activeReviews(reviews).filter(r => (!sprint.projectId || r.projectId === sprint.projectId) && ((sprint.id && r.sprintId === sprint.id) || (!r.sprintId && sprint.name && r.sprint === sprint.name)));
 }
 export function sprintStats(reviews, sprint, today) {
   const items = sprintTasks(reviews, sprint);
@@ -69,11 +70,15 @@ export function priorityCounts(reviews) {
 export function teamWorkload(reviews) {
   const map = new Map();
   activeReviews(reviews).forEach(r => {
-    const name = (r.assignee || 'Unassigned').split(',')[0].trim() || 'Unassigned';
-    const entry = map.get(name) || { name, tasks: 0, est: 0 };
-    entry.tasks += 1;
-    entry.est += Number(r.estimateHours) || 0;
-    map.set(name, entry);
+    const names = [...new Set((Array.isArray(r.assignees) && r.assignees.length ? r.assignees : [r.assignee || 'Unassigned']).map(name=>name.trim()).filter(Boolean))];
+    for (const name of names) {
+      const entry = map.get(name) || { name, tasks:0,est:0 };
+      entry.tasks+=1;
+      // Shared tasks count for each owner; estimated effort is divided so
+      // aggregate workload never invents more hours than the task estimate.
+      entry.est+=(Number(r.estimateHours)||0)/names.length;
+      map.set(name,entry);
+    }
   });
   return [...map.values()].sort((a, b) => b.tasks - a.tasks);
 }

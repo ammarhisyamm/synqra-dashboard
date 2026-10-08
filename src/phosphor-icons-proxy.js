@@ -1,4 +1,8 @@
 // Keep the icon surface compatible while importing only the icons used by the app.
+export { ArrowsClockwise } from '../node_modules/@phosphor-icons/react/dist/csr/ArrowsClockwise.es.js';
+export { Microphone } from '../node_modules/@phosphor-icons/react/dist/csr/Microphone.es.js';
+export { ShareNetwork } from '../node_modules/@phosphor-icons/react/dist/csr/ShareNetwork.es.js';
+export { StopCircle } from '../node_modules/@phosphor-icons/react/dist/csr/StopCircle.es.js';
 export { Archive } from '../node_modules/@phosphor-icons/react/dist/csr/Archive.es.js';
 export { ArrowRight } from '../node_modules/@phosphor-icons/react/dist/csr/ArrowRight.es.js';
 export { Bell } from '../node_modules/@phosphor-icons/react/dist/csr/Bell.es.js';

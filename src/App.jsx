@@ -1,4 +1,5 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { lazyRoute } from './lib/lazy-route';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Archive, ArrowRight, Bell, CalendarBlank as CalendarDays, CalendarPlus, Check, CheckCircle as CheckCircle2, CaretDown as ChevronDown, CaretLeft as ChevronLeft, CaretRight as ChevronRight, CaretUpDown as ChevronsUpDown, Circle as CircleDot,
   ClipboardText as ClipboardList, Clock, Clock as Clock3, Copy, DownloadSimple as Download, ArrowSquareOut as ExternalLink, Eye, Flag, Folder, House as Home, Info, Kanban as KanbanSquare, Link as Link2, ListChecks, Lock,
@@ -29,19 +30,19 @@ import { SectionHead, AttentionCard, StatusPill, Empty, Metric, InlineSync, Deta
 import { NotificationMenu, Sidebar, ProjectSwitcher } from './components/layout/Shell';
 import { AuthLoading, AuthScreen, CollaboratorModal } from './components/auth/Auth';
 
-const Dashboard = lazy(() => import('./components/dashboard/Dashboard').then(module => ({ default: module.Dashboard })));
-const Reviews = lazy(() => import('./components/reviews/Reviews').then(module => ({ default: module.Reviews })));
-const ReviewDetailEnhanced = lazy(() => import('./components/reviews/ReviewDetail').then(module => ({ default: module.ReviewDetailEnhanced })));
-const Meetings = lazy(() => import('./components/meetings/MeetingsView').then(module => ({ default: module.Meetings })));
-const MeetingModal = lazy(() => import('./components/meetings/MeetingsView').then(module => ({ default: module.MeetingModal })));
-const MeetingEditor = lazy(() => import('./components/meetings/MeetingEditor').then(module => ({ default: module.MeetingEditor })));
-const KanbanWorkspace = lazy(() => import('./components/kanban/KanbanWorkspace').then(module => ({ default: module.KanbanWorkspace })));
-const Reports = lazy(() => import('./components/reports/Reports').then(module => ({ default: module.Reports })));
-const ArchivePage = lazy(() => import('./components/archive/ArchivePage').then(module => ({ default: module.ArchivePage })));
-const SettingsPageEnhanced = lazy(() => import('./components/settings/SettingsPage').then(module => ({ default: module.SettingsPageEnhanced })));
-const AdminPageEnhanced = lazy(() => import('./components/admin/AdminPage').then(module => ({ default: module.AdminPageEnhanced })));
-const ReviewModal = lazy(() => import('./components/reviews/ReviewModal').then(module => ({ default: module.ReviewModal })));
-const MyWork = lazy(() => import('./components/work/MyWork').then(module => ({ default: module.MyWork })));
+const Dashboard = lazyRoute(() => import('./components/dashboard/Dashboard'),'Dashboard','src/components/dashboard/Dashboard.jsx');
+const Reviews = lazyRoute(() => import('./components/reviews/Reviews'),'Reviews','src/components/reviews/Reviews.jsx');
+const ReviewDetailEnhanced = lazyRoute(() => import('./components/reviews/ReviewDetail'),'ReviewDetailEnhanced','src/components/reviews/ReviewDetail.jsx');
+const Meetings = lazyRoute(() => import('./components/meetings/MeetingsView'),'Meetings','src/components/meetings/MeetingsView.jsx');
+const MeetingModal = lazyRoute(() => import('./components/meetings/MeetingsView'),'MeetingModal','src/components/meetings/MeetingsView.jsx');
+const MeetingEditor = lazyRoute(() => import('./components/meetings/MeetingEditor'),'MeetingEditor','src/components/meetings/MeetingEditor.jsx');
+const KanbanWorkspace = lazyRoute(() => import('./components/kanban/KanbanWorkspace'),'KanbanWorkspace','src/components/kanban/KanbanWorkspace.jsx');
+const Reports = lazyRoute(() => import('./components/reports/Reports'),'Reports','src/components/reports/Reports.jsx');
+const ArchivePage = lazyRoute(() => import('./components/archive/ArchivePage'),'ArchivePage','src/components/archive/ArchivePage.jsx');
+const SettingsPageEnhanced = lazyRoute(() => import('./components/settings/SettingsPage'),'SettingsPageEnhanced','src/components/settings/SettingsPage.jsx');
+const AdminPageEnhanced = lazyRoute(() => import('./components/admin/AdminPage'),'AdminPageEnhanced','src/components/admin/AdminPage.jsx');
+const ReviewModal = lazyRoute(() => import('./components/reviews/ReviewModal'),'ReviewModal','src/components/reviews/ReviewModal.jsx');
+const MyWork = lazyRoute(() => import('./components/work/MyWork'),'MyWork','src/components/work/MyWork.jsx');
 
 function EmptyWorkspaceOnboarding({ user, project, onCreateProject, onFinish, setToast, onMembersChanged }) {
   const [projectName, setProjectName] = useState('');
@@ -153,6 +154,7 @@ export function App() {
   const [team, setTeam] = useState([]);
   const [onboardingActive, setOnboardingActive] = useState(false);
   const meetingCreation = useRef(null);
+  const initialTaskLink=useRef(new URLSearchParams(window.location.search).get('review'));
   const refreshTeam = () => { api('/api/team?project_id=' + encodeURIComponent(data.project?.id || '')).then(result => setTeam(result.team || [])).catch(error => setToast(error.message)); };
   useEffect(() => {
     if (!user || !data.project?.id) { setTeam([]); return; }
@@ -334,13 +336,22 @@ export function App() {
     }
   };
   const showSuccess = (title, subtitle, ctaLabel, onCta) => setDialog({ success: true, icon: <CheckCircle2 size={24}/>, title, subtitle, ctaLabel, onCta });
-  const openReview = reference => {
-    const review = data.reviews.find(item => item.id === reference.id);
+  const openReview = async reference => {
+    let review = data.reviews.find(item => item.id === reference.id);
+    if (!review) {
+      try { review = (await api('/api/reviews/'+encodeURIComponent(reference.id)+'/details')).review; }
+      catch(error){setToast(error.message);return;}
+    }
     if (!review) { setToast('This task is no longer available. Refresh your workspace.'); return; }
     const project = data.projects.find(item => item.id === review.projectId);
     if (project) setData(previous => ({ ...previous, project }));
     setSelectedReview(review);
   };
+  useEffect(()=>{
+    if(!cloudReady || !user || !initialTaskLink.current)return;
+    const taskId=initialTaskLink.current;initialTaskLink.current=null;
+    openReview({id:taskId});
+  },[cloudReady,user?.id]);
   const archiveReview = (id) => {
     const target = data.reviews.find(r => r.id === id);
     setDialog({ icon: <Archive size={24}/>, title: 'Archive this review?', subtitle: target ? `"${target.title}" will be moved to Archive. You can restore it anytime.` : 'This review will be moved to Archive.', confirmLabel: 'Archive', onConfirm: async () => { if (!await updateReview(id, { archived: true })) throw new Error('Archive failed. Please try again.'); } });
@@ -490,7 +501,7 @@ export function App() {
           <button className="notification" aria-label="Notifications" onClick={()=>{setNotificationsOpen(open=>!open);if(!notifications.length)refreshNotifications()}}><Bell size={17}/>{data.unreadNotifications > 0 && <i/>}</button>
         </div>
       </header>
-      {commandOpen && <CommandPalette query={query} setQuery={setQuery} reviews={activeReviews} projects={data.projects || []} activeProjectId={activeProjectId} readOnly={readOnly || !activeProjectId} isAdmin={['super_admin', 'admin'].includes(user.role)} onClose={() => setCommandOpen(false)} onNavigate={pageName => { setPage(pageName); setQuery(''); }} onNewMeeting={openNewMeeting} onNewReview={() => setModal('review')} onOpenReview={review => { setSelectedReview(review); setQuery(''); }} onSelectProject={selected => { setData(previous => ({ ...previous, project: selected })); setPage('Overview'); setQuery(''); }}/ >}
+      {commandOpen && <CommandPalette query={query} setQuery={setQuery} reviews={activeReviews} projects={data.projects || []} activeProjectId={activeProjectId} readOnly={readOnly || !activeProjectId} isAdmin={['super_admin', 'admin'].includes(user.role)} onClose={() => setCommandOpen(false)} onNavigate={pageName => { setPage(pageName); setQuery(''); }} onNewMeeting={openNewMeeting} onNewReview={() => setModal('review')} onOpenReview={review => { openReview(review); setQuery(''); }} onSelectProject={selected => { setData(previous => ({ ...previous, project: selected })); setPage('Overview'); setQuery(''); }}/ >}
       {notificationsOpen && <NotificationMenu notifications={notifications} onClose={()=>setNotificationsOpen(false)} onOpen={openReview} onRead={markNotificationRead} onReadAll={markAllNotificationsRead}/>}
       {projectOpen && <ProjectSwitcher project={currentProject} projects={data.projects || []} collapsed={collapsed} onSelect={selected => { setData(prev => ({ ...prev, project: selected })); setProjectOpen(false); setPage('Overview'); }} onNew={() => { setProjectOpen(false); setModal('project'); }} onClose={() => setProjectOpen(false)} />}
       {collabOpen && <CollaboratorModal user={user} projectId={activeProjectId} onClose={() => setCollabOpen(false)} onToast={setToast} onMembersChanged={refreshTeam} />}
@@ -501,7 +512,7 @@ export function App() {
       {page === 'Overview' && <Dashboard readOnly={readOnly} reviews={activeReviews} meetings={activeMeetings} workload={activeWorkload} reportByStatus={activeReportByStatus} sprints={activeSprints} goTo={setPage} onSubmitReview={() => setModal('review')} onNewMeeting={openNewMeeting} />}
       {page === 'My Work' && <MyWork readOnly={readOnly} reviews={activeReviews} user={user} onOpen={openReview} onCreateTask={() => setModal('review')} />}
       {page === 'All Reviews' && <Reviews readOnly={readOnly} user={user} reviews={activeReviews} query={query} setQuery={setQuery} updateReview={updateReview} archiveReview={archiveReview} setModal={setModal} onOpen={openReview} teamList={team} sync={{ saving: savingField, saved: savedField, failed: failedField }} onRetry={failed => { setFailedField(null); updateReview(failed.id, failed.patch, failed.field); }} />}
-      {page === 'Meetings' && <Meetings readOnly={readOnly} meetings={activeMeetings} reviews={activeReviews} addMeeting={addMeeting} addReview={addReview} onDeleteMeeting={deleteMeeting} setToast={setToast} setModal={setModal} onNewMeeting={openNewMeeting} onTasksCreated={count => showSuccess(`${count} review items created`, 'Action items from the meeting notes are now on the board.', 'View board', () => setPage('Board'))} onOpen={openReview} />}
+      {page === 'Meetings' && <Meetings key={activeProjectId} readOnly={readOnly} isAdmin={['admin','super_admin'].includes(user.role)} meetings={activeMeetings} reviews={activeReviews} addMeeting={addMeeting} addReview={addReview} onMeetingUpdated={saved=>setData(previous=>({...previous,meetings:previous.meetings.map(item=>item.id===saved.id?{...item,...saved}:item)}))} onDeleteMeeting={deleteMeeting} setToast={setToast} setModal={setModal} onNewMeeting={openNewMeeting} onTasksCreated={count => showSuccess(`${count} review items created`, 'Action items from the meeting notes are now on the board.', 'View board', () => setPage('Board'))} onOpen={openReview} />}
       {page === 'Meeting Editor' && <MeetingEditor projectId={activeProjectId} user={user} team={team} onClose={() => setPage('Meetings')} onToast={setToast} onCreate={createMeetingFromEditor} />}
       {page === 'Board' && <KanbanWorkspace readOnly={readOnly} project={data.project} team={team} reviews={activeReviews} sprints={activeSprints} metadata={(data.metadata || []).filter(item => !item.projectId || item.projectId === activeProjectId)} projectId={activeProjectId} updateReview={updateReview} createSprint={addSprint} updateSprint={updateSprint} refreshMetadata={refreshMetadata} setModal={setModal} onOpen={openReview} requestConfirm={opts => setDialog(opts)} onToast={setToast} onProjectClick={() => setProjectOpen(!projectOpen)} />}
       {page === 'Archive' && <ArchivePage readOnly={readOnly} reviews={(data.reviews || []).filter(r => r.archived && r.projectId === activeProjectId)} restoreReview={restoreReview} goTo={setPage} />}

@@ -31,13 +31,21 @@ export function nextTaskKey(reviews) {
   return `AR-${Math.max(0, ...numbers) + 1}`;
 }
 export function downloadReviewsCsv(reviews) {
-  const columns = ['Key', 'Title', 'Description', 'Team', 'Phase', 'Priority', 'Assignee', 'Status', 'Due date', 'Archived'];
-  const escape = value => `"${String(value ?? '').replace(/"/g, '""')}"`;
-  const rows = reviews.map(item => [item.key, item.title, item.description, item.area, item.stage, item.priority, item.assignee || 'Unassigned', statusFor(item), item.due, item.archived ? 'Yes' : 'No']);
-  const csv = [columns, ...rows].map(row => row.map(escape).join(',')).join('\n');
+  const csv = reviewsCsv(reviews);
   const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' }));
   const anchor = document.createElement('a'); anchor.href = url; anchor.download = `synqra-reviews-${new Date().toISOString().slice(0, 10)}.csv`; anchor.click();
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+export function csvCell(value) {
+  let text=String(value ?? '');
+  // Quoting alone does not prevent spreadsheet formula execution.
+  if(/^[\s\u0000-\u001f]*[=+@-]/.test(text))text="'"+text;
+  return `"${text.replace(/"/g,'""')}"`;
+}
+export function reviewsCsv(reviews) {
+  const columns=['Key','Title','Description','Project ID','Team','Phase','Priority','Assignees','Status','Due date','Estimate hours','Archived'];
+  const rows=reviews.map(item=>[item.key,item.title,item.description,item.projectId,item.area,item.stage,item.priority,Array.isArray(item.assignees)&&item.assignees.length?item.assignees.join('; '):item.assignee || 'Unassigned',statusFor(item),item.due,item.estimateHours ?? '',item.archived?'Yes':'No']);
+  return [columns,...rows].map(row=>row.map(csvCell).join(',')).join('\n');
 }
 export function elapsedLabel(minutes) {
   const total = Math.max(0, Math.floor(minutes || 0));

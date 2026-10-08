@@ -3,8 +3,12 @@ import { test, expect } from '@playwright/test';
 test('built application persists tasks and accepts a viewer invitation through the real Worker', async ({ page, browser }) => {
   test.skip(process.env.E2E_REAL_WORKER !== '1', 'Requires a disposable local Worker/D1/R2, not API mocks');
   test.setTimeout(60000);
-  expect(['127.0.0.1','localhost']).toContain(new URL(process.env.E2E_BASE_URL).hostname);
-  expect(process.env.WORKER_TEST_DB_DIR?.startsWith('/tmp/synqra-qa-')).toBe(true);
+  const staging=process.env.E2E_STAGING==='1';
+  if(staging)expect(new URL(process.env.E2E_BASE_URL).origin).toBe('https://synqra-staging.ammarhisyam151.workers.dev');
+  else {
+    expect(['127.0.0.1','localhost']).toContain(new URL(process.env.E2E_BASE_URL).hostname);
+    expect(process.env.WORKER_TEST_DB_DIR?.startsWith('/tmp/synqra-qa-')).toBe(true);
+  }
   const suffix = crypto.randomUUID().slice(0,8);
   const name = `QA Owner ${suffix}`;
   const errors = [];
@@ -101,4 +105,13 @@ test('built application persists tasks and accepts a viewer invitation through t
   } finally { await viewerContext.close(); }
   await page.screenshot({ path:'test-results/ui-audit/real-worker-invite.png' });
   expect(errors).toEqual([]);
+  if(staging){
+    const deletion=await page.evaluate(async title=>{
+      const data=await(await fetch('/api/bootstrap')).json();
+      const project=data.projects.find(item=>item.name===title);
+      if(!project)throw new Error('Disposable staging project not found.');
+      return (await fetch('/api/projects/'+project.id,{method:'DELETE'})).status;
+    },`Browser QA ${suffix}`);
+    expect(deletion).toBe(200);
+  }
 });
