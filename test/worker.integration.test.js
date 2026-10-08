@@ -20,7 +20,7 @@ test('real Worker → D1/R2: onboarding, invitations, task lifecycle and isolati
   assert.doesNotMatch(stale.headers.get('content-type'), /text\/html/);
   const suffix = crypto.randomUUID().slice(0, 8);
   async function request(account, path, body, method = body ? 'POST' : 'GET', status = 200, origin = base) {
-    const response = await fetch(base + path, { method, headers: { ...(account?.cookie ? { Cookie: account.cookie } : {}), Origin: origin, ...(body && !(body instanceof FormData) ? { 'content-type': 'application/json' } : {}) }, body: body ? body instanceof FormData ? body : JSON.stringify(body) : undefined });
+    const response = await fetch(base + path, { method, headers: { 'cf-connecting-ip': suffix, ...(account?.cookie ? { Cookie: account.cookie } : {}), Origin: origin, ...(body && !(body instanceof FormData) ? { 'content-type': 'application/json' } : {}) }, body: body ? body instanceof FormData ? body : JSON.stringify(body) : undefined });
     const result = await response.json();
     assert.equal(response.status, status, `${method} ${path}: ${result.error || 'unexpected status'}`);
     return { ...result, cookie: response.headers.get('set-cookie')?.split(';')[0] };
@@ -46,6 +46,10 @@ test('real Worker → D1/R2: onboarding, invitations, task lifecycle and isolati
   const empty = await request(owner, '/api/bootstrap');
   assert.equal(empty.projects.length, 0);
   assert.equal(empty.reviews.length, 0);
+  await request(null, '/api/auth/login', { identifier:owner.email, password:'Incorrect-password!' }, 'POST', 401);
+  await request(null, '/api/auth/register', { name:'Duplicate', email:owner.email, password:'Qa-example-123!' }, 'POST', 409);
+  await request(null, '/api/auth/register', { name:'Invalid', email:'not-an-email', password:'short' }, 'POST', 400);
+  await request(owner, '/api/admin/users', null, 'GET', 403);
   const project = await request(owner, '/api/projects', { name: `Private QA ${suffix}` }, 'POST', 201);
   const other = await request(outsider, '/api/projects', { name: `Other QA ${suffix}` }, 'POST', 201);
   const invite = await request(owner, '/api/project-members', { projectId: project.id, email: viewer.email, role: 'viewer' }, 'POST', 201);
@@ -69,6 +73,27 @@ test('real Worker → D1/R2: onboarding, invitations, task lifecycle and isolati
   await request(viewer, `/api/workflow/sprints/${sprint.id}`, { status:'active' }, 'PATCH', 403);
   await request(owner, `/api/workflow/sprints/${sprint.id}`, { status:'active' }, 'PATCH');
   const task = await request(owner, '/api/reviews', taskInput, 'POST', 201);
+  await request(null, '/api/bootstrap', null, 'GET', 401);
+  await request(owner, '/api/reviews', [], 'POST', 400);
+  await request(owner, `/api/reviews/${task.id}`, { due:'2026-02-30' }, 'PATCH', 400);
+  await request(owner, `/api/reviews/${task.id}`, { startDate:'2026-10-08', due:'2026-10-07' }, 'PATCH', 400);
+  await request(owner, `/api/reviews/${task.id}`, { startDate:'2026-10-08' }, 'PATCH');
+  await request(owner, `/api/reviews/${task.id}`, { due:'2026-10-07' }, 'PATCH', 400);
+  await request(owner, '/api/meetings', { projectId:project.id, title:'Invalid date', date:'2026-02-30' }, 'POST', 400);
+  await request(owner, `/api/meetings/${meeting.id}`, { date:'2026-04-31' }, 'PATCH', 400);
+  await request(owner, '/api/workflow/sprints', { projectId:project.id, name:'Invalid sprint', startDate:'2026-10-08', endDate:'2026-10-07' }, 'POST', 400);
+  await request(owner, `/api/workflow/sprints/${sprint.id}`, { name:'' }, 'PATCH', 400);
+  await request(owner, `/api/workflow/sprints/${sprint.id}`, { endDate:'2026-09-30' }, 'PATCH', 400);
+  const child = await request(owner, '/api/reviews', { ...taskInput, title:'Child', parentId:task.id }, 'POST', 201);
+  await request(owner, `/api/reviews/${task.id}`, { parentId:child.id }, 'PATCH', 400);
+  await request(owner, `/api/reviews/${child.id}`, null, 'DELETE');
+  const otherEpic = await request(outsider, '/api/metadata', { projectId:other.id, type:'epic', name:'Private epic' }, 'POST', 201);
+  await request(owner, '/api/metadata', { projectId:project.id, type:'feature', name:'Invalid parent', parentId:otherEpic.id }, 'POST', 400);
+  await request(owner, `/api/metadata/${epic.id}`, { parentId:epic.id }, 'PATCH', 400);
+  const secondEpic = await request(owner, '/api/metadata', { projectId:project.id, type:'epic', name:'Second epic' }, 'POST', 201);
+  await request(owner, `/api/metadata/${secondEpic.id}`, { name:'Updated QA epic' }, 'PATCH', 409);
+  await request(owner, `/api/reviews/${task.id}`, { status:'Open' }, 'PATCH', 403, 'https://untrusted.example');
+  await request(owner, '/api/auth/logout', {}, 'POST', 403, 'https://untrusted.example');
   await request(outsider, `/api/reviews/${task.id}/details`, null, 'GET', 403);
   await request(viewer, `/api/reviews/${task.id}`, { status: 'Resolved' }, 'PATCH', 403);
   await request(owner, `/api/reviews/${task.id}`, { projectId: other.id }, 'PATCH', 400);
@@ -80,11 +105,16 @@ test('real Worker → D1/R2: onboarding, invitations, task lifecycle and isolati
   assert.equal(proxiedUpdate.stage, 'Review');
   await request(owner, `/api/reviews/${task.id}/comments`, { body: 'QA comment' }, 'POST', 201);
   const subtask = await request(owner, `/api/reviews/${task.id}/subtasks`, { title: 'QA subtask' }, 'POST', 201);
+  await request(owner, `/api/reviews/${task.id}/subtasks/${subtask.id}`, { title:'' }, 'PATCH', 400);
   await request(owner, `/api/reviews/${task.id}/subtasks/${subtask.id}`, { completed: true }, 'PATCH');
   const form = new FormData(); form.append('file', new Blob(['QA attachment'], { type: 'text/plain' }), 'qa.txt');
+  await request(owner, `/api/reviews/${task.id}/attachments`, {}, 'POST', 400);
+  await request(owner, `/api/reviews/${task.id}/attachments`, new FormData(), 'POST', 400);
   const attachment = await request(owner, `/api/reviews/${task.id}/attachments`, form, 'POST', 201);
   const downloaded = await fetch(`${base}/api/attachments/${attachment.id}`, { headers: { Cookie: viewer.cookie } });
   assert.equal(downloaded.status, 200); assert.equal(await downloaded.text(), 'QA attachment');
+  assert.match(downloaded.headers.get('content-disposition'), /^attachment/);
+  await request(outsider, `/api/attachments/${attachment.id}`, null, 'GET', 403);
   const details = await request(viewer, `/api/reviews/${task.id}/details`);
   assert.equal(details.review.status, 'In Progress'); assert.equal(details.comments.length, 1); assert.equal(details.subtasks[0].completed, true); assert.equal(details.attachments.length, 1);
   assert.ok(details.history.some(item => item.toStatus === 'In Progress'));
@@ -109,8 +139,11 @@ test('real Worker → D1/R2: onboarding, invitations, task lifecycle and isolati
   assert.equal((await request(owner, '/api/bootstrap')).reviews.find(item => item.id === task.id).archived, 1);
   await request(owner, `/api/reviews/${task.id}`, { archived: false }, 'PATCH');
   await request(owner, `/api/reviews/${task.id}`, null, 'DELETE');
+  await request(owner, `/api/attachments/${attachment.id}`, null, 'GET', 404);
   await request(owner, `/api/meetings/${meeting.id}`, null, 'DELETE');
   // Only objects created above, only the isolated database; never production.
   await request(root, `/api/projects/${project.id}`, null, 'DELETE');
   await request(root, `/api/projects/${other.id}`, null, 'DELETE');
+  await request(owner, '/api/auth/logout', {});
+  await request(owner, '/api/bootstrap', null, 'GET', 401);
 });

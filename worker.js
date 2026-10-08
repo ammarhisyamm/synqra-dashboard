@@ -6,6 +6,7 @@ import { normalizeReview, reviewSnapshot, notifyUsers, recordActivity } from './
 import { bootstrap } from './worker/bootstrap.js';
 import { handleAiGenerate } from './worker/ai.js';
 import { handleProjectPeople } from './worker/project-people.js';
+import { calendarDate, dateRange } from './worker/validation.js';
 
 const MUTATING_METHODS = new Set(['POST', 'PATCH', 'DELETE', 'PUT']);
 const securityHeaders = {
@@ -37,12 +38,31 @@ async function requireProject(env, user, projectId, permission = 'view') {
   return canAccessProject(env, user, projectId || 'default', permission);
 }
 async function validateRelations(env, review, projectId, reviewId) {
+  try { dateRange(review.start_date, review.due); } catch (error) { return error.message; }
   for (const [key, table, label] of [['meeting_id','meetings','Meeting'], ['parent_id','reviews','Parent item'], ['sprint_id','sprints','Sprint']]) {
     if (!review[key]) continue;
     if (key === 'parent_id' && review[key] === reviewId) return 'A task cannot be its own parent.';
     const related = await env.DB.prepare(`SELECT project_id FROM ${table} WHERE id=?`).bind(review[key]).first();
     if (!related || related.project_id !== projectId) return `${label} must belong to the same project.`;
   }
+  if (review.parent_id) {
+    const ancestors = new Set(reviewId ? [reviewId] : []);
+    let parentId = review.parent_id;
+    while (parentId) {
+      if (ancestors.has(parentId)) return 'Parent items cannot form a cycle.';
+      ancestors.add(parentId);
+      if (ancestors.size > 100) return 'Task hierarchy is too deep.';
+      const parent = await env.DB.prepare('SELECT parent_id FROM reviews WHERE id=?').bind(parentId).first();
+      parentId = parent?.parent_id;
+    }
+  }
+  return null;
+}
+async function metadataParentError(env, parentId, projectId, type) {
+  if (!parentId) return null;
+  if (type !== 'feature') return 'Only features can have a parent epic.';
+  const parent = await env.DB.prepare("SELECT project_id, type, archived FROM project_metadata WHERE id=?").bind(parentId).first();
+  if (!parent || parent.project_id !== projectId || parent.type !== 'epic' || parent.archived) return 'Parent epic must be active and belong to the same project.';
   return null;
 }
 async function canCreateProject(env, user) {
@@ -61,6 +81,13 @@ function secureResponse(response) {
 
 async function routeApi(request, env) {
   const path = new URL(request.url).pathname;
+  if (MUTATING_METHODS.has(request.method)) {
+    // The production UI is served by Vercel and proxies /api/* to this Worker.
+    // In that setup the browser Origin is the Vercel origin while request.url is
+    // the Worker origin. Validate against an explicit allowlist instead of
+    // comparing those two unrelated origins directly.
+    if (!isAllowedMutationOrigin(request, env)) return json({ error: 'Cross-origin requests are not allowed.' }, 403);
+  }
   if (request.method === 'POST' && path === '/api/auth/register') {
     if (authRateLimited(request)) return tooManyRequests();
     const body = await readBody(request); if (!body) return json({ error: 'Invalid JSON.' }, 400);
@@ -94,13 +121,6 @@ async function routeApi(request, env) {
 
   const user = await sessionUser(request, env);
   if (!user) return json({ error: 'Sign in required.' }, 401);
-  if (MUTATING_METHODS.has(request.method)) {
-    // The production UI is served by Vercel and proxies /api/* to this Worker.
-    // In that setup the browser Origin is the Vercel origin while request.url is
-    // the Worker origin. Validate against an explicit allowlist instead of
-    // comparing those two unrelated origins directly.
-    if (!isAllowedMutationOrigin(request, env)) return json({ error: 'Cross-origin requests are not allowed.' }, 403);
-  }
   await ensureWorkspaceSchema(env);
   const peopleResponse = await handleProjectPeople(request, env, user);
   if (peopleResponse) return peopleResponse;
@@ -119,23 +139,30 @@ async function routeApi(request, env) {
     const item = { id: id(), projectId: safeText(body.projectId, 80) || 'default', type: body.type, name: safeText(body.name, 100), parentId: safeText(body.parentId, 80) || null, color: /^#[0-9a-fA-F]{6}$/.test(body.color || '') ? body.color : '#111b30' };
     if (!item.name) return json({ error: 'Name is required.' }, 400);
     if (!await requireProject(env, user, item.projectId, 'edit')) return accessDenied();
+    const parentError = await metadataParentError(env, item.parentId, item.projectId, item.type);
+    if (parentError) return json({ error: parentError }, 400);
     try { await env.DB.prepare('INSERT INTO project_metadata (id, project_id, type, name, parent_id, color, status, archived) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').bind(item.id, item.projectId, item.type, item.name, item.parentId, item.color, 'active', 0).run(); await notifyUsers(env, user.id, { projectId: item.projectId, type: 'metadata_created', title: item.type + ' created', body: user.name + ' created ' + item.name }); return json({ ...item, status: 'active', archived: 0 }, 201); } catch { return json({ error: 'That item already exists in this project.' }, 409); }
   }
   const metadataMatch = path.match(/^\/api\/metadata\/([a-zA-Z0-9-]+)$/);
   if (request.method === 'PATCH' && metadataMatch) {
-    const item = await env.DB.prepare('SELECT project_id AS projectId FROM project_metadata WHERE id=?').bind(metadataMatch[1]).first();
+    const item = await env.DB.prepare('SELECT project_id AS projectId, type FROM project_metadata WHERE id=?').bind(metadataMatch[1]).first();
     if (!item) return json({ error: 'Metadata not found.' }, 404);
     if (!await requireProject(env, user, item.projectId, 'edit')) return accessDenied();
     const body = await readBody(request); if (!body) return json({ error: 'Invalid JSON.' }, 400);
-    const fields = {}; if ('name' in body) fields.name = safeText(body.name, 100); if ('parentId' in body) fields.parent_id = safeText(body.parentId, 80) || null; if ('color' in body && /^#[0-9a-fA-F]{6}$/.test(body.color)) fields.color = body.color;
+    const fields = {}; if ('name' in body) { fields.name = safeText(body.name, 100); if (!fields.name) return json({ error: 'Name is required.' }, 400); } if ('parentId' in body) fields.parent_id = safeText(body.parentId, 80) || null; if ('color' in body && /^#[0-9a-fA-F]{6}$/.test(body.color)) fields.color = body.color;
     if ('archived' in body || 'status' in body) {
       const archived = body.archived === true || body.archived === 1 || body.status === 'archived';
       fields.status = archived ? 'archived' : 'active';
       fields.archived = archived ? 1 : 0;
     }
     if (!Object.keys(fields).length || ('name' in fields && !fields.name)) return json({ error: 'Valid changes are required.' }, 400);
-    const result = await env.DB.prepare(`UPDATE project_metadata SET ${Object.keys(fields).map(key => `${key} = ?`).join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(...Object.values(fields), metadataMatch[1]).run();
-    if (result.meta.changes) await notifyUsers(env, user.id, { type: 'metadata_updated', title: fields.status === 'archived' ? 'Metadata archived' : 'Metadata updated', body: user.name + ' updated a metadata item' });
+    if ('parent_id' in fields) {
+      const parentError = await metadataParentError(env, fields.parent_id, item.projectId, item.type);
+      if (parentError) return json({ error: parentError }, 400);
+    }
+    let result;
+    try { result = await env.DB.prepare(`UPDATE project_metadata SET ${Object.keys(fields).map(key => `${key} = ?`).join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(...Object.values(fields), metadataMatch[1]).run(); } catch (error) { if (/UNIQUE constraint failed/i.test(error.message)) return json({ error: 'That item already exists in this project.' }, 409); throw error; }
+    if (result.meta.changes) await notifyUsers(env, user.id, { projectId: item.projectId, type: 'metadata_updated', title: fields.status === 'archived' ? 'Metadata archived' : 'Metadata updated', body: user.name + ' updated a metadata item' });
     return result.meta.changes ? json({ ok: true }) : json({ error: 'Metadata not found.' }, 404);
   }
   if (request.method === 'DELETE' && metadataMatch) {
@@ -143,7 +170,7 @@ async function routeApi(request, env) {
     if (!item) return json({ error: 'Metadata not found.' }, 404);
     if (!await requireProject(env, user, item.projectId, 'edit')) return accessDenied();
     const result = await env.DB.prepare('DELETE FROM project_metadata WHERE id = ?').bind(metadataMatch[1]).run();
-    if (result.meta.changes) await notifyUsers(env, user.id, { type: 'metadata_deleted', title: 'Metadata deleted', body: user.name + ' permanently deleted a metadata item' });
+    if (result.meta.changes) await notifyUsers(env, user.id, { projectId: item.projectId, type: 'metadata_deleted', title: 'Metadata deleted', body: user.name + ' permanently deleted a metadata item' });
     return result.meta.changes ? json({ ok: true }) : json({ error: 'Metadata not found.' }, 404);
   }
   if (request.method === 'POST' && path === '/api/admin/users') {
@@ -310,23 +337,37 @@ async function routeApi(request, env) {
     const projectId = safeText(body.projectId, 80) || 'default';
     if (!await requireProject(env, user, projectId, 'edit')) return accessDenied();
     if (!await env.DB.prepare('SELECT id FROM projects WHERE id = ?').bind(projectId).first()) return json({ error: 'Project not found.' }, 400);
-    const item = { id: id(), projectId, name, goal: safeText(body.goal, 500), startDate: safeText(body.startDate, 10) || null, endDate: safeText(body.endDate, 10) || null, status: ['planned','active','completed'].includes(body.status) ? body.status : 'planned' };
+    const item = { id: id(), projectId, name, goal: safeText(body.goal, 500), startDate: null, endDate: null, status: ['planned','active','completed'].includes(body.status) ? body.status : 'planned' };
+    try {
+      item.startDate = calendarDate(body.startDate, 'Sprint start date');
+      item.endDate = calendarDate(body.endDate, 'Sprint end date');
+      dateRange(item.startDate, item.endDate, 'Sprint end date');
+      if (body.status && !['planned','active','completed'].includes(body.status)) throw new Error('Invalid sprint status.');
+    } catch (error) { return json({ error: error.message }, 400); }
     try { await env.DB.prepare('INSERT INTO sprints (id, project_id, name, goal, start_date, end_date, status) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(item.id, item.projectId, item.name, item.goal, item.startDate, item.endDate, item.status).run(); await notifyUsers(env, user.id, { projectId: item.projectId, type: 'sprint_created', title: 'Sprint created', body: user.name + ' created ' + item.name }); return json(item, 201); } catch { return json({ error: 'Sprint already exists.' }, 409); }
   }
   const sprintMatch = path.match(/^\/api\/workflow\/sprints\/([a-zA-Z0-9-]+)$/);
   if (request.method === 'PATCH' && sprintMatch) {
-    const item = await env.DB.prepare('SELECT project_id AS projectId FROM sprints WHERE id=?').bind(sprintMatch[1]).first();
+    const item = await env.DB.prepare('SELECT project_id AS projectId, start_date AS startDate, end_date AS endDate FROM sprints WHERE id=?').bind(sprintMatch[1]).first();
     if (!item) return json({ error: 'Sprint not found.' }, 404);
     if (!await requireProject(env, user, item.projectId, 'edit')) return accessDenied();
     const body = await readBody(request) || {};
     const fields = {};
-    if ('name' in body) fields.name = safeText(body.name, 100);
+    if ('name' in body) { fields.name = safeText(body.name, 100); if (!fields.name) return json({ error: 'Sprint name is required.' }, 400); }
     if ('goal' in body) fields.goal = safeText(body.goal, 500);
-    if ('startDate' in body) fields.start_date = safeText(body.startDate, 10) || null;
-    if ('endDate' in body) fields.end_date = safeText(body.endDate, 10) || null;
-    if ('status' in body && ['planned', 'active', 'completed'].includes(body.status)) fields.status = body.status;
+    try {
+      if ('startDate' in body) fields.start_date = calendarDate(body.startDate, 'Sprint start date');
+      if ('endDate' in body) fields.end_date = calendarDate(body.endDate, 'Sprint end date');
+      dateRange('start_date' in fields ? fields.start_date : item.startDate, 'end_date' in fields ? fields.end_date : item.endDate, 'Sprint end date');
+      if ('status' in body) {
+        if (!['planned','active','completed'].includes(body.status)) throw new Error('Invalid sprint status.');
+        fields.status = body.status;
+      }
+    } catch (error) { return json({ error: error.message }, 400); }
     if (!Object.keys(fields).length) return json({ error: 'No changes supplied.' }, 400);
-    const result = await env.DB.prepare(`UPDATE sprints SET ${Object.keys(fields).map(key => `${key} = ?`).join(', ')} WHERE id = ?`).bind(...Object.values(fields), sprintMatch[1]).run();
+    let result;
+    try { result = await env.DB.prepare(`UPDATE sprints SET ${Object.keys(fields).map(key => `${key} = ?`).join(', ')} WHERE id = ?`).bind(...Object.values(fields), sprintMatch[1]).run(); }
+    catch (error) { if (/UNIQUE constraint/i.test(error.message)) return json({ error: 'Sprint already exists.' }, 409); throw error; }
     if (!result.meta.changes) return json({ error: 'Sprint not found.' }, 404);
     const saved = await env.DB.prepare('SELECT id, project_id AS projectId, name, goal, start_date AS startDate, end_date AS endDate, status FROM sprints WHERE id = ?').bind(sprintMatch[1]).first();
     await notifyUsers(env, user.id, { projectId: saved.projectId, type: 'sprint_updated', title: 'Sprint updated', body: user.name + ' updated ' + (saved?.name || 'a sprint') });
@@ -403,7 +444,7 @@ async function routeApi(request, env) {
       const patch = normalizeReview(body, true); const keys = Object.keys(patch);
       if (!keys.length) return json({ error: 'No changes supplied.' }, 400);
       if ('project_id' in patch && patch.project_id !== before.projectId) return json({ error: 'Moving tasks between projects is not supported.' }, 400);
-      const relationError = await validateRelations(env, { meeting_id: before.meetingId, parent_id: before.parentId, sprint_id: before.sprintId, ...patch }, before.projectId, reviewMatch[1]);
+      const relationError = await validateRelations(env, { meeting_id: before.meetingId, parent_id: before.parentId, sprint_id: before.sprintId, start_date: before.startDate, due: before.due, ...patch }, before.projectId, reviewMatch[1]);
       if (relationError) return json({ error: relationError }, 400);
       const values = keys.map(key => patch[key]);
       const result = await env.DB.prepare(`UPDATE reviews SET ${keys.map(key => `${key} = ?`).join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).bind(...values, reviewMatch[1]).run();
@@ -419,6 +460,8 @@ async function routeApi(request, env) {
   if (request.method === 'DELETE' && reviewMatch) {
     if (!await requireProject(env, user, await projectIdForReview(env, reviewMatch[1]), 'edit')) return accessDenied();
     const doomed = await env.DB.prepare('SELECT title, project_id AS projectId FROM reviews WHERE id = ?').bind(reviewMatch[1]).first();
+    const attachments = await env.DB.prepare('SELECT object_key AS objectKey FROM review_attachments WHERE review_id = ?').bind(reviewMatch[1]).all();
+    if (env.ATTACHMENTS && attachments.results.length) await Promise.all(attachments.results.map(item => env.ATTACHMENTS.delete(item.objectKey)));
     const result = await env.DB.prepare('DELETE FROM reviews WHERE id = ?').bind(reviewMatch[1]).run();
     if (result.meta.changes && doomed) await notifyUsers(env, user.id, { projectId: doomed.projectId, type: 'review_deleted', title: 'Task deleted', body: user.name + ' deleted "' + doomed.title + '"' });
     return result.meta.changes ? json({ ok: true }) : json({ error: 'Review not found.' }, 404);
@@ -439,7 +482,7 @@ async function routeApi(request, env) {
   if (subtaskMatch && request.method === 'PATCH') {
     if (!await requireProject(env, user, await projectIdForReview(env, subtaskMatch[1]), 'edit')) return accessDenied();
     const body = await readBody(request); const patch = {};
-    if ('title' in (body || {})) patch.title = safeText(body.title, 240);
+    if ('title' in (body || {})) { patch.title = safeText(body.title, 240); if (!patch.title) return json({ error: 'Subtask title is required.' }, 400); }
     if ('completed' in (body || {})) patch.completed = body.completed ? 1 : 0;
     if (!Object.keys(patch).length) return json({ error: 'No changes supplied.' }, 400);
     const keys = Object.keys(patch); const result = await env.DB.prepare(`UPDATE review_subtasks SET ${keys.map(key => `${key} = ?`).join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND review_id = ?`).bind(...keys.map(key => patch[key]), subtaskMatch[2], subtaskMatch[1]).run();
@@ -457,7 +500,9 @@ async function routeApi(request, env) {
   if (request.method === 'POST' && attachmentPostMatch) {
     if (!await requireProject(env, user, await projectIdForReview(env, attachmentPostMatch[1]), 'edit')) return accessDenied();
     if (!env.ATTACHMENTS) return json({ error: 'R2 attachments are not configured.' }, 503);
-    const form = await request.formData(); const file = form.get('file');
+    let form;
+    try { form = await request.formData(); } catch { return json({ error: 'Choose a file using multipart form data.' }, 400); }
+    const file = form.get('file');
     if (!(file instanceof File) || !file.size) return json({ error: 'Choose a file to upload.' }, 400);
     if (file.size > MAX_ATTACHMENT_BYTES) return json({ error: 'Files must be 50 MB or smaller.' }, 413);
     if (!await env.DB.prepare('SELECT id FROM reviews WHERE id = ?').bind(attachmentPostMatch[1]).first()) return json({ error: 'Review not found.' }, 404);
@@ -484,7 +529,9 @@ async function routeApi(request, env) {
 
   if (request.method === 'POST' && path === '/api/meetings') {
     const body = await readBody(request); if (!body) return json({ error: 'Invalid JSON.' }, 400);
-    const title = safeText(body.title); const date = /^\d{4}-\d{2}-\d{2}$/.test(body.date || '') ? body.date : null;
+    const title = safeText(body.title);
+    let date;
+    try { date = calendarDate(body.date, 'Meeting date', true); } catch (error) { return json({ error: error.message }, 400); }
     if (!title || !date) return json({ error: 'Meeting title and date are required.' }, 400);
     const meeting = { id: body.id && /^[a-zA-Z0-9-]{8,80}$/.test(body.id) ? body.id : id(), title, date, projectId: safeText(body.projectId, 80) || 'default', notes: safeText(body.notes, 5000), ai: body.ai ? 1 : 0, itemCount: 0, attendees: Array.isArray(body.attendees) ? body.attendees.map(x => safeText(x, 120)).filter(Boolean).slice(0, 30) : [] };
     if (!await requireProject(env, user, meeting.projectId, 'edit')) return accessDenied();
@@ -502,7 +549,7 @@ async function routeApi(request, env) {
     const body = await readBody(request); if (!body) return json({ error: 'Invalid JSON.' }, 400);
     const patch = {};
     if ('title' in body) { patch.title = safeText(body.title, 200); if (!patch.title) return json({ error: 'Meeting title is required.' }, 400); }
-    if ('date' in body) { if (!/^\d{4}-\d{2}-\d{2}$/.test(body.date || '')) return json({ error: 'Invalid meeting date.' }, 400); patch.date = body.date; }
+    if ('date' in body) { try { patch.date = calendarDate(body.date, 'Meeting date', true); } catch (error) { return json({ error: error.message }, 400); } }
     if ('notes' in body) patch.notes = safeText(body.notes, 5000);
     if ('ai' in body) patch.ai = body.ai ? 1 : 0;
     if ('attendees' in body) patch.attendees = JSON.stringify(Array.isArray(body.attendees) ? body.attendees.map(x => safeText(x, 120)).filter(Boolean).slice(0, 30) : []);

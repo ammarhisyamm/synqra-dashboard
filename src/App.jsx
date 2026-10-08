@@ -8,7 +8,7 @@ import { Wave } from './components/Wave.jsx';
 import { STORAGE_KEY, AREAS, STAGES, PRIORITIES, STAGE_ICONS } from './constants/workflow';
 import { dateLabel, slashDate, shortDate, ageLabel, groupDateLabel, relativeDate } from './lib/dates';
 import { isResolved, isOverdue, activeReviews, portfolioProjects, taskOverview, sprintTasks, sprintStats, statusCounts, priorityCounts, teamWorkload, hoursTotals, formatHours, daysOverdue } from './lib/reports';
-import { api } from './api/client';
+import { api, mutationState } from './api/client';
 import { reviewsApi } from './api/reviews';
 import { reportsApi } from './api/reports';
 import { notificationsApi } from './api/notifications';
@@ -21,6 +21,7 @@ import { DeleteProjectModal } from './components/projects/DeleteProjectModal';
 import { CommandPalette } from './components/navigation/CommandPalette';
 import { AppSelect } from './components/common/AppSelect';
 import { TextField } from './components/common/Field';
+import { useDialogFocusTracking } from './components/ui/dialog';
 
 import { REPORT_COLORS, seed, loadData, statusFor, nextTaskKey, downloadReviewsCsv, elapsedLabel, makeHistoryModel, historyDateLabel, deduplicateNotifications, extractNotes } from './lib/helpers';
 import { ErrorPanel } from './components/common/ErrorPanel';
@@ -120,6 +121,7 @@ function EmptyWorkspaceOnboarding({ user, project, onCreateProject, onFinish, se
 }
 
 export function App() {
+  useDialogFocusTracking();
   const [data, setData] = useState(loadData);
   const [cloudReady, setCloudReady] = useState(false);
   const [user, setUser] = useState(undefined);
@@ -172,8 +174,14 @@ export function App() {
     return { ...remote, project: remote.projects.find(item => item.id === requested) || remote.project || null };
   };
   const [commandOpen, setCommandOpen] = useState(false);
+  const clearWorkspace = () => { setUser(null); setCloudReady(false); setData(loadData()); setNotifications([]); setSelectedReview(null); setModal(null); setDialog(null); setCommandOpen(false); setProjectOpen(false); setCollabOpen(false); setNotificationsOpen(false); setOnboardingActive(false); setPage('Overview'); setQuery(''); meetingCreation.current = null; };
 
-  useEffect(() => localStorage.setItem(STORAGE_KEY, JSON.stringify(data)), [data]);
+  useEffect(() => {
+    try { localStorage.removeItem(STORAGE_KEY); } catch { /* Storage is optional. */ }
+    window.addEventListener('synqra:session-expired', clearWorkspace);
+    return () => window.removeEventListener('synqra:session-expired', clearWorkspace);
+  }, []);
+
   useEffect(() => {
     const requestedProjectId = new URLSearchParams(window.location.search).get('project');
     let cancelled = false;
@@ -375,7 +383,7 @@ export function App() {
   };
   const refreshMetadata = async () => { try { const result = await metadataApi.list(); setData(previous => ({ ...previous, metadata: result.metadata })); } catch (error) { setToast(error.message); } };
   const refreshAll = () => { refreshTeam(); api('/api/bootstrap?project=' + encodeURIComponent(data.project?.id || '')).then(remote => { setData(previous => { const selectedId = previous.project?.id; const selectedProject = selectedId ? remote.projects.find(item => item.id === selectedId) : null; return { ...remote, project: selectedProject || remote.project || null }; }); if (!(remote.projects || []).length) setOnboardingActive(true); setCloudReady(true); }).catch(error => setToast(error.message)); };
-  const signOut = async () => { try { await api('/api/auth/logout', { method: 'POST' }); } finally { setUser(null); setCloudReady(false); setData(seed); } };
+  const signOut = async () => { try { await api('/api/auth/logout', { method: 'POST' }); } finally { clearWorkspace(); } };
   const saveProject = async settings => {
     try {
       const isDefaultProject = activeProjectId === 'default';
@@ -396,17 +404,16 @@ export function App() {
     } catch (error) { setToast(error.message); }
   };
   useEffect(() => {
-    if (!user) return undefined;
+    if (!user || !cloudReady) return undefined;
     let active = true;
     const sync = async () => {
       if (typeof navigator !== 'undefined' && !navigator.onLine) return;
-      let skip = false;
-      setPendingOps(count => { if (count > 0) skip = true; return count; });
-      if (skip) return;
+      const snapshot = mutationState();
+      if (snapshot.pending) return;
       setSyncing(true);
       try {
         const [remote, notificationResult] = await Promise.all([api('/api/bootstrap?project=' + encodeURIComponent(data.project?.id || '')), notificationsApi.list()]);
-        if (!active) return;
+        if (!active || mutationState().pending || mutationState().revision !== snapshot.revision) return;
         setData(previous => {
           const selectedId = previous.project?.id;
           const selectedProject = selectedId ? remote.projects.find(item => item.id === selectedId) : null;
@@ -426,7 +433,7 @@ export function App() {
     window.addEventListener('online', onOnline);
     window.addEventListener('offline', onOffline);
     return () => { active = false; window.clearInterval(interval); window.removeEventListener('online', onOnline); window.removeEventListener('offline', onOffline); };
-  }, [user]);
+  }, [user?.id, activeProjectId, cloudReady]);
   const markNotificationRead = async notification => { try { await notificationsApi.read(notification.id); setNotifications(items => items.map(item => item.id === notification.id ? { ...item, read: true } : item)); setData(prev => ({ ...prev, unreadNotifications: Math.max(0, (prev.unreadNotifications || 0) - (notification.read ? 0 : 1)) })); } catch (error) { setToast(error.message); } };
   const markAllNotificationsRead = async () => { try { await notificationsApi.readAll(); setNotifications(items => items.map(item => ({ ...item, read: true }))); setData(prev => ({ ...prev, unreadNotifications: 0 })); } catch (error) { setToast(error.message); } };
   const createProject = async name => { try { const hadNoProjects = !(data.projects || []).length; const created = await projectsApi.create({ name }); const project = { ...created, initials: name.slice(0, 1).toUpperCase() }; setData(prev => ({ ...prev, project, projects: [...(prev.projects || []).filter(item => item.id !== project.id), project] })); if (hadNoProjects) setOnboardingActive(true); setProjectOpen(false); setModal(null); setPage('Overview'); setToast('Project created'); return project; } catch (error) { setToast(error.message); throw error; } };
@@ -461,13 +468,13 @@ export function App() {
     } catch (error) { throw error; }
   };
 
-  if (user === undefined) {
+  if (user === undefined || (user && !cloudReady)) {
     if (bootError || bootFailed) {
       return <div className="auth-shell"><section className="auth-card" style={{ maxWidth: 480, textAlign: 'left' }}><div className="auth-brand" style={{ justifyContent: 'flex-start' }}><img className="synqra-logo auth-logo" src="/logo-synqra.png" alt="Synqra" /></div><h1 style={{ fontSize: 22, marginTop: 16 }}>Something went wrong</h1><p style={{ color: '#687a92', fontSize: 13, lineHeight: 1.5 }}>We couldn&apos;t load this workspace. Your saved data is safe and you are still signed in. Try again or return to the previous page.</p>{bootError && <p style={{ color: '#9aa6b5', fontSize: 12 }}>{bootError}</p>}<div style={{ display: 'flex', gap: 10 }}><button className="primary-button" onClick={() => window.location.reload()}><RotateCcw size={15}/> Try again</button><button className="secondary-button" onClick={() => { if (window.history.length > 1) window.history.back(); }}>Go back</button></div></section></div>;
     }
     return <AuthLoading/>;
   }
-  if (!user) return <AuthScreen onAuthenticated={signedInUser => { setUser(signedInUser); loadWorkspace().then(remote => { setData(remote); setCloudReady(true); }).catch(error => { setCloudReady(false); setBootError(error.message); }); }}/>;
+  if (!user) return <AuthScreen onAuthenticated={signedInUser => { setBootError(''); setBootFailed(false); setData(loadData()); setUser(signedInUser); loadWorkspace().then(remote => { setData(remote); setCloudReady(true); }).catch(error => { setCloudReady(false); setBootError(error.message); }); }}/>;
 
   const currentProject = data.project || { id: '', name: 'No project', initials: 'N' };
   const needsOnboarding = cloudReady && (onboardingActive || !(data.projects || []).length);
@@ -483,7 +490,7 @@ export function App() {
           <button className="notification" aria-label="Notifications" onClick={()=>{setNotificationsOpen(open=>!open);if(!notifications.length)refreshNotifications()}}><Bell size={17}/>{data.unreadNotifications > 0 && <i/>}</button>
         </div>
       </header>
-      {commandOpen && <CommandPalette query={query} setQuery={setQuery} reviews={activeReviews} projects={data.projects || []} activeProjectId={activeProjectId} onClose={() => setCommandOpen(false)} onNavigate={pageName => { setPage(pageName); setQuery(''); }} onNewMeeting={openNewMeeting} onNewReview={() => setModal('review')} onOpenReview={review => { setSelectedReview(review); setQuery(''); }} onSelectProject={selected => { setData(previous => ({ ...previous, project: selected })); setPage('Overview'); setQuery(''); }}/ >}
+      {commandOpen && <CommandPalette query={query} setQuery={setQuery} reviews={activeReviews} projects={data.projects || []} activeProjectId={activeProjectId} readOnly={readOnly || !activeProjectId} isAdmin={['super_admin', 'admin'].includes(user.role)} onClose={() => setCommandOpen(false)} onNavigate={pageName => { setPage(pageName); setQuery(''); }} onNewMeeting={openNewMeeting} onNewReview={() => setModal('review')} onOpenReview={review => { setSelectedReview(review); setQuery(''); }} onSelectProject={selected => { setData(previous => ({ ...previous, project: selected })); setPage('Overview'); setQuery(''); }}/ >}
       {notificationsOpen && <NotificationMenu notifications={notifications} onClose={()=>setNotificationsOpen(false)} onOpen={openReview} onRead={markNotificationRead} onReadAll={markAllNotificationsRead}/>}
       {projectOpen && <ProjectSwitcher project={currentProject} projects={data.projects || []} collapsed={collapsed} onSelect={selected => { setData(prev => ({ ...prev, project: selected })); setProjectOpen(false); setPage('Overview'); }} onNew={() => { setProjectOpen(false); setModal('project'); }} onClose={() => setProjectOpen(false)} />}
       {collabOpen && <CollaboratorModal user={user} projectId={activeProjectId} onClose={() => setCollabOpen(false)} onToast={setToast} onMembersChanged={refreshTeam} />}

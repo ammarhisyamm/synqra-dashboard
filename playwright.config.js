@@ -10,7 +10,13 @@ export default defineConfig({
     screenshot: 'only-on-failure',
     video: 'retain-on-failure'
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    { name:'chromium', use:{ ...devices['Desktop Chrome'] } },
+    ...(process.env.E2E_CROSS_BROWSER === '1' ? [
+      { name:'firefox', use:{ ...devices['Desktop Firefox'] } },
+      { name:'webkit', use:{ ...devices['Desktop Safari'] } }
+    ] : [])
+  ],
   webServer: process.env.E2E_BASE_URL ? undefined : {
     command: 'npm run dev -- --host 127.0.0.1',
     url: 'http://127.0.0.1:5173',

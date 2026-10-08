@@ -27,7 +27,7 @@ export function TextAreaField({ label, icon, hint, rows = 3, className = '', ...
   const id = props.id || generatedId;
   return (
     <Field label={label} icon={icon} hint={hint} hintId={`${id}-hint`} className={className}>
-      <Textarea className="field-input" rows={rows} aria-describedby={hint ? `${id}-hint` : undefined} {...props} id={id} />
+      <Textarea className="field-input" rows={rows} aria-label={label} aria-describedby={hint ? `${id}-hint` : undefined} {...props} id={id} />
     </Field>
   );
 }

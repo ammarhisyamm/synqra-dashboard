@@ -335,6 +335,59 @@ test('viewer can browse and filter, but task editing and creation are disabled',
   await expect(drawer.getByLabel('Estimate (hours)', { exact:true })).toBeDisabled();
   await expect(drawer.getByRole('button', { name:'Close task details' })).toBeEnabled();
   await expect(drawer.getByRole('button', { name:'Delete', exact:true })).toHaveCount(0);
+  await drawer.getByRole('button', { name:'Close task details' }).click();
+  await page.keyboard.press('Control+k');
+  await expect(page.getByRole('button', { name:'Start new meeting' })).toBeDisabled();
+  await expect(page.getByRole('button', { name:'Submit new review' })).toBeDisabled();
+  await expect(page.locator('.command-palette').getByRole('button', { name:'Admin Management' })).toHaveCount(0);
+});
+
+test('bootstrap failure hides cached workspace and recovers after retry', async ({ page }) => {
+  await fixture(page);
+  await page.evaluate(() => localStorage.setItem('synqra-dashboard-v1', JSON.stringify({ reviews:[{ title:'Other account private task' }], project:{ name:'Other account private project' } })));
+  await page.route('**/api/bootstrap*', route => route.fulfill({ status:503, contentType:'application/json', body:JSON.stringify({ error:'QA workspace unavailable' }) }));
+  await page.reload();
+  await expect(page.getByText('Something went wrong', { exact:true })).toBeVisible();
+  await expect(page.locator('.app-shell')).toHaveCount(0);
+  await expect(page.getByText('Other account private task')).toHaveCount(0);
+  await page.unroute('**/api/bootstrap*');
+  await page.getByRole('button', { name:'Try again', exact:true }).click();
+  await expect(page.getByRole('heading', { name:'Overview', exact:true })).toBeVisible();
+});
+
+test('mobile task title wraps and meeting properties stay inside the detail pane', async ({ page }) => {
+  await page.setViewportSize({ width:375, height:900 });
+  await fixture(page);
+  await navigate(page, 'All Reviews');
+  const titleButton = page.locator('.review-title-button').first();
+  expect(await titleButton.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+  await expect(page.locator('.review-mobile-meta').first()).toBeVisible();
+  await page.setViewportSize({ width:768, height:900 });
+  await navigate(page, 'Meetings');
+  const table = page.locator('.meeting-action-table');
+  const bounds = await table.boundingBox();
+  const pane = await page.locator('.meeting-action-table-wrap').boundingBox();
+  expect(bounds.width).toBeLessThanOrEqual(pane.width + 1);
+  expect(await table.locator('.meeting-action-title').first().evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+  for (const text of ['Severity', 'Status', 'Due']) {
+    const cell = table.locator(`td[data-label="${text}"]`).first();
+    await expect(cell).toBeVisible();
+    const box = await cell.boundingBox();
+    expect(box.x + box.width).toBeLessThanOrEqual(pane.x + pane.width + 1);
+  }
+  await page.screenshot({ path:'test-results/ui-audit/768-meeting-cards.png', fullPage:true });
+});
+
+test('polling follows the selected project, not the original project', async ({ page }) => {
+  const state = await fixture(page);
+  const other = { ...project, id:'qa-other-project', name:'Other QA project', role:'editor' };
+  state.data.projects.push(other);
+  await page.reload();
+  await page.locator('.sidebar').getByRole('button', { name:/QA project/ }).click();
+  const response = page.waitForRequest(request => new URL(request.url()).pathname === '/api/bootstrap' && new URL(request.url()).searchParams.get('project') === other.id);
+  await page.getByRole('button', { name:'Other QA project', exact:true }).click();
+  await response;
+  await expect(page.locator('.sidebar').getByRole('button', { name:/Other QA project/ })).toBeVisible();
 });
 
 test('metadata dialogs have a surface, shared fields, color state and Escape dismissal', async ({ page }) => {
@@ -384,5 +437,98 @@ test('generated AI preview supports assignee, priority and status before creatio
   await expect(page.getByRole('heading', { name: '1 task created' })).toBeVisible();
   const created = state.data.reviews.find(item => item.title === 'Improve login');
   expect(created).toMatchObject({ status: 'Review', priority: 'Minor', assignee: 'QA User' });
+  expect(state.errors).toEqual([]);
+});
+
+test('meeting and search dialogs trap keyboard focus and restore their trigger', async ({ page }) => {
+  await fixture(page, { meetingNotes:'First\nSecond\nThird\nFourth\nFifth\nSixth' });
+  await navigate(page, 'Meetings');
+  for (const [triggerName, dialogName] of [['Filter by date', 'Filter meetings by date'], ['View details', 'Meeting notes — QA weekly sync']]) {
+    const trigger = page.getByRole('button', { name:triggerName, exact:true });
+    await trigger.click();
+    const dialog = page.getByRole('dialog', { name:dialogName, exact:true });
+    await expect(dialog).toBeVisible();
+    for (let index=0; index<8; index++) await page.keyboard.press('Tab');
+    expect(await dialog.evaluate(el => el.contains(document.activeElement))).toBe(true);
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+  }
+  await page.keyboard.press('Control+k');
+  const palette = page.getByRole('dialog', { name:'Search and navigation' });
+  await expect(palette).toBeVisible();
+  for (let index=0; index<25; index++) await page.keyboard.press('Tab');
+  expect(await palette.evaluate(el => el.contains(document.activeElement))).toBe(true);
+  await page.keyboard.press('Escape');
+  await expect(palette).toHaveCount(0);
+});
+
+test('expired session clears private content and closes an open task drawer', async ({ page }) => {
+  await fixture(page);
+  await openDetail(page);
+  await page.route('**/api/reviews/qa-task', route => route.fulfill({ status:401, contentType:'application/json', body:JSON.stringify({ error:'Sign in required.' }) }));
+  const input = page.getByRole('dialog', { name:'Task details' }).getByLabel('Estimate (hours)', { exact:true });
+  await input.fill('5');
+  await input.press('Tab');
+  await expect(page.getByRole('heading', { name:'Welcome back' })).toBeVisible();
+  await expect(page.locator('.app-shell')).toHaveCount(0);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+});
+
+test('browser storage denial does not crash navigation or task creation', async ({ page }) => {
+  await page.addInitScript(() => {
+    for (const method of ['getItem','setItem','removeItem']) Storage.prototype[method] = () => { throw new DOMException('Blocked storage', 'SecurityError'); };
+  });
+  const state = await fixture(page);
+  await navigate(page, 'My Work');
+  await page.getByRole('button', { name:'Create Task', exact:true }).click();
+  const dialog = page.getByRole('dialog', { name:'Create task' });
+  await dialog.getByLabel('Title', { exact:true }).fill('Storage-safe task');
+  await dialog.getByRole('button', { name:'Create task', exact:true }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(state.errors).toEqual([]);
+});
+
+test('a delayed bootstrap response cannot overwrite a completed detail save', async ({ page }) => {
+  await page.clock.install();
+  const state = await fixture(page);
+  await openDetail(page);
+  const stale = JSON.parse(JSON.stringify(state.data));
+  let held;
+  await page.route('**/api/bootstrap*', route => { held = route; });
+  await page.clock.runFor(10000);
+  await expect.poll(() => !!held).toBe(true);
+  await page.clock.resume();
+  const drawer = page.getByRole('dialog', { name:'Task details' });
+  await drawer.getByLabel('Task title', { exact:true }).fill('Updated during polling');
+  await drawer.getByLabel('Task title', { exact:true }).press('Tab');
+  await expect.poll(() => state.changes.some(item => item.title === 'Updated during polling')).toBe(true);
+  await held.fulfill({ contentType:'application/json', body:JSON.stringify(stale) });
+  await drawer.getByRole('button', { name:'Close task details' }).click();
+  await expect(page.locator('.review-title-button')).toHaveText('Updated during polling');
+});
+
+test('partial AI task failure keeps only failed items and retry never duplicates the meeting', async ({ page }) => {
+  const state = await fixture(page);
+  await page.route('**/api/ai/generate', route => route.fulfill({ contentType:'application/json', body:JSON.stringify({ items:['First task','Retry task'].map((title,index) => ({ id:`generated-${index}`, title, keep:true, status:'Open', priority:'Major', area:'Engineering', due:'' })) }) }));
+  let failed = false;
+  await page.route('**/api/reviews', route => {
+    if (route.request().postDataJSON()?.title === 'Retry task' && !failed) {
+      failed = true; return route.fulfill({ status:500, contentType:'application/json', body:JSON.stringify({ error:'Temporary failure' }) });
+    }
+    return route.fallback();
+  });
+  await navigate(page, 'Meetings');
+  await page.getByRole('button', { name:'New meeting' }).click();
+  await page.getByLabel('Meeting title', { exact:true }).fill('Retry meeting');
+  await page.getByLabel('Meeting notes', { exact:true }).fill('First task and retry task');
+  await page.getByRole('button', { name:'Generate AI' }).click();
+  await page.getByRole('button', { name:'Create 2 items', exact:true }).click();
+  await expect(page.getByRole('button', { name:'Create 1 item', exact:true })).toBeEnabled();
+  expect(state.data.meetings.filter(item => item.title === 'Retry meeting')).toHaveLength(1);
+  await page.getByRole('button', { name:'Create 1 item', exact:true }).click();
+  await expect(page.getByRole('heading', { name:'1 task created' })).toBeVisible();
+  expect(state.data.meetings.filter(item => item.title === 'Retry meeting')).toHaveLength(1);
+  for (const title of ['First task','Retry task']) expect(state.data.reviews.filter(item => item.title === title)).toHaveLength(1);
   expect(state.errors).toEqual([]);
 });

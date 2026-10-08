@@ -107,8 +107,7 @@ export function ReviewDetailEnhanced({ review, meetings = [], metadata = [], spr
     setUploading(true); setError('');
     try {
       const form = new FormData(); form.append('file', file);
-      const response = await fetch(`/api/reviews/${review.id}/attachments`, { method: 'POST', body: form, cache: 'no-store' });
-      const result = await response.json(); if (!response.ok) throw new Error(result.error || 'Upload failed');
+      const result = await api(`/api/reviews/${review.id}/attachments`, { method:'POST', body:form });
       setDetail(previous => ({ ...previous, attachments: [result, ...(previous?.attachments || [])] })); onActivity(); onToast('Attachment uploaded');
     } catch (failure) { setError(failure.message); } finally { setUploading(false); }
   };

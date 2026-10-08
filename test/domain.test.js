@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import { statusFor } from '../src/lib/status.js';
 import { isOverdue, portfolioProjects, sprintStats, statusCounts, taskOverview, teamWorkload } from '../src/lib/reports.js';
 import { dateLabel, slashDate, parseDate, localToday } from '../src/lib/dates.js';
-import { isAssignedTo, makeHistoryModel } from '../src/lib/helpers.js';
+import { isAssignedTo, makeHistoryModel, loadData } from '../src/lib/helpers.js';
+import { calendarDate, dateRange } from '../worker/validation.js';
+import { readBody } from '../worker/utils.js';
 import { normalizeReview } from '../worker/reviews.js';
 
 const today = '2026-09-10';
@@ -88,4 +90,30 @@ test('estimate API rejects invalid hours and preserves explicit zero/clear', () 
   assert.throws(() => normalizeReview({ estimateHours: 'invalid' }, true), /Estimate/);
   assert.equal(normalizeReview({ estimateHours: 0 }, true).estimate_hours, 0);
   assert.equal(normalizeReview({ estimateHours: null }, true).estimate_hours, null);
+});
+
+test('calendar validation rejects impossible dates and inverted ranges', () => {
+  assert.equal(calendarDate('2024-02-29'), '2024-02-29');
+  for (const value of ['2026-02-29', '2026-04-31', '2026-13-01', 'invalid', 123]) assert.throws(() => calendarDate(value), /Invalid/);
+  assert.equal(calendarDate(''), null);
+  assert.throws(() => calendarDate('', 'Meeting date', true), /required/);
+  assert.throws(() => dateRange('2026-10-08', '2026-10-07'), /on or after/);
+  assert.doesNotThrow(() => dateRange('2026-10-08', '2026-10-08'));
+});
+
+test('JSON bodies must be objects, not null, arrays or primitives', async () => {
+  for (const body of ['null', '[]', '"text"', '12', '{']) assert.equal(await readBody(new Request('https://example.test', { method: 'POST', body })), null);
+  assert.deepEqual(await readBody(new Request('https://example.test', { method: 'POST', body: '{"title":"QA"}' })), { title: 'QA' });
+});
+
+test('workspace starts empty without reading account-shared browser cache', () => {
+  assert.deepEqual(loadData().reviews, []);
+  assert.deepEqual(loadData().projects, []);
+  assert.equal(loadData().project, null);
+});
+
+test('review normalization rejects invalid bodies and impossible dates', () => {
+  for (const body of [null, [], 'text']) assert.throws(() => normalizeReview(body, true));
+  assert.throws(() => normalizeReview({ due: '2026-02-30' }, true), /Invalid/);
+  assert.throws(() => normalizeReview({ startDate: '2026-10-08', due: '2026-10-07' }, true), /on or after/);
 });

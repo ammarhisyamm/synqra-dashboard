@@ -1,4 +1,3 @@
-import { STORAGE_KEY } from '../constants/workflow.js';
 import { parseDate } from './dates.js';
 
 export const REPORT_COLORS = {
@@ -11,44 +10,9 @@ export const REPORT_COLORS = {
   muted: '#a7b3c2'
 };
 
-export const seed = {
-  project: { name: 'Acme Redesign', initials: 'A' },
-  reviews: [
-    { id: 'r1', title: 'Pricing page copy needs tightening', area: 'Marketing', priority: 'Major', stage: 'Review', assignee: 'Aria', due: '2026-09-12', createdAt: '2026-09-09', archived: false },
-    { id: 'r2', title: 'Empty states illustration set', area: 'Design', priority: 'Minor', stage: 'Planning', assignee: 'Mia', due: '2026-09-16', createdAt: '2026-09-09', archived: false },
-    { id: 'r3', title: 'Homepage hero lacks clear value proposition', area: 'Marketing', priority: 'Major', stage: 'Planning', assignee: 'Leo', due: '2026-09-14', createdAt: '2026-09-08', archived: false },
-    { id: 'r4', title: 'Dark mode contrast fails WCAG AA on cards', area: 'Design', priority: 'Major', stage: 'In Progress', assignee: 'Mia', due: '2026-09-11', createdAt: '2026-09-07', archived: false },
-    { id: 'r5', title: 'API rate limiting for public endpoints', area: 'Engineering', priority: 'Minor', stage: 'Review', assignee: 'Leo', due: '2026-09-15', createdAt: '2026-09-06', archived: false },
-    { id: 'r6', title: 'Checkout flow drops on mobile Safari', area: 'Engineering', priority: 'Blocker', stage: 'In Progress', assignee: 'Aria', due: '2026-09-09', createdAt: '2026-09-05', archived: false },
-    { id: 'r7', title: 'Footer links audit', area: 'Marketing', priority: 'Minor', stage: 'Final', assignee: 'Aria', due: '2026-09-08', createdAt: '2026-09-04', archived: false },
-    { id: 'r8', title: 'Analytics events naming', area: 'Engineering', priority: 'Minor', stage: 'Completed', assignee: 'Leo', due: '2026-09-07', createdAt: '2026-09-03', archived: false },
-    { id: 'r9', title: 'Onboarding checklist states', area: 'Design', priority: 'Major', stage: 'Final', assignee: 'Mia', due: '2026-09-09', createdAt: '2026-09-02', archived: false }
-  ],
-  meetings: [
-    { id: 'm1', title: 'Weekly product sync', date: '2026-09-09', ai: true, notes: 'Fix onboarding flow. Update the pricing page. Audit dashboard metrics.', itemCount: 3 },
-    { id: 'm2', title: 'Design review — checkout', date: '2026-09-06', ai: true, notes: 'Improve checkout mobile layout. Review dark mode contrast.', itemCount: 2 },
-    { id: 'm3', title: 'Marketing alignment', date: '2026-09-03', ai: false, notes: 'Clarify hero proposition. Tighten pricing page copy.', itemCount: 2 }
-  ]
-};
-
-export function loadData() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    if (!saved || typeof saved !== 'object') return seed;
-    return {
-      ...seed,
-      ...saved,
-      project: { ...seed.project, ...(saved.project || {}) },
-      reviews: Array.isArray(saved.reviews) ? saved.reviews : seed.reviews,
-      meetings: Array.isArray(saved.meetings) ? saved.meetings : seed.meetings,
-      projects: Array.isArray(saved.projects) ? saved.projects : [],
-      sprints: Array.isArray(saved.sprints) ? saved.sprints : [],
-      metadata: Array.isArray(saved.metadata) ? saved.metadata : [],
-      spaces: Array.isArray(saved.spaces) ? saved.spaces : [],
-      notifications: Array.isArray(saved.notifications) ? saved.notifications : []
-    };
-  } catch { return seed; }
-}
+// Workspace records are never restored from shared browser storage before authentication.
+export const seed = { project: null, projects: [], reviews: [], meetings: [], sprints: [], metadata: [], spaces: [], notifications: [], unreadNotifications: 0 };
+export function loadData() { return { ...seed }; }
 
 export function statusFor(review) {
   if (review.status) return review.status;

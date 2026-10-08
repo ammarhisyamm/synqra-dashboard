@@ -1,7 +1,9 @@
 import { stages, areas, priorities, statuses } from './constants.js';
 import { safeText, id } from './utils.js';
+import { calendarDate, dateRange } from './validation.js';
 
 export function normalizeReview(input, partial = false) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('A task object is required.');
   const review = {};
   if (!partial || 'title' in input) {
     review.title = safeText(input.title);
@@ -17,10 +19,10 @@ export function normalizeReview(input, partial = false) {
     if ('assignees' in input) review.assignee = list[0] || '';
     else if (!partial) review.assignee = review.assignee || '';
   }
-  if (!partial || 'due' in input) review.due = /^\d{4}-\d{2}-\d{2}$/.test(input.due || '') ? input.due : null;
+  if (!partial || 'due' in input) review.due = calendarDate(input.due, 'Due date');
   if (!partial || 'start_date' in input || 'startDate' in input) {
     const start = input.start_date ?? input.startDate;
-    review.start_date = /^\d{4}-\d{2}-\d{2}$/.test(start || '') ? start : null;
+    review.start_date = calendarDate(start, 'Start date');
   }
   if (!partial || 'description' in input) review.description = safeText(input.description, 4000);
   if (!partial || 'status' in input) { if (!statuses.has(input.status || 'Open')) throw new Error('Invalid review status.'); review.status = input.status || 'Open'; }
@@ -41,6 +43,7 @@ export function normalizeReview(input, partial = false) {
   if (!partial || 'itemType' in input) review.item_type = ['task', 'epic', 'feature'].includes(input.itemType) ? input.itemType : 'task';
   if (!partial || 'sprintId' in input) review.sprint_id = safeText(input.sprintId, 80) || null;
   if ('archived' in input) review.archived = input.archived ? 1 : 0;
+  dateRange(review.start_date, review.due);
   return review;
 }
 

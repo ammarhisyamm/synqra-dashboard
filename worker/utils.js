@@ -11,7 +11,10 @@ export const publicUser = user => ({ id: user.id, email: user.email, username: u
 export const parseJson = (value, fallback) => { try { return value ? JSON.parse(value) : fallback; } catch { return fallback; } };
 
 export async function readBody(request) {
-  try { return await request.json(); } catch { return null; }
+  try {
+    const body = await request.json();
+    return body && typeof body === 'object' && !Array.isArray(body) ? body : null;
+  } catch { return null; }
 }
 
 // Lightweight in-memory sliding-window limiter for auth endpoints.

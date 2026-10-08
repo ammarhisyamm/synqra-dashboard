@@ -466,6 +466,40 @@
 .reviews-page .review-row { cursor:pointer; }
 .reviews-page .review-row:hover { background:var(--ui-subtle); }
 .reviews-page .row-description { display:block; margin-top:4px; color:var(--ui-muted); font-size:12px; line-height:1.5; }
+.review-title-button { display:block; width:100%; padding:0; border:0; background:transparent; color:var(--ui-text); font:inherit; font-weight:500; text-align:left; white-space:normal; overflow-wrap:anywhere; }
+.review-title-button:focus-visible { outline:2px solid var(--ui-focus); outline-offset:4px; }
+.review-mobile-meta { display:none; }
+
+/* Compact task rows retain their title and important properties without
+   requiring horizontal scrolling just to identify the task. */
+@media (max-width:720px) {
+  .reviews-page .table-wrap table { min-width:0; table-layout:fixed; }
+  .reviews-page .table-wrap th:first-child,
+  .reviews-page .table-wrap td:first-child { width:44px; padding:12px; }
+  .reviews-page .table-wrap th:nth-child(n+3),
+  .reviews-page .table-wrap td:nth-child(n+3) { display:none; }
+  .reviews-page .table-wrap td:nth-child(2) { white-space:normal; }
+  .review-mobile-meta { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:8px; font-size:12px; }
+}
+
+/* Meeting detail becomes a labelled card list when its available width is
+   narrow (including tablet workspaces with a visible sidebar). */
+.meeting-detail-card { container-type:inline-size; }
+.meeting-action-table .meeting-action-title { min-width:0; white-space:normal; overflow-wrap:anywhere; }
+.command-palette .command-search input { min-width:0; }
+.command-palette .command-item:disabled { opacity:.5; cursor:not-allowed; }
+.meeting-date-modal .date-picker { width:100%; border:0; box-shadow:none; }
+@container (max-width:640px) {
+  .meeting-detail-card .meeting-action-table { display:block; width:100%; min-width:0; }
+  .meeting-action-table thead { display:none; }
+  .meeting-action-table tbody { display:block; }
+  .meeting-action-table tbody tr { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:12px; padding:16px; border-bottom:1px solid var(--ui-border); }
+  .meeting-action-table tbody tr:last-child { border-bottom:0; }
+  .meeting-action-table tbody td:nth-child(n) { display:flex; flex-direction:column; align-items:flex-start; gap:4px; width:auto; min-width:0; padding:0; border:0; overflow-wrap:anywhere; }
+  .meeting-action-table tbody td:first-child { grid-column:1/-1; }
+  .meeting-action-table tbody td[data-label]::before { content:attr(data-label); color:var(--ui-muted); font-size:12px; }
+  .meeting-draft-title { width:100%; }
+}
 
 .my-work-row {
   display: flex;

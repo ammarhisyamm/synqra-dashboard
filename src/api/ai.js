@@ -1,3 +1,5 @@
+import { api } from './client.js';
+
 /**
  * Client-side AI helper — no API keys here.
  * Generation runs server-side via POST /api/ai/generate (worker.js),
@@ -41,30 +43,26 @@ export async function generateActionItemsWithOrvix({ notes }) {
     return { items: extractItemsLocally(notes || ''), brief: { generatedAt: new Date().toISOString(), sourceExcerpt, model: 'local', source: 'local' } };
   }
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 25000);
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 25000);
 
-    const response = await fetch('/api/ai/generate', {
+    const data = await api('/api/ai/generate', {
       method: 'POST',
       signal: controller.signal,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ notes })
     });
 
-    clearTimeout(timeout);
-
-    if (!response.ok) {
-      throw new Error(`AI service responded with ${response.status}`);
-    }
-
-    const data = await response.json();
     if (Array.isArray(data?.items) && data.items.length > 0) {
       return data;
     }
     throw new Error('Empty AI result');
   } catch (err) {
+    if (err.status === 401) throw err;
     console.warn('AI generation error, falling back to local extractor:', err);
+  } finally {
+    clearTimeout(timeout);
   }
 
   // Fallback to local heuristic extractor
