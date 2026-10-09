@@ -79,6 +79,19 @@ test('built application persists tasks and accepts a viewer invitation through t
   await expect(reloaded.getByText('Persisted browser comment', { exact:true })).toBeVisible();
   await expect(reloaded.getByRole('link', { name:'browser-qa.txt' })).toBeVisible();
   await reloaded.getByRole('button', { name:'Close task details' }).click();
+  await page.locator('.sidebar').getByRole('button',{name:'Project Docs',exact:true}).click();
+  await page.getByRole('button',{name:'New document'}).click();
+  const documentDialog=page.getByRole('dialog',{name:'New document'});
+  await documentDialog.getByLabel('Document title').fill(`Persisted doc ${suffix}`);
+  await documentDialog.getByRole('button',{name:'Create document',exact:true}).click();
+  await expect(documentDialog).toHaveCount(0);
+  await page.getByLabel('Document content').fill('## Verified notes\n- Browser → API → D1 persisted');
+  await page.getByRole('button',{name:'Save document',exact:true}).click();
+  await expect(page.getByText('Document saved.',{exact:true})).toBeVisible();
+  await page.reload();
+  await page.locator('.sidebar').getByRole('button',{name:'Project Docs',exact:true}).click();
+  await page.getByRole('button',{name:new RegExp(`Persisted doc ${suffix} General`)}).click();
+  await expect(page.getByLabel('Document content')).toHaveValue('## Verified notes\n- Browser → API → D1 persisted');
   await page.getByRole('button', { name:'Collaborator', exact:true }).click();
   const collaborator = page.getByRole('dialog', { name:'Collaborator', exact:true });
   const viewerEmail = `viewer-ui-${suffix}@example.test`;
@@ -102,6 +115,11 @@ test('built application persists tasks and accepts a viewer invitation through t
     await expect(viewerDrawer.getByLabel('Estimate (hours)', { exact:true })).toBeDisabled();
     await expect(viewerDrawer.getByLabel('Estimate (hours)', { exact:true })).toHaveValue('3.5');
     await viewer.screenshot({ path:'test-results/ui-audit/real-worker-viewer.png' });
+    await viewerDrawer.getByRole('button',{name:'Close task details'}).click();
+    await viewer.locator('.sidebar').getByRole('button',{name:'Project Docs',exact:true}).click();
+    await viewer.getByRole('button',{name:new RegExp(`Persisted doc ${suffix} General`)}).click();
+    await expect(viewer.getByRole('heading',{name:'Verified notes',exact:true})).toBeVisible();
+    await expect(viewer.getByRole('button',{name:'Save document'})).toBeDisabled();
   } finally { await viewerContext.close(); }
   await page.screenshot({ path:'test-results/ui-audit/real-worker-invite.png' });
   expect(errors).toEqual([]);

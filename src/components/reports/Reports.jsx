@@ -80,6 +80,8 @@ export function Reports({ reviews, projects, sprints, projectName, onRefresh, on
   const [burnId, setBurnId] = useState('');
   const [burn, setBurn] = useState(null);
   const [burnLoading, setBurnLoading] = useState(false);
+  const [burnError,setBurnError] = useState('');
+  const [burnRetry,setBurnRetry] = useState(0);
   const [expandedSprint, setExpandedSprint] = useState(null);
   const [overdueOnly, setOverdueOnly] = useState(false);
   const today = localToday();
@@ -94,20 +96,22 @@ export function Reports({ reviews, projects, sprints, projectName, onRefresh, on
   const effectiveProjectId = projectId || projectList[0].id;
   const scopedProject = pid => (r => (r.projectId || 'default') === pid);
   const projectReviews = useMemo(() => activeReviews(reviews).filter(scopedProject(effectiveProjectId)), [reviews, effectiveProjectId]);
-  const owners = useMemo(() => [...new Set(projectReviews.map(r => r.assignee).filter(Boolean))], [projectReviews]);
-  const teamReviews = useMemo(() => assignee ? projectReviews.filter(r => r.assignee === assignee) : projectReviews, [projectReviews, assignee]);
+  const assigneesOf = r => [...new Set([r.assignee,...(Array.isArray(r.assignees) ? r.assignees : [])].filter(Boolean))];
+  const owners = useMemo(() => [...new Set(projectReviews.flatMap(assigneesOf))], [projectReviews]);
+  const teamReviews = useMemo(() => assignee ? projectReviews.filter(r => assigneesOf(r).includes(assignee)) : projectReviews, [projectReviews, assignee]);
   const projectSprints = useMemo(() => {
     const direct = sprints.filter(s => (s.projectId || 'default') === effectiveProjectId);
     return direct.length || projectList.length > 1 ? direct : sprints;
   }, [sprints, effectiveProjectId, projectList.length]);
   const burnSprintId = burnId || (projectSprints.find(s => s.status === 'active') || projectSprints[0] || {}).id || '';
   useEffect(() => {
-    if (!burnSprintId) { setBurn(null); return; }
+    setBurn(null); setBurnError('');
+    if (!burnSprintId) { setBurnLoading(false); return; }
     let cancelled = false;
     setBurnLoading(true);
-    reportsApi.burndown(burnSprintId).then(data => { if (!cancelled) { setBurn(data); setBurnLoading(false); } }).catch(() => { if (!cancelled) setBurnLoading(false); });
+    reportsApi.burndown(burnSprintId).then(data => { if (!cancelled) { setBurn(data); setBurnLoading(false); } }).catch(failure => { if (!cancelled) { setBurnLoading(false); setBurnError(failure.message); } });
     return () => { cancelled = true; };
-  }, [burnSprintId]);
+  }, [burnSprintId,burnRetry,updatedAt]);
   const velocity = useMemo(() => projectSprints.map(sprint => ({ sprint, ...sprintStats(teamReviews, sprint, today) })), [projectSprints, teamReviews]);
   const cfd = useMemo(() => projectSprints.map(sprint => {
     const items = sprintTasks(teamReviews, sprint);
@@ -160,7 +164,7 @@ export function Reports({ reviews, projects, sprints, projectName, onRefresh, on
       <div className="report-filters">
         <label>Burndown for: <AppSelect value={burnSprintId} options={reportBurnOptions} onChange={setBurnId} ariaLabel="Burndown Sprint"/></label>
       </div>
-      <div className="rail-card"><h2><TrendUp size={17}/> Sprint Burndown — {burn?.sprint?.name || ''}</h2><p>Remaining tasks per day vs ideal progress</p>{burnLoading ? <div className="empty-state"><Wave /> Loading burndown…</div> : burn && burn.total ? <><BurndownChart days={burn.days} /><div className="chart-legend"><span><i style={{ background: REPORT_COLORS.muted }}/>Ideal</span><span><i style={{ background: REPORT_COLORS.accent }}/>Remaining</span></div></> : <Empty text="No burndown data for this sprint." />}</div>
+      <div className="rail-card"><h2><TrendUp size={17}/> Sprint Burndown — {burn?.sprint?.name || ''}</h2><p>Remaining tasks per day vs ideal progress</p>{burnLoading ? <div className="empty-state"><Wave /> Loading burndown…</div> : burnError ? <div role="alert"><p className="form-error">{burnError}</p><button type="button" className="secondary-button" onClick={() => setBurnRetry(value => value + 1)}>Retry burndown</button></div> : burn && burn.total ? <><BurndownChart days={burn.days} /><div className="chart-legend"><span><i style={{ background: REPORT_COLORS.muted }}/>Ideal</span><span><i style={{ background: REPORT_COLORS.accent }}/>Remaining</span></div></> : <Empty text="No burndown data for this sprint." />}</div>
       <div className="report-section-head"><h2><Clock size={17}/> Sprint Reports ({projectSprints.length} sprints)</h2></div>
       {projectSprints.map(sprint => {
         const stats = sprintStats(teamReviews, sprint, today);

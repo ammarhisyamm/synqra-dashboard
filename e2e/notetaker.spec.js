@@ -20,12 +20,24 @@ test('core meeting notes remain usable while the meeting assistant is hidden',as
   await expect(page.getByRole('button',{name:'Online meeting',exact:true})).toHaveCount(0);
   await expect(page.getByRole('button',{name:'New meeting',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'New meeting',exact:true}).click();
+  await page.getByRole('button',{name:'Use Meeting notes',exact:true}).click();
   await expect(page.getByRole('textbox',{name:'Meeting title',exact:true})).toBeVisible();
   await expect(page.getByRole('textbox',{name:'Meeting notes',exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'Generate AI',exact:true})).toBeVisible();
   await expect(page.getByRole('heading',{name:'Notetaker & meeting workspace',exact:true})).toHaveCount(0);
-  await page.getByRole('button',{name:'Meetings',exact:true}).first().click();
+  await page.getByLabel('Meeting title',{exact:true}).fill('Persisted template meeting '+suffix);
+  await page.getByLabel('Meeting notes',{exact:true}).fill('## Decisions\n> Template guidance\nAgreed to verify the release.');
+  await page.getByRole('button',{name:'Save meeting',exact:true}).click();
+  await page.getByRole('button',{name:'View meetings',exact:true}).click();
   await expect(page.getByRole('button',{name:'New meeting',exact:true})).toBeVisible();
+  await page.reload();
+  const persisted=await page.evaluate(async title=>{
+    const response=await fetch('/api/bootstrap');
+    return (await response.json()).meetings.find(item=>item.title===title);
+  },'Persisted template meeting '+suffix);
+  expect(persisted?.templateId).toBe('general');
+  expect(persisted?.notes).toContain('Agreed to verify the release.');
+  await page.locator('.sidebar').getByRole('button',{name:'Meetings',exact:true}).click();
   expect(captureRequests).toBe(0);
   for(const width of [1440,768,375]) {
     await page.setViewportSize({width,height:900});

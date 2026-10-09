@@ -1,28 +1,27 @@
 import { localToday } from '../../lib/dates';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, CalendarBlank, Check, FileText, Lightbulb, MagicWand, ArrowCounterClockwise as RotateCcw, Sparkle, Target, User, Users, X } from '@phosphor-icons/react';
+import { ArrowLeft, CalendarBlank, Lightbulb, MagicWand, ArrowCounterClockwise as RotateCcw, Sparkle, X } from '@phosphor-icons/react';
 import { MeetingAiReview } from './MeetingAiReview';
 import { extractItemsLocally, generateActionItemsWithOrvix, hashNotes } from '../../api/ai';
 import { api } from '../../api/client';
 import { Wave } from '../Wave.jsx';
 import { TextField } from '../common/Field';
+import { MeetingTemplatePicker } from './MeetingTemplatePicker';
+import { meetingTemplate, templateNotes, meetingEvidence } from '../../lib/meeting-templates';
 import '../../workflow.css';
 
 const today = () => localToday();
 const draftStorageKey = (user, projectId) => `synqra-meeting-editor-draft:${user?.id || 'anonymous'}:${projectId || 'none'}`;
-const templates = [
-  { title: 'Blank Meeting', subtitle: 'Start from scratch', icon: FileText, notes: '' },
-  { title: 'Meeting Notes', subtitle: 'Standard meeting notes', icon: FileText, notes: 'Yesterday:\n\nToday:\n\nBlockers:\n' },
-  { title: 'Daily Standup', subtitle: 'Yesterday / Today / Blockers', icon: Target, notes: 'Yesterday:\n\nToday:\n\nBlockers:\n' },
-  { title: 'Sprint Planning', subtitle: 'Goal, stories, risks', icon: Target, notes: 'Goal:\n\nStories:\n\nRisks:\n' }
-];
 
 export function MeetingEditor({ projectId, user, team = [], onClose, onCreate, onToast }) {
-  const [phase, setPhase] = useState('writing');
+  const [phase, setPhase] = useState(() => {
+    try { const draft = JSON.parse(localStorage.getItem(draftStorageKey(user, projectId))); return draft?.title || draft?.notes ? 'writing' : 'templates'; }
+    catch { return 'templates'; }
+  });
   const [form, setForm] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(draftStorageKey(user, projectId)));
-      const base = saved?.title || saved?.notes ? { title: saved.title || '', date: saved.date || today(), notes: saved.notes || '', attendees: Array.isArray(saved.attendees) ? saved.attendees : [] } : { title: '', date: today(), notes: '', attendees: [] };
+      const base = saved?.title || saved?.notes ? { title: saved.title || '', date: saved.date || today(), notes: saved.notes || '', templateId: saved.templateId || '', attendees: Array.isArray(saved.attendees) ? saved.attendees : [] } : { title: '', date: today(), notes: '', templateId: '', attendees: [] };
       return base;
     } catch { return { title: '', date: today(), notes: '', attendees: [] }; }
   });
@@ -38,6 +37,9 @@ export function MeetingEditor({ projectId, user, team = [], onClose, onCreate, o
   const [aiError, setAiError] = useState('');
   const [saved, setSaved] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [savingMeeting, setSavingMeeting] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const evidence = meetingEvidence(form.notes);
 
   const update = (key, value) => {
     setForm(previous => ({ ...previous, [key]: value }));
@@ -45,12 +47,12 @@ export function MeetingEditor({ projectId, user, team = [], onClose, onCreate, o
   };
 
   const useTemplate = template => {
-    update('notes', template.notes);
-    if (!form.title) update('title', template.title === 'Blank Meeting' ? '' : template.title);
+    setForm(previous => ({ ...previous, notes: templateNotes(template), templateId: template.id, title: previous.title || (template.id === 'blank' ? '' : template.name) }));
+    setItems([]); setBrief(null); setGeneratedHash(''); setAiError(''); setSaved(false); setPhase('writing');
   };
 
   const generate = async () => {
-    if (!form.notes.trim()) {
+    if (!evidence) {
       onToast('Write some meeting notes first');
       return;
     }
@@ -63,7 +65,7 @@ export function MeetingEditor({ projectId, user, team = [], onClose, onCreate, o
     setGenerating(true);
     setAiError('');
     try {
-      const result = await generateActionItemsWithOrvix({ notes: form.notes });
+      const result = await generateActionItemsWithOrvix({ notes: evidence });
       const extracted = result?.items || [];
       if (!extracted.length) {
         onToast('No action items could be extracted. Try adding bullet points.');
@@ -80,7 +82,7 @@ export function MeetingEditor({ projectId, user, team = [], onClose, onCreate, o
     }
   };
   const useLocalExtraction = () => {
-    const extracted = extractItemsLocally(form.notes);
+    const extracted = extractItemsLocally(evidence);
     if (!extracted.length) {
       onToast('No action items could be extracted. Try adding bullet points.');
       return;
@@ -146,6 +148,15 @@ export function MeetingEditor({ projectId, user, team = [], onClose, onCreate, o
     catch (failure) { if (failure.failedItems) setItems(failure.failedItems.map(item => ({ ...item, keep: true }))); throw failure; }
     try { localStorage.removeItem(draftStorageKey(user, projectId)); } catch {}
   };
+  const saveMeeting = async () => {
+    if (savingMeeting || !form.title.trim() || !form.date) return;
+    setSavingMeeting(true); setSaveError('');
+    try { await create({ meeting: { ...form, ai: false }, items: [] }); }
+    catch (failure) { setSaveError(failure.message || 'Meeting could not be saved. Your notes are kept for retry.'); }
+    finally { setSavingMeeting(false); }
+  };
+
+  if (phase === 'templates') return <MeetingTemplatePicker currentId={form.templateId || 'general'} replacing={!!form.notes.trim()} onUse={useTemplate} onCancel={() => form.title || form.notes ? setPhase('writing') : onClose()}/>;
 
   if (phase === 'ai') {
     return (
@@ -175,11 +186,12 @@ export function MeetingEditor({ projectId, user, team = [], onClose, onCreate, o
             disabled={!form.title.trim()}
             onClick={saveDraft}
           >
-            Save
+            Save draft
           </button>
+          <button className="secondary-button" disabled={savingMeeting || generating || !form.title.trim() || !form.date} onClick={saveMeeting}>{savingMeeting ? 'Saving meeting…' : 'Save meeting'}</button>
           <button
             className="primary-button"
-            disabled={generating || !form.title.trim() || !form.notes.trim()}
+            disabled={savingMeeting || generating || !form.title.trim() || !form.date || !evidence}
             onClick={generate}
           >
             {generating ? (
@@ -198,6 +210,7 @@ export function MeetingEditor({ projectId, user, team = [], onClose, onCreate, o
       <div className="meeting-editor-heading">
         <input
           className="meeting-title-input field-input" aria-label="Meeting title"
+          maxLength={200}
           value={form.title}
           onChange={event => update('title', event.target.value)}
           placeholder="Untitled Meeting"
@@ -290,41 +303,21 @@ export function MeetingEditor({ projectId, user, team = [], onClose, onCreate, o
         )}
 
         <div className="editor-prompt">
+          <div className="meeting-template-context"><span>Template: {meetingTemplate(form.templateId)?.name || 'Custom notes'}</span><button type="button" className="secondary-button" disabled={generating || savingMeeting} onClick={() => setPhase('templates')}>Change template</button></div>
           <strong>Meeting notes</strong>
           <p>
-            Write decisions, discussions, and next steps below or pick a template to get started
+            Write decisions, discussions, and next steps below. Lines beginning with &gt; are guidance and are excluded from AI extraction.
           </p>
           <textarea
             value={form.notes}
             onChange={event => update('notes', event.target.value)}
             placeholder="Start writing your meeting notes… (e.g. Action: Aria to polish login UX by Friday)"
             rows="8" className="field-input" aria-label="Meeting notes"
+            maxLength={5000}
           />
         </div>
 
-        <div className="template-grid">
-          {templates.map(template => {
-            const Icon = template.icon;
-            return (
-              <button key={template.title} className="template-card" onClick={() => useTemplate(template)}>
-                <Icon size={18} />
-                <span>
-                  <strong>{template.title}</strong>
-                  <small>{template.subtitle}</small>
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="recently-used">
-          <span className="editor-label">
-            <Check size={13} /> Recently used
-          </span>
-          <button className="recent-template" onClick={() => useTemplate(templates[0])}>
-            <FileText size={14} /> Blank Meeting
-          </button>
-        </div>
+        {saveError && <p className="form-error" role="alert">{saveError}</p>}
 
         {aiError && (
           <div className="ai-error" role="alert">

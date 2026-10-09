@@ -16,7 +16,7 @@ export async function bootstrap(env, userId, requestedProjectId = null) {
   const allowedProjectIds = new Set(projects.map(item => item.id));
   const [reviews, meetings, spaces, workflowStatuses, sprints, metadata, unread, workload, report] = await env.DB.batch([
     scoped(`SELECT id, key, title, area, priority, stage, assignee, assignees, due, start_date AS startDate, description, status, submitted_by AS submittedBy, reporter, meeting_id AS meetingId, estimate_hours AS estimateHours, epic, feature, sprint, labels, project_id AS projectId, parent_id AS parentId, item_type AS itemType, sprint_id AS sprintId, created_at AS createdAt, updated_at AS updatedAt, archived FROM reviews WHERE ${scope("project_id")} ORDER BY created_at DESC`),
-    scoped(`SELECT id, title, date, ai, notes, project_id AS projectId, (SELECT COUNT(*) FROM reviews WHERE meeting_id = m.id AND archived = 0) AS itemCount, attendees FROM meetings m WHERE ${scope("m.project_id")} ORDER BY date DESC`),
+    scoped(`SELECT id, title, date, ai, notes, template_id AS templateId, project_id AS projectId, (SELECT COUNT(*) FROM reviews WHERE meeting_id = m.id AND archived = 0) AS itemCount, attendees FROM meetings m WHERE ${scope("m.project_id")} ORDER BY date DESC`),
     env.DB.prepare('SELECT id, name, key, description FROM spaces ORDER BY name'),
     scoped(`SELECT id, project_id AS projectId, name, color, position, is_terminal AS isTerminal FROM workflow_statuses WHERE ${scope("project_id")} ORDER BY project_id, position`),
     scoped(`SELECT id, project_id AS projectId, name, goal, start_date AS startDate, end_date AS endDate, status FROM sprints WHERE ${scope("project_id")} ORDER BY start_date DESC`),

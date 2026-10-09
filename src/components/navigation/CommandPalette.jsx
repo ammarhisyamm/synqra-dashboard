@@ -1,10 +1,10 @@
-import { CalendarPlus, ChatCircle, Gear, House, Kanban, MagnifyingGlass, Plus, ShieldCheck, Archive, Folder, Briefcase, CalendarBlank, ChartBar } from '@phosphor-icons/react';
+import { CalendarPlus, ChatCircle, Gear, House, Kanban, MagnifyingGlass, Plus, ShieldCheck, Archive, Folder, Briefcase, CalendarBlank, ChartBar, FileText } from '@phosphor-icons/react';
 import { Modal } from '../common/ui';
 import { statusFor } from '../../lib/status';
 import { useEffect, useState } from 'react';
 import { api } from '../../api/client';
 
-const navigation = [['Overview', House], ['My Work', Briefcase], ['Meetings', CalendarBlank], ['Reports', ChartBar], ['All Reviews', ChatCircle], ['Board', Kanban], ['Archive', Archive], ['Settings', Gear], ['Admin Management', ShieldCheck]];
+const navigation = [['Overview', House], ['My Work', Briefcase], ['Meetings', CalendarBlank], ['Project Docs', FileText], ['Reports', ChartBar], ['All Reviews', ChatCircle], ['Board', Kanban], ['Archive', Archive], ['Settings', Gear], ['Admin Management', ShieldCheck]];
 
 export function CommandPalette({ query, setQuery, reviews, projects, activeProjectId, readOnly = false, isAdmin = false, onClose, onNavigate, onNewMeeting, onNewReview, onOpenReview, onSelectProject }) {
   const term = query.trim().toLowerCase();

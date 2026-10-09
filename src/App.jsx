@@ -43,6 +43,7 @@ const SettingsPageEnhanced = lazyRoute(() => import('./components/settings/Setti
 const AdminPageEnhanced = lazyRoute(() => import('./components/admin/AdminPage'),'AdminPageEnhanced','src/components/admin/AdminPage.jsx');
 const ReviewModal = lazyRoute(() => import('./components/reviews/ReviewModal'),'ReviewModal','src/components/reviews/ReviewModal.jsx');
 const MyWork = lazyRoute(() => import('./components/work/MyWork'),'MyWork','src/components/work/MyWork.jsx');
+const ProjectDocs = lazyRoute(() => import('./components/documents/ProjectDocs'),'ProjectDocs','src/components/documents/ProjectDocs.jsx');
 
 function EmptyWorkspaceOnboarding({ user, project, onCreateProject, onFinish, setToast, onMembersChanged }) {
   const [projectName, setProjectName] = useState('');
@@ -475,7 +476,8 @@ export function App() {
       }
       meetingCreation.current = null;
       setPage('Meetings');
-      showSuccess(`${createdCount} task${createdCount === 1 ? '' : 's'} created`, failedCount ? 'The meeting was saved, but some selected tasks need to be retried.' : 'The meeting and its selected action items are now synced to the project.', 'View board', () => setPage('Board'));
+      if (!items.length) showSuccess('Meeting saved', 'Your notes are synced to this project. AI generation is optional.', 'View meetings', () => setPage('Meetings'));
+      else showSuccess(`${createdCount} task${createdCount === 1 ? '' : 's'} created`, 'The meeting and its selected action items are now synced to the project.', 'View board', () => setPage('Board'));
     } catch (error) { throw error; }
   };
 
@@ -510,10 +512,11 @@ export function App() {
       <ErrorPanel compact key={page}>
       <Suspense fallback={<div className="empty-state"><Wave /> Loading page…</div>}>
       {page === 'Overview' && <Dashboard readOnly={readOnly} reviews={activeReviews} meetings={activeMeetings} workload={activeWorkload} reportByStatus={activeReportByStatus} sprints={activeSprints} goTo={setPage} onSubmitReview={() => setModal('review')} onNewMeeting={openNewMeeting} />}
-      {page === 'My Work' && <MyWork readOnly={readOnly} reviews={activeReviews} user={user} onOpen={openReview} onCreateTask={() => setModal('review')} />}
+      {page === 'My Work' && <MyWork readOnly={readOnly} reviews={data.reviews || []} projects={data.projects || []} activeProjectName={data.project?.name} user={user} onOpen={openReview} onCreateTask={() => setModal('review')} />}
+      {page === 'Project Docs' && <ProjectDocs key={activeProjectId} projectId={activeProjectId} user={user} readOnly={readOnly} metadata={(data.metadata || []).filter(item => item.projectId === activeProjectId)} sprints={activeSprints} requestConfirm={opts => setDialog(opts)}/>}
       {page === 'All Reviews' && <Reviews readOnly={readOnly} user={user} reviews={activeReviews} query={query} setQuery={setQuery} updateReview={updateReview} archiveReview={archiveReview} setModal={setModal} onOpen={openReview} teamList={team} sync={{ saving: savingField, saved: savedField, failed: failedField }} onRetry={failed => { setFailedField(null); updateReview(failed.id, failed.patch, failed.field); }} />}
       {page === 'Meetings' && <Meetings key={activeProjectId} readOnly={readOnly} isAdmin={['admin','super_admin'].includes(user.role)} meetings={activeMeetings} reviews={activeReviews} addMeeting={addMeeting} addReview={addReview} onMeetingUpdated={saved=>setData(previous=>({...previous,meetings:previous.meetings.map(item=>item.id===saved.id?{...item,...saved}:item)}))} onDeleteMeeting={deleteMeeting} setToast={setToast} setModal={setModal} onNewMeeting={openNewMeeting} onTasksCreated={count => showSuccess(`${count} review items created`, 'Action items from the meeting notes are now on the board.', 'View board', () => setPage('Board'))} onOpen={openReview} />}
-      {page === 'Meeting Editor' && <MeetingEditor projectId={activeProjectId} user={user} team={team} onClose={() => setPage('Meetings')} onToast={setToast} onCreate={createMeetingFromEditor} />}
+      {page === 'Meeting Editor' && <MeetingEditor key={activeProjectId} projectId={activeProjectId} user={user} team={team} onClose={() => setPage('Meetings')} onToast={setToast} onCreate={createMeetingFromEditor} />}
       {page === 'Board' && <KanbanWorkspace readOnly={readOnly} project={data.project} team={team} reviews={activeReviews} sprints={activeSprints} metadata={(data.metadata || []).filter(item => !item.projectId || item.projectId === activeProjectId)} projectId={activeProjectId} updateReview={updateReview} createSprint={addSprint} updateSprint={updateSprint} refreshMetadata={refreshMetadata} setModal={setModal} onOpen={openReview} requestConfirm={opts => setDialog(opts)} onToast={setToast} onProjectClick={() => setProjectOpen(!projectOpen)} />}
       {page === 'Archive' && <ArchivePage readOnly={readOnly} reviews={(data.reviews || []).filter(r => r.archived && r.projectId === activeProjectId)} restoreReview={restoreReview} goTo={setPage} />}
       {page === 'Reports' && <Reports reviews={data.reviews} projects={data.projects || []} sprints={data.sprints || []} projectName={data.project?.name || currentProject.name} onRefresh={refreshAll} onOpen={openReview} updatedAt={lastSync} />}

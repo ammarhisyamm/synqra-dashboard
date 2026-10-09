@@ -129,6 +129,7 @@ for (const width of [1440, 768, 375]) {
     await expect(page.locator('.meeting-action-table').getByText('Major', { exact:true })).toBeVisible();
     await page.screenshot({ path:`test-results/ui-audit/${width}-meeting-long-content.png` });
     await page.getByRole('button', { name:'New meeting', exact:true }).click();
+    await page.getByRole('button',{name:'Use Meeting notes',exact:true}).click();
     await page.getByLabel('Meeting title', { exact:true }).fill('Audit meeting');
     await page.getByLabel('Meeting notes', { exact:true }).fill('Improve login layout.');
     await page.screenshot({ path:`test-results/ui-audit/${width}-meeting-editor.png` });
@@ -548,6 +549,7 @@ test('generated AI preview supports assignee, priority and status before creatio
   await navigate(page, 'Meetings');
   await expect(page.locator('.meeting-action-table tbody tr')).toHaveCount(1); // No duplicated note drafts.
   await page.getByRole('button', { name: 'New meeting' }).click();
+  await page.getByRole('button',{name:'Use Meeting notes',exact:true}).click();
   await page.getByLabel('Meeting title', { exact: true }).fill('QA generated meeting');
   await page.getByLabel('Meeting notes', { exact: true }).fill('Improve login layout and assign it to QA User.');
   await page.getByRole('button', { name: 'Generate AI' }).click();
@@ -647,6 +649,7 @@ test('partial AI task failure keeps only failed items and retry never duplicates
   });
   await navigate(page, 'Meetings');
   await page.getByRole('button', { name:'New meeting' }).click();
+  await page.getByRole('button',{name:'Use Meeting notes',exact:true}).click();
   await page.getByLabel('Meeting title', { exact:true }).fill('Retry meeting');
   await page.getByLabel('Meeting notes', { exact:true }).fill('First task and retry task');
   await page.getByRole('button', { name:'Generate AI' }).click();

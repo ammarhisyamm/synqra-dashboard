@@ -1,6 +1,6 @@
 import { json, id, readBody, safeText } from './utils.js';
 
-export const releaseInfo = env => ({ release:env.RELEASE_SHA || 'development', environment:env.APP_ENV || 'development', schema:17 });
+export const releaseInfo = env => ({ release:env.RELEASE_SHA || 'development', environment:env.APP_ENV || 'development', schema:18 });
 export const cleanupStatement = (env, key, delay = 0) => env.DB.prepare("INSERT INTO file_cleanup(object_key,next_attempt) VALUES(?,datetime('now',?)) ON CONFLICT(object_key) DO UPDATE SET next_attempt=excluded.next_attempt").bind(key,`+${delay} seconds`);
 
 export async function preserveAttachment(env,key) {

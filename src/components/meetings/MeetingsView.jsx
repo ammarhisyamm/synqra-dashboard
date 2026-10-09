@@ -3,6 +3,7 @@ import { ArrowRight, CalendarBlank as CalendarDays, CalendarPlus, CheckCircle as
 import { AREAS } from '../../constants/workflow';
 import { localToday, dateLabel, groupDateLabel, shortDate } from '../../lib/dates';
 import { statusFor, extractNotes } from '../../lib/helpers';
+import { meetingEvidence } from '../../lib/meeting-templates';
 import { MEETING_ASSISTANT_ENABLED } from '../../lib/features';
 import { PageHeading, Empty, DatePicker, Modal, Priority, StatusPill } from '../common/ui';
 import { TextField, TextAreaField } from '../common/Field';
@@ -22,7 +23,7 @@ export function Meetings({ readOnly = false, isAdmin = false, meetings = [], rev
   const [onlineOpen, setOnlineOpen] = useState(false);
   useEffect(() => {
     const existing = reviews.some(item => item.meetingId === meeting?.id);
-    setDrafts(meeting && !existing && !readOnly ? extractNotes(meeting.notes || '') : []);
+    setDrafts(meeting && !existing && !readOnly ? extractNotes(meetingEvidence(meeting.notes || '')) : []);
     setTaskError('');
   }, [meeting?.id, readOnly]);
   useEffect(() => { setNotesOpen(false); }, [meeting?.id, readOnly]);

@@ -35,7 +35,7 @@ try {
   // Integration suites share one disposable SQLite runtime; serialize writers.
   await run(['--test','--test-concurrency=1'],env);
   await run(['node_modules/@playwright/test/cli.js','test','e2e/real-worker-flow.spec.js','e2e/notetaker.spec.js','--project=chromium'],env);
-  await run(['node_modules/@playwright/test/cli.js','test','e2e/core-flow.spec.js','e2e/ui-audit.spec.js','e2e/office-settings.spec.js','e2e/recovery.spec.js','e2e/notetaker.spec.js'],{...env,E2E_REAL_WORKER:'',E2E_CROSS_BROWSER:'1'});
+  await run(['node_modules/@playwright/test/cli.js','test','e2e/core-flow.spec.js','e2e/ui-audit.spec.js','e2e/office-settings.spec.js','e2e/recovery.spec.js','e2e/notetaker.spec.js','e2e/project-knowledge.spec.js'],{...env,E2E_REAL_WORKER:'',E2E_CROSS_BROWSER:'1'});
   await run(['scripts/verify-release.mjs',base]);
   // Real export/import proof, against a second disposable local database.
   const sql=directory+'/restore.sql';
@@ -55,7 +55,7 @@ try {
   assert.deepEqual(original,decrypted,'Encrypted export differs after decryption');
   await writeFile(sql,decrypted,{mode:0o600});
   await run([cli,'d1','execute','synqra-dashboard-data','--local','--persist-to',directory+'/restored','--file',sql]);
-  const query="SELECT COUNT(*) AS users FROM users; SELECT COUNT(*) AS receipts FROM creation_receipts; SELECT COUNT(*) AS tasks FROM reviews;";
+  const query="SELECT COUNT(*) AS users FROM users; SELECT COUNT(*) AS receipts FROM creation_receipts; SELECT COUNT(*) AS tasks FROM reviews; SELECT COUNT(*) AS documents FROM project_documents;";
   const counts=location=>JSON.parse(execFileSync(node,[cli,'d1','execute','synqra-dashboard-data','--local','--persist-to',location,'--command',query,'--json'],{ encoding:'utf8' })).map(result=>result.results);
   assert.deepEqual(counts(database),counts(directory+'/restored'),'Restored row counts differ');
   console.log('Local D1 restore proof passed. Evidence directory: '+directory);

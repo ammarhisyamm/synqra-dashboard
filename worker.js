@@ -10,6 +10,7 @@ import { calendarDate, dateRange } from './worker/validation.js';
 import { handleSecurity, verifyMfa, handlePasswordReset } from './worker/security.js';
 import { handleOperations, releaseInfo, cleanupStatement, drainFileCleanup, maintenance, recordOperationalEvent, notifyMentions } from './worker/operations.js';
 import { handleSearch } from './worker/search.js';
+import { handleDocuments } from './worker/documents.js';
 import { creationReceipt } from './worker/idempotency.js';
 import { handleNotetaker, handlePublicMeeting, syncNotetakers, activeProjectCapture } from './worker/notetaker.js';
 
@@ -150,6 +151,8 @@ async function routeApi(request, env) {
   if (notetakerResponse) return notetakerResponse;
   const officeResponse = await handleSecurity(request,env,user) || await handlePasswordReset(request,env,user) || await handleOperations(request,env,user) || await handleSearch(request,env,user);
   if (officeResponse) return officeResponse;
+  const documentsResponse = await handleDocuments(request,env,user);
+  if (documentsResponse) return documentsResponse;
   const peopleResponse = await handleProjectPeople(request, env, user);
   if (peopleResponse) return peopleResponse;
   if (request.method === 'POST' && path === '/api/ai/generate') {
@@ -264,6 +267,7 @@ async function routeApi(request, env) {
       env.DB.prepare('DELETE FROM review_attachments WHERE review_id IN (SELECT id FROM reviews WHERE project_id = ?)').bind(projectMatch[1]),
       env.DB.prepare('DELETE FROM reviews WHERE project_id = ?').bind(projectMatch[1]),
       env.DB.prepare('DELETE FROM meetings WHERE project_id = ?').bind(projectMatch[1]),
+      env.DB.prepare('DELETE FROM project_documents WHERE project_id = ?').bind(projectMatch[1]),
       env.DB.prepare('DELETE FROM workflow_statuses WHERE project_id = ?').bind(projectMatch[1]),
       env.DB.prepare('DELETE FROM sprints WHERE project_id = ?').bind(projectMatch[1]),
       env.DB.prepare('DELETE FROM projects WHERE id = ?').bind(projectMatch[1])
@@ -594,22 +598,24 @@ async function routeApi(request, env) {
     let date;
     try { date = calendarDate(body.date, 'Meeting date', true); } catch (error) { return json({ error: error.message }, 400); }
     if (!title || !date) return json({ error: 'Meeting title and date are required.' }, 400);
-    const meeting = { id: body.id && /^[a-zA-Z0-9-]{8,80}$/.test(body.id) ? body.id : id(), title, date, projectId: safeText(body.projectId, 80) || 'default', notes: safeText(body.notes, 5000), ai: body.ai ? 1 : 0, itemCount: 0, attendees: Array.isArray(body.attendees) ? body.attendees.map(x => safeText(x, 120)).filter(Boolean).slice(0, 30) : [] };
+    if (body.templateId != null && (typeof body.templateId !== 'string' || !/^[a-z0-9-]{0,80}$/.test(body.templateId))) return json({error:'Invalid meeting template.'},400);
+    if (typeof body.notes === 'string' && body.notes.length > 5000) return json({error:'Meeting notes must be at most 5,000 characters.'},400);
+    const meeting = { id: body.id && /^[a-zA-Z0-9-]{8,80}$/.test(body.id) ? body.id : id(), title, date, templateId:body.templateId || '', projectId: safeText(body.projectId, 80) || 'default', notes: safeText(body.notes, 5000), ai: body.ai ? 1 : 0, itemCount: 0, attendees: Array.isArray(body.attendees) ? body.attendees.map(x => safeText(x, 120)).filter(Boolean).slice(0, 30) : [] };
     if (!await requireProject(env, user, meeting.projectId, 'edit')) return accessDenied();
     if (!await env.DB.prepare('SELECT id FROM projects WHERE id = ?').bind(meeting.projectId).first()) return json({ error: 'Project not found.' }, 400);
     const receipt = await creationReceipt(env,user,'meeting',meeting.id,meeting);
     if (receipt.response) return receipt.response;
     if (receipt.replay) {
-      const saved = await env.DB.prepare('SELECT id,title,date,ai,notes,project_id AS projectId,attendees FROM meetings WHERE id=?').bind(meeting.id).first();
+      const saved = await env.DB.prepare('SELECT id,title,date,ai,notes,template_id AS templateId,project_id AS projectId,attendees FROM meetings WHERE id=?').bind(meeting.id).first();
       return saved ? json({ ...saved,ai:!!saved.ai,attendees:parseJson(saved.attendees,[]) },201) : json({ error:'This meeting has been deleted. Create it with a new ID.' },410);
     }
     try {
-    await env.DB.batch([receipt.statement,env.DB.prepare('INSERT INTO meetings (id, project_id, title, date, ai, notes, item_count, attendees) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').bind(meeting.id, meeting.projectId, meeting.title, meeting.date, meeting.ai, meeting.notes, meeting.itemCount, JSON.stringify(meeting.attendees))]);
+    await env.DB.batch([receipt.statement,env.DB.prepare('INSERT INTO meetings (id, project_id, title, date, ai, notes, item_count, attendees, template_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(meeting.id, meeting.projectId, meeting.title, meeting.date, meeting.ai, meeting.notes, meeting.itemCount, JSON.stringify(meeting.attendees),meeting.templateId)]);
     } catch(error) {
       const raced=await creationReceipt(env,user,'meeting',meeting.id,meeting);
       if(raced.response)return raced.response;
       if(!raced.replay)throw error;
-      const saved=await env.DB.prepare('SELECT id,title,date,ai,notes,project_id AS projectId,attendees FROM meetings WHERE id=?').bind(meeting.id).first();
+      const saved=await env.DB.prepare('SELECT id,title,date,ai,notes,template_id AS templateId,project_id AS projectId,attendees FROM meetings WHERE id=?').bind(meeting.id).first();
       return saved?json({...saved,ai:!!saved.ai,attendees:parseJson(saved.attendees,[])},201):json({error:'This meeting was deleted. Use a new creation ID.'},410);
     }
     await notifyUsers(env, user.id, { projectId: meeting.projectId, type: 'meeting_created', title: 'New meeting scheduled', body: `"${meeting.title}" on ${meeting.date}` });
@@ -626,12 +632,13 @@ async function routeApi(request, env) {
     if ('title' in body) { patch.title = safeText(body.title, 200); if (!patch.title) return json({ error: 'Meeting title is required.' }, 400); }
     if ('date' in body) { try { patch.date = calendarDate(body.date, 'Meeting date', true); } catch (error) { return json({ error: error.message }, 400); } }
     if ('notes' in body) patch.notes = safeText(body.notes, 5000);
+    if ('templateId' in body) { if (typeof body.templateId !== 'string' || !/^[a-z0-9-]{0,80}$/.test(body.templateId)) return json({error:'Invalid meeting template.'},400); patch.template_id=body.templateId; }
     if ('ai' in body) patch.ai = body.ai ? 1 : 0;
     if ('attendees' in body) patch.attendees = JSON.stringify(Array.isArray(body.attendees) ? body.attendees.map(x => safeText(x, 120)).filter(Boolean).slice(0, 30) : []);
     const keys = Object.keys(patch); if (!keys.length) return json({ error: 'No changes supplied.' }, 400);
     const result = await env.DB.prepare(`UPDATE meetings SET ${keys.map(key => `${key} = ?`).join(', ')} WHERE id = ?`).bind(...keys.map(key => patch[key]), meetingMatch[1]).run();
     if (!result.meta.changes) return json({ error: 'Meeting not found.' }, 404);
-    const saved = await env.DB.prepare('SELECT id, title, date, ai, notes, project_id AS projectId, (SELECT COUNT(*) FROM reviews WHERE meeting_id = m.id AND archived = 0) AS itemCount, attendees FROM meetings m WHERE id = ?').bind(meetingMatch[1]).first();
+    const saved = await env.DB.prepare('SELECT id, title, date, ai, notes, template_id AS templateId, project_id AS projectId, (SELECT COUNT(*) FROM reviews WHERE meeting_id = m.id AND archived = 0) AS itemCount, attendees FROM meetings m WHERE id = ?').bind(meetingMatch[1]).first();
     await notifyUsers(env, user.id, { projectId: saved.projectId, type: 'meeting_updated', title: 'Meeting updated', body: user.name + ' updated "' + (saved?.title || 'a meeting') + '"' });
     return json({ ...saved, ai: Boolean(saved.ai), attendees: parseJson(saved.attendees, []) });
   }
