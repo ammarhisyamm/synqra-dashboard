@@ -14,7 +14,7 @@ const buttonVariants = cva(
         destructive: 'border border-[#efc4c4] bg-card text-destructive hover:bg-[#fff1f1]',
       },
       size: {
-        sm: 'min-h-8 rounded-[6px] px-2.5 text-xs',
+        sm: 'min-h-8 rounded-[6px] px-3 text-xs',
         default: 'min-h-9',
         icon: 'size-9 p-0',
       },
@@ -24,7 +24,7 @@ const buttonVariants = cva(
 );
 
 const Button = React.forwardRef(({ className, variant, size, ...props }, ref) => (
-  <button ref={ref} className={cn(buttonVariants({ variant, size, className }))} {...props} />
+  <button ref={ref} data-slot="button" className={cn(buttonVariants({ variant, size, className }))} {...props} />
 ));
 Button.displayName = 'Button';
 

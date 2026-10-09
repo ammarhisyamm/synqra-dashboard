@@ -140,7 +140,7 @@ export function MeetingAiReview({ user, team = [], meeting, items, brief, setIte
                       <tbody>
                         {groupItems.map(item => (
                           <tr key={item.id} className={item.keep ? '' : 'discarded'}>
-                            <td>
+                            <td data-label="Task name">
                               <div className="ai-task-check">
                                 <input type="checkbox" checked={item.keep} onChange={event => update(item.id, 'keep', event.target.checked)} aria-label={`Include ${item.title}`} />
                                 {editingId === item.id ? (
@@ -157,7 +157,7 @@ export function MeetingAiReview({ user, team = [], meeting, items, brief, setIte
                                 )}
                               </div>
                             </td>
-                            <td>
+                            <td data-label="Assignee">
                               <AppSelect
                                 className="inline ai-assignee-inline"
                                 value={item.assignee || ''}
@@ -166,7 +166,7 @@ export function MeetingAiReview({ user, team = [], meeting, items, brief, setIte
                                 ariaLabel={`Assignee of ${item.title}`}
                               />
                             </td>
-                            <td>
+                            <td data-label="Priority">
                               <AppSelect
                                 className={`inline ai-priority-inline priority-${String(item.priority || 'Major').toLowerCase()}`}
                                 value={item.priority || 'Major'}
@@ -175,7 +175,7 @@ export function MeetingAiReview({ user, team = [], meeting, items, brief, setIte
                                 ariaLabel={`Priority of ${item.title}`}
                               />
                             </td>
-                            <td>
+                            <td data-label="Status">
                               <AppSelect
                                 className="inline status-inline"
                                 value={item.status || 'Open'}
@@ -184,10 +184,10 @@ export function MeetingAiReview({ user, team = [], meeting, items, brief, setIte
                                 ariaLabel={`Status of ${item.title}`}
                               />
                             </td>
-                            <td>
+                            <td data-label="Due date">
                               <input className="ai-due-inline" type="date" value={item.due || ''} onChange={event => update(item.id, 'due', event.target.value)} aria-label={`Due date of ${item.title}`} />
                             </td>
-                            <td>
+                            <td data-label="Actions">
                               <button
                                 className="ai-delete small"
                                 onClick={() => (item.keep ? remove(item.id) : permanentlyDelete(item.id))}

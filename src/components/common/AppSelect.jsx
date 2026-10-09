@@ -20,9 +20,9 @@ export function AppSelect({ value, options = [], onChange, ariaLabel, placeholde
         <SelectPrimitive.Trigger type="button" className={cn('app-select-trigger ui-focus-ring', open && 'open')} aria-label={ariaLabel}>
           {prefix}
           {Icon && <Icon size={15} className="app-select-icon" />}
-          <SelectPrimitive.Value placeholder={placeholder}>{current?.label ?? (value || placeholder)}</SelectPrimitive.Value>
+          <span className="app-select-label"><SelectPrimitive.Value placeholder={placeholder}>{current?.label ?? (value || placeholder)}</SelectPrimitive.Value></span>
           {badge !== undefined && badge !== null && <span className="app-select-badge">{badge}</span>}
-          <SelectPrimitive.Icon><ChevronDown size={14} className={`app-select-chevron ${open ? 'rotated' : ''}`} /></SelectPrimitive.Icon>
+          <SelectPrimitive.Icon className="app-select-indicator"><ChevronDown size={14} className={`app-select-chevron ${open ? 'rotated' : ''}`} /></SelectPrimitive.Icon>
         </SelectPrimitive.Trigger>
         <SelectPrimitive.Portal>
           <SelectPrimitive.Content position="popper" align="start" sideOffset={8} collisionPadding={16} className="app-select-menu" aria-label={ariaLabel}>
@@ -30,8 +30,8 @@ export function AppSelect({ value, options = [], onChange, ariaLabel, placeholde
               {items.length === 0 ? <span className="app-select-empty">No options</span> : items.map(item => {
                 const itemValue = String(item.value) === '' ? emptyValue : String(item.value);
                 return <SelectPrimitive.Item key={itemValue} value={itemValue} className={cn('app-select-item', itemValue === selectedValue && 'selected')}>
-                  <SelectPrimitive.ItemText>{item.label}</SelectPrimitive.ItemText>
-                  <SelectPrimitive.ItemIndicator><Check size={14} /></SelectPrimitive.ItemIndicator>
+                  <span className="app-select-option-label"><SelectPrimitive.ItemText>{item.label}</SelectPrimitive.ItemText></span>
+                  <SelectPrimitive.ItemIndicator className="app-select-item-indicator"><Check size={14} /></SelectPrimitive.ItemIndicator>
                 </SelectPrimitive.Item>;
               })}
             </SelectPrimitive.Viewport>

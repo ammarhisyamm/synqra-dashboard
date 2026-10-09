@@ -74,6 +74,85 @@ async function noOverflow(page) {
   await expect(page.getByText('Something went wrong', { exact: true })).toHaveCount(0);
 }
 
+for (const width of [1440, 768, 375]) {
+  test(`shared UI contract survives route order, long labels and keyboard at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height:900 });
+    const state = await fixture(page);
+    state.data.meetings[0].title = 'Weekly planning with a very long meeting name and cross-functional project stakeholders';
+    await page.reload();
+    await navigate(page, 'All Reviews');
+    const exportButton = page.getByRole('button', { name:'Export CSV', exact:true });
+    const createButton = page.getByRole('button', { name:'Submit Review', exact:true });
+    const a = await exportButton.boundingBox(), b = await createButton.boundingBox();
+    const separation = Math.abs(a.y - b.y) < 2 ? b.x - a.x - a.width : b.y - a.y - a.height;
+    expect(separation).toBeGreaterThanOrEqual(8);
+    await createButton.click();
+    const modal = page.getByRole('dialog', { name:'Create task' });
+    const controlStyle = element => {
+      const style = getComputedStyle(element);
+      return { font:style.fontFamily, size:style.fontSize, weight:style.fontWeight, height:element.getBoundingClientRect().height };
+    };
+    const firstStyle = await modal.getByLabel('Title', { exact:true }).evaluate(controlStyle);
+    expect(firstStyle).toMatchObject({ size:'13px', weight:'400', height:40 });
+    const contrast = await modal.getByLabel('Title', { exact:true }).evaluate(element => {
+      const luminance = color => {
+        const channels = color.match(/[\d.]+/g).slice(0,3).map(Number).map(value=>value/255).map(value=>value<=.04045 ? value/12.92 : ((value+.055)/1.055)**2.4);
+        return channels.reduce((sum,value,index)=>sum+value*[.2126,.7152,.0722][index],0);
+      };
+      const style = getComputedStyle(element);
+      const placeholder = getComputedStyle(element,'::placeholder');
+      const bg = luminance(style.backgroundColor), fg = luminance(placeholder.color);
+      return (Math.max(bg,fg)+.05)/(Math.min(bg,fg)+.05);
+    });
+    expect(contrast).toBeGreaterThanOrEqual(4.5);
+    expect(await modal.locator('form').evaluate(el=>getComputedStyle(el).rowGap)).toBe('16px');
+    await modal.getByRole('combobox', { name:'Status', exact:true }).click();
+    const menu = page.getByRole('listbox');
+    expect((await menu.boundingBox()).width).toBeGreaterThanOrEqual(160);
+    await page.getByRole('option', { name:'In Progress', exact:true }).click();
+    await expect(modal.locator('.app-select-label').first()).toHaveText('In Progress');
+    await modal.getByRole('combobox', { name:'Related meeting', exact:true }).click();
+    const longOption = page.getByRole('option', { name:state.data.meetings[0].title, exact:true });
+    await expect(longOption).toBeVisible();
+    expect(await longOption.evaluate(el=>el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+    await longOption.click();
+    await page.screenshot({ path:`test-results/ui-audit/${width}-create-task.png` });
+    await page.keyboard.press('Escape');
+
+    await navigate(page, 'Meetings');
+    const meetingButton = page.locator('.meeting-card-main').first();
+    await meetingButton.focus();
+    await page.keyboard.press('Enter');
+    await expect(meetingButton).toHaveAttribute('aria-pressed','true');
+    const tableWrap = page.locator('.meeting-action-table-wrap');
+    expect(await tableWrap.evaluate(el=>el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+    await expect(page.locator('.meeting-action-table').getByText('Major', { exact:true })).toBeVisible();
+    await page.screenshot({ path:`test-results/ui-audit/${width}-meeting-long-content.png` });
+    await page.getByRole('button', { name:'New meeting', exact:true }).click();
+    await page.getByLabel('Meeting title', { exact:true }).fill('Audit meeting');
+    await page.getByLabel('Meeting notes', { exact:true }).fill('Improve login layout.');
+    await page.screenshot({ path:`test-results/ui-audit/${width}-meeting-editor.png` });
+    await page.getByRole('button', { name:'Generate AI', exact:true }).click();
+    await expect(page.getByRole('heading', { name:'AI Review', exact:true })).toBeVisible();
+    // All four properties must remain editable without horizontal scrolling.
+    for (const [field,value] of [['Priority','Minor'],['Status','Review'],['Assignee','QA User']]) {
+      const trigger = page.getByRole('combobox', { name:`${field} of Improve login`, exact:true });
+      await expect(trigger).toBeVisible();
+      expect((await trigger.boundingBox()).x + (await trigger.boundingBox()).width).toBeLessThanOrEqual(width);
+      await trigger.click();
+      await page.getByRole('option', { name:value, exact:true }).click();
+    }
+    await expect(page.getByLabel('Due date of Improve login', { exact:true })).toBeVisible();
+    await page.screenshot({ path:`test-results/ui-audit/${width}-AI-review.png` });
+    await navigate(page, 'All Reviews');
+    await createButton.click();
+    expect(await modal.getByLabel('Title', { exact:true }).evaluate(controlStyle)).toEqual(firstStyle);
+    await page.keyboard.press('Escape');
+    await noOverflow(page);
+    expect(state.errors).toEqual([]);
+  });
+}
+
 test('detail before Board: aligned people menu, keyboard Escape, saved estimate and metadata', async ({ page }) => {
   const state = await fixture(page);
   await openDetail(page);
@@ -315,7 +394,18 @@ for (const width of [1440, 768, 375]) {
     for (const name of ['My Work', 'All Reviews', 'Meetings', 'Reports', 'Archive', 'Settings', 'Admin Management', 'Board']) {
       await navigate(page, name);
       await expect(page.locator('.page').first()).toBeVisible();
+      const heading = page.locator('.page-heading');
+      if (await heading.count()) expect((await heading.boundingBox()).height).toBeLessThan(200);
       await noOverflow(page);
+      if (width <= 820 && ['Reports','Admin Management'].includes(name)) {
+        const cells = await page.locator('.responsive-record-table td[data-label]').evaluateAll(elements=>elements.map(el=>({ label:el.dataset.label,left:el.getBoundingClientRect().left,right:el.getBoundingClientRect().right,width:el.getBoundingClientRect().width })));
+        expect(cells.length).toBeGreaterThan(0);
+        for (const cell of cells) {
+          expect(cell.width, `${name}: ${cell.label} has space`).toBeGreaterThan(0);
+          expect(cell.left, `${name}: ${cell.label} left edge`).toBeGreaterThanOrEqual(0);
+          expect(cell.right, `${name}: ${cell.label} right edge`).toBeLessThanOrEqual(width+1);
+        }
+      }
       await page.screenshot({ path: `test-results/ui-audit/${width}-${name.replaceAll(' ', '-')}.png`, fullPage: true });
     }
     await page.locator('.kanban-view-tabs').getByRole('button', { name: 'List', exact: true }).click();
@@ -337,6 +427,27 @@ for (const width of [1440, 768, 375]) {
     expect(state.errors).toEqual([]);
   });
 }
+
+test('mobile admin retains role and account actions, with keyboard-accessible confirmation', async ({ page }) => {
+  await page.setViewportSize({ width:375, height:900 });
+  const state = await fixture(page);
+  await page.route('**/api/admin/users', route=>route.fulfill({ contentType:'application/json', body:JSON.stringify({ users:[user,{ id:'qa-member',name:'Long member name',email:'member@example.test',role:'member' }] }) }));
+  await navigate(page,'Admin Management');
+  await expect(page.locator('td[data-label="Role"]').first()).toBeVisible();
+  const roleBox = await page.locator('td[data-label="Role"]').first().boundingBox();
+  expect(roleBox.x + roleBox.width).toBeLessThanOrEqual(375);
+  const promote = page.getByRole('button',{ name:'Promote',exact:true });
+  await expect(promote).toBeVisible();
+  const box = await promote.boundingBox();
+  expect(box.x + box.width).toBeLessThanOrEqual(375);
+  await promote.focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(promote).toBeFocused();
+  await noOverflow(page);
+  expect(state.errors).toEqual([]);
+});
 
 test('viewer can browse and filter, but task editing and creation are disabled', async ({ page }) => {
   await fixture(page, { readOnly:true });

@@ -9,7 +9,7 @@ import { metadataApi } from '../../api/metadata';
 import { AppSelect } from '../common/AppSelect';
 import { MultiCheckSelect, AssigneeOption, PriorityOption } from '../common/MultiCheckSelect';
 import { TextField } from '../common/Field';
-import { Modal } from '../common/ui';
+import { Modal, Priority } from '../common/ui';
 import './kanban-workspace.css';
 import './metadata.css';
 
@@ -285,7 +285,7 @@ export function KanbanWorkspace({ readOnly = false, project, team = [], reviews,
       </div>
     </div>
 
-    {view === 'board' && <div className="kanban-board-grid">{STAGES.map(stage => <section className="kanban-stage" key={stage} {...drop(stage)}><header><strong>{stage}</strong><span>{filtered.filter(task => task.stage === stage).length}</span></header>{filtered.filter(task => task.stage === stage).map(task => <article className="kanban-work-card" key={task.id} draggable={!readOnly} onDragStart={() => setDragId(task.id)} onDragEnd={() => setDragId(null)} onClick={() => onOpen(task)}><div><strong>{task.title}</strong><small>{task.key || 'TASK'} · {task.area}</small></div><TaskMeta task={task}/><footer><span className="task-priority-dot"/><small>{task.priority}</small><span className="task-avatar">{task.assignee ? task.assignee.slice(0, 1).toUpperCase() : 'U'}</span></footer></article>)}<button disabled={readOnly} className="kanban-add-card" onClick={() => setModal('review')}><Plus size={15}/> Add task</button></section>)}</div>}
+    {view === 'board' && <div className="kanban-board-grid">{STAGES.map(stage => <section className="kanban-stage" key={stage} {...drop(stage)}><header><strong>{stage}</strong><span>{filtered.filter(task => task.stage === stage).length}</span></header>{filtered.filter(task => task.stage === stage).map(task => <article className="kanban-work-card ui-focus-ring" key={task.id} role="button" tabIndex={0} aria-label={`Open task ${task.title}`} onKeyDown={event => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onOpen(task); } }} draggable={!readOnly} onDragStart={() => setDragId(task.id)} onDragEnd={() => setDragId(null)} onClick={() => onOpen(task)}><div><strong>{task.title}</strong><small className="kanban-card-meta"><span>{task.key || 'TASK'}</span><span aria-hidden="true">·</span><span>{task.area}</span></small></div><TaskMeta task={task}/><footer><Priority value={task.priority || 'Minor'}/><span className="task-avatar">{task.assignee ? task.assignee.slice(0, 1).toUpperCase() : 'U'}</span></footer></article>)}<button disabled={readOnly} className="kanban-add-card" onClick={() => setModal('review')}><Plus size={15}/> Add task</button></section>)}</div>}
     {view === 'list' && <div className="kanban-list-view">{STAGES.map(stage => <section key={stage}><header><strong>{stage}</strong><span>{filtered.filter(task => task.stage === stage).length}</span></header>{filtered.filter(task => task.stage === stage).map(task => <TaskRow readOnly={readOnly} key={task.id} task={task} onOpen={onOpen}/>)}</section>)}</div>}
     {view === 'planning' && <SprintPlanning readOnly={readOnly} tasks={filtered} sprints={sprints} onOpen={onOpen} onUpdateTask={updateReview} onUpdateSprint={updateSprint} onCreateSprint={createSprint}/>}
     {view === 'timeline' && <Timeline tasks={filtered} onOpen={onOpen}/>}

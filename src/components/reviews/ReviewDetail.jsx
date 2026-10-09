@@ -125,8 +125,8 @@ export function ReviewDetailEnhanced({ review, meetings = [], metadata = [], spr
     <Dialog.Content className="detail-panel" aria-describedby={undefined}>
       <Dialog.Title className="sr-only">Task details</Dialog.Title>
       <Dialog.Close className="detail-close" aria-label="Close task details"><X size={20}/></Dialog.Close>
-      <Button variant="ghost" onClick={async()=>{const url=new URL('/',window.location.origin);url.searchParams.set('project',review.projectId);url.searchParams.set('review',review.id);try{await navigator.clipboard.writeText(url.href);onToast('Task link copied. Recipients must have project access.');}catch{setError('Could not copy the task link. Check your browser clipboard permissions.');}}}><Link size={16}/>Copy task link</Button>
       <div className="detail-head">
+        <div className="detail-head-actions"><Button variant="ghost" size="sm" onClick={async()=>{const url=new URL('/',window.location.origin);url.searchParams.set('project',review.projectId);url.searchParams.set('review',review.id);try{await navigator.clipboard.writeText(url.href);onToast('Task link copied. Recipients must have project access.');}catch{setError('Could not copy the task link. Check your browser clipboard permissions.');}}}><Link size={16}/>Copy task link</Button></div>
         <TextAreaField readOnly={readOnly} label="Task title" className="detail-title-field" rows={2} value={draft.title || ''} onChange={event => edit('title', event.target.value)} onBlur={event => {
           const title = event.target.value.trim();
           if (!title) setError('Task title cannot be empty.'); else if (title !== detail?.review?.title) save({ title });

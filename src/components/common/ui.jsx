@@ -29,8 +29,8 @@ export function InlineSync({ rowId, field, sync, onRetry }) {
 }
 export function DetailSection({title,children,icon:Icon}){return <section className="detail-section"><h3>{Icon && <Icon size={17} aria-hidden="true"/>}<span>{title}</span></h3>{children}</section>}
 export function MetricCard({ label, value }) { return <article><span>{label}</span><strong>{value}</strong></article>; }
-export function Priority({ value = 'Minor' }) { const normalized = String(value).toLowerCase(); const variant = normalized === 'blocker' || normalized === 'urgent' ? 'danger' : normalized === 'major' || normalized === 'high' ? 'warning' : 'neutral'; return <Badge variant={variant}><i className="mr-1.5 size-1.5 rounded-full bg-current"/>{value}</Badge>; }
-export function PageHeading({ eyebrow, title, description, action }) { return <div className="page-heading"><div>{eyebrow && <small>{eyebrow}</small>}<h1>{title}</h1>{description && <p>{description}</p>}</div>{action}</div>; }
+export function Priority({ value = 'Minor' }) { const normalized = String(value).toLowerCase(); const variant = normalized === 'blocker' || normalized === 'urgent' ? 'danger' : normalized === 'major' || normalized === 'high' ? 'warning' : 'neutral'; return <Badge variant={variant} className="gap-2"><i className="size-2 shrink-0 rounded-full bg-current"/>{value}</Badge>; }
+export function PageHeading({ eyebrow, title, description, action }) { return <div className="page-heading"><div className="page-heading-copy">{eyebrow && <small>{eyebrow}</small>}<h1>{title}</h1>{description && <p>{description}</p>}</div>{action && <div className="page-heading-actions">{action}</div>}</div>; }
 export function DatePicker({ value, onPick, onClear }) {
   const initial = value ? new Date(`${value}T12:00:00`) : new Date();
   const [view, setView] = useState({ y: initial.getFullYear(), m: initial.getMonth() });

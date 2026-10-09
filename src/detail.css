@@ -3,7 +3,9 @@
 .detail-panel { position:fixed; z-index:76; inset:0 0 0 auto; width:min(400px,100vw); max-width:400px; height:100dvh; display:flex; flex-direction:column; background:var(--ui-surface); color:var(--ui-text); border-left:1px solid var(--ui-border); box-shadow:var(--ui-shadow); }
 .detail-close { position:absolute; top:12px; right:12px; width:32px; height:32px; display:grid; place-items:center; border-radius:8px; color:var(--ui-muted); }
 .detail-close:hover { background:var(--ui-subtle); }
-.detail-head { padding:48px 20px 20px; border-bottom:1px solid var(--ui-border); }
+.detail-head { padding:12px 20px 20px; border-bottom:1px solid var(--ui-border); }
+.detail-head-actions { display:flex; align-items:center; gap:8px; padding-right:32px; margin-bottom:16px; }
+.detail-head-actions button { justify-content:flex-start; }
 .detail-title-field textarea { min-height:64px; font-size:18px; line-height:1.4; font-weight:500; }
 .detail-badges { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:12px; color:var(--ui-muted); font-size:12px; }
 .detail-scroll { min-height:0; flex:1; overflow:auto; overscroll-behavior:contain; }

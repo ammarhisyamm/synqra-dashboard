@@ -15,8 +15,8 @@ Use CSS custom properties for new work. Existing literal values should be migrat
   --color-primary-soft: #edf1f6;
   --color-text: #172238;
   --color-text-secondary: #526075;
-  --color-text-muted: #718199;
-  --color-text-subtle: #98a6b9;
+  --color-text-muted: #607088;
+  --color-text-subtle: #607088;
   --color-surface: #ffffff;
   --color-surface-subtle: #f3f6f9;
   --color-canvas: #f7f9fc;
@@ -24,8 +24,8 @@ Use CSS custom properties for new work. Existing literal values should be migrat
   --color-border-strong: #c9d5e3;
   --color-focus: #526784;
   --color-focus-ring: #e1e8f0;
-  --color-success: #248764;
-  --color-warning: #a76d2a;
+  --color-success: #23795a;
+  --color-warning: #986126;
   --color-danger: #c24d4d;
   --color-info: #526784;
 }
@@ -35,6 +35,15 @@ Use CSS custom properties for new work. Existing literal values should be migrat
 - Neutral surfaces and borders carry most of the interface. Do not use primary as a large background fill.
 - Semantic colours communicate state; never use them as a second brand palette.
 - Text must use the text tokens above. Placeholder and disabled copy use `--color-text-subtle`.
+- Supporting text and placeholders use the darker blue-grey token so they remain readable on white and subtle surfaces. Shared success/warning badges use the corresponding semantic foreground token, not a separate literal colour.
+
+### Shared control ownership
+
+- Page action groups are defined globally in `design-system.css`; they must not depend on a lazy route importing `workflow.css`. Use `PageHeading` and its action slot. Adjacent controls have an 8px gap.
+- `AppSelect` owns the trigger label, chevron and option label wrappers. Radix `Value` and `ItemText` intentionally discard `className`, so style their wrappers instead. Labels ellipsize only in the closed trigger; open option labels wrap and remain fully readable.
+- Single-select menus match fields, with a 160px minimum for compact table triggers. Multi-select menus match wider fields, with a 220px minimum for names/checkboxes. Radix handles portal positioning, collision and keyboard interaction.
+- Forms use 16px row gaps, 8px label/control gaps, 40px controls and shared font/colour tokens. Compact table controls may use the documented smaller size.
+- Narrow tables must not hide editing controls or administrative actions. Use labelled record cards (`responsive-record-table` with `data-label` cells) or labelled AI-review rows. Meeting actions switch according to their pane width, not only the viewport width.
 
 ### Typography
 

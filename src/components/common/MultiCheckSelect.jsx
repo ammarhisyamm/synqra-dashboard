@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import * as Menu from '@radix-ui/react-dropdown-menu';
 import { CaretDown as ChevronDown, Check } from '@phosphor-icons/react';
+import { cn } from '@/lib/utils';
 import './MultiCheckSelect.css';
 
 function initials(name) {
@@ -35,12 +36,12 @@ export function MultiCheckSelect({ values = [], options = [], onChange, ariaLabe
 
   return (
     <Menu.Root open={open} onOpenChange={setOpen}>
-    <div className={`app-select app-multi-select ${className}`.trim()}>
+    <div className={cn('app-select app-multi-select', className)}>
       <Menu.Trigger asChild>
       <button
         type="button"
         disabled={disabled}
-        className={`app-select-trigger ${open ? 'open' : ''} ${selected.length ? 'has-value' : ''}`}
+        className={cn('app-select-trigger ui-focus-ring', open && 'open', selected.length && 'has-value')}
         aria-label={ariaLabel}
       >
         {prefix}

@@ -6,8 +6,8 @@ const badgeVariants = cva('inline-flex items-center rounded-full border px-2 py-
   variants: {
     variant: {
       default: 'border-transparent bg-primary text-primary-foreground',
-      success: 'border-[#c5ead9] bg-[#edf8f3] text-[#248764]',
-      warning: 'border-[#f0d7ad] bg-[#fff7ea] text-[#a76d2a]',
+      success: 'border-[#c5ead9] bg-[#edf8f3] text-[var(--ui-success)]',
+      warning: 'border-[#f0d7ad] bg-[#fff7ea] text-[var(--ui-warning)]',
       danger: 'border-[#efc4c4] bg-[#fff1f1] text-destructive',
       info: 'border-[#c9daf6] bg-[#eff5ff] text-[#315fa8]',
       neutral: 'border-border bg-muted text-secondary-foreground',
