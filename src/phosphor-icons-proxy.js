@@ -79,3 +79,15 @@ export { Notebook } from '../node_modules/@phosphor-icons/react/dist/csr/Noteboo
 export { ArrowsCounterClockwise } from '../node_modules/@phosphor-icons/react/dist/csr/ArrowsCounterClockwise.es.js';
 export { CalendarCheck } from '../node_modules/@phosphor-icons/react/dist/csr/CalendarCheck.es.js';
 export { Strategy } from '../node_modules/@phosphor-icons/react/dist/csr/Strategy.es.js';
+export { FlagCheckered } from '../node_modules/@phosphor-icons/react/dist/csr/FlagCheckered.es.js';
+export { SealCheck } from '../node_modules/@phosphor-icons/react/dist/csr/SealCheck.es.js';
+export { HourglassMedium } from '../node_modules/@phosphor-icons/react/dist/csr/HourglassMedium.es.js';
+export { UsersThree } from '../node_modules/@phosphor-icons/react/dist/csr/UsersThree.es.js';
+export { FolderSimple } from '../node_modules/@phosphor-icons/react/dist/csr/FolderSimple.es.js';
+export { Gauge } from '../node_modules/@phosphor-icons/react/dist/csr/Gauge.es.js';
+export { CalendarDots } from '../node_modules/@phosphor-icons/react/dist/csr/CalendarDots.es.js';
+export { PaperPlaneTilt } from '../node_modules/@phosphor-icons/react/dist/csr/PaperPlaneTilt.es.js';
+export { UserCircle } from '../node_modules/@phosphor-icons/react/dist/csr/UserCircle.es.js';
+export { ChartDonut } from '../node_modules/@phosphor-icons/react/dist/csr/ChartDonut.es.js';
+export { ChartLineUp } from '../node_modules/@phosphor-icons/react/dist/csr/ChartLineUp.es.js';
+export { TrendDown } from '../node_modules/@phosphor-icons/react/dist/csr/TrendDown.es.js';
