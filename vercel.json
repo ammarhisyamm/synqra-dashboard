@@ -3,6 +3,7 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "rewrites": [
+    { "source": "/website", "destination": "/website/index.html" },
     {
       "source": "/api/:path*",
       "destination": "https://synqra-dashboard.ammarhisyam151.workers.dev/api/:path*"
