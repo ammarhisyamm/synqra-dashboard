@@ -25,7 +25,7 @@ test('built application persists tasks and accepts a viewer invitation through t
   await page.getByRole('button', { name:'Finish setup' }).click();
   await expect(page.getByRole('heading', { name:'Overview', exact:true })).toBeVisible();
   await page.locator('.sidebar').getByRole('button', { name:'My Work', exact:true }).click();
-  await page.getByRole('button', { name:'Create Task', exact:true }).click();
+  await page.getByRole('button', { name:'New task', exact:true }).click();
   const modal = page.getByRole('dialog', { name:'Create task' });
   await modal.getByLabel('Title', { exact:true }).fill(`Persisted task ${suffix}`);
   await modal.getByRole('button', { name:'Assignees', exact:true }).click();
@@ -76,7 +76,7 @@ test('built application persists tasks and accepts a viewer invitation through t
   await expect(reloaded.getByRole('link', { name:'browser-qa.txt' })).toBeVisible();
   await reloaded.getByRole('button', { name:'Close task details' }).click();
   await page.getByRole('button', { name:'Collaborator', exact:true }).click();
-  const collaborator = page.getByRole('dialog', { name:'Collaborator', exact:true });
+  const collaborator = page.getByRole('dialog', { name:'Invite collaborators', exact:true });
   const viewerEmail = `viewer-ui-${suffix}@example.test`;
   await collaborator.getByLabel('Email', { exact:true }).fill(viewerEmail);
   await collaborator.getByRole('button', { name:'Invite', exact:true }).click();
@@ -92,7 +92,7 @@ test('built application persists tasks and accepts a viewer invitation through t
     await expect(viewer.getByRole('heading', { name:'Overview', exact:true })).toBeVisible();
     await expect(viewer.getByText(/View-only access/)).toBeVisible();
     await viewer.locator('.sidebar').getByRole('button', { name:'All Reviews', exact:true }).click();
-    await expect(viewer.getByRole('button', { name:'Submit Review', exact:true })).toBeDisabled();
+    await expect(viewer.getByRole('button', { name:'New task', exact:true })).toBeDisabled();
     await viewer.locator('.reviews-page').getByText(`Persisted task ${suffix}`, { exact:true }).click();
     const viewerDrawer = viewer.getByRole('dialog', { name:'Task details' });
     await expect(viewerDrawer.getByLabel('Estimate (hours)', { exact:true })).toBeDisabled();

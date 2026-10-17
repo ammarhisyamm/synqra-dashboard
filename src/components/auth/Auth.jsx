@@ -12,7 +12,7 @@ import { AppSelect } from '../common/AppSelect';
 import { TextField } from '../common/Field';
 import { api } from '../../api/client';
 import { relativeDate } from '../../lib/dates';
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from '../ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog';
 import './auth-components.css';
 
 export function AuthLoading() { return <div className="auth-shell"><div className="auth-card auth-loading"><Wave style={{ fontSize: 24 }} /><strong>Checking your session…</strong></div></div>; }
@@ -51,8 +51,8 @@ export function CollaboratorModal({ user, projectId, onClose, onToast, onMembers
     });
   };
   return <Dialog open onOpenChange={open => { if (!open && !pending) onClose(); }}><DialogContent className="collab-modal" onEscapeKeyDown={event => { if (pending) event.preventDefault(); }} onPointerDownOutside={event => { if (pending) event.preventDefault(); }}>
-    <DialogTitle>Collaborator</DialogTitle>
-    <DialogDescription>Invite people to this project. Editors can change tasks; viewers can only read.</DialogDescription>
+    <DialogHeader><DialogTitle>Invite collaborators</DialogTitle>
+    <DialogDescription>Invite people to this project. Editors can change tasks; viewers can only read.</DialogDescription></DialogHeader>
     <form className="collab-invite-row" onSubmit={invite}>
       <TextField label="Email" type="email" value={email} onChange={event => setEmail(event.target.value)} required disabled={pending}/>
       <AppSelect value={role} options={['viewer','editor']} onChange={setRole} ariaLabel="Invite role" disabled={pending}/>

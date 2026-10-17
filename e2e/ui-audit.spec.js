@@ -107,7 +107,7 @@ test('detail before Board: aligned people menu, keyboard Escape, saved estimate 
 test('failed task creation stays open, keeps input, never shows success', async ({ page }) => {
   await fixture(page, { failCreate: true });
   await navigate(page, 'My Work');
-  await page.getByRole('button', { name: 'Create Task', exact: true }).click();
+  await page.getByRole('button', { name:'New task', exact:true }).click();
   const modal = page.getByRole('dialog', { name: 'Create task' });
   await modal.getByLabel('Title', { exact: true }).fill('Retryable task');
   await expect(modal.getByLabel('Due date')).toHaveValue('');
@@ -129,7 +129,7 @@ test('create task dialog stays centered in the viewport', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await fixture(page);
   await navigate(page, 'My Work');
-  await page.getByRole('button', { name: 'Create Task', exact: true }).click();
+  await page.getByRole('button', { name:'New task', exact:true }).click();
 
   const modal = page.getByRole('dialog', { name: 'Create task' });
   await expect(modal).toBeVisible();
@@ -325,9 +325,9 @@ for (const width of [1440, 768, 375]) {
 test('viewer can browse and filter, but task editing and creation are disabled', async ({ page }) => {
   await fixture(page, { readOnly:true });
   await navigate(page, 'My Work');
-  await expect(page.getByRole('button', { name:'Create Task', exact:true })).toBeDisabled();
+  await expect(page.getByRole('button', { name:'New task', exact:true })).toBeDisabled();
   await navigate(page, 'All Reviews');
-  await expect(page.getByRole('button', { name:'Submit Review', exact:true })).toBeDisabled();
+  await expect(page.getByRole('button', { name:'New task', exact:true })).toBeDisabled();
   await expect(page.getByRole('combobox', { name:`Change phase of ${title}` })).toBeDisabled();
   await expect(page.getByRole('combobox', { name:'Filter by status' })).toBeEnabled();
   await openDetail(page);
@@ -338,7 +338,7 @@ test('viewer can browse and filter, but task editing and creation are disabled',
   await drawer.getByRole('button', { name:'Close task details' }).click();
   await page.keyboard.press('Control+k');
   await expect(page.getByRole('button', { name:'Start new meeting' })).toBeDisabled();
-  await expect(page.getByRole('button', { name:'Submit new review' })).toBeDisabled();
+  await expect(page.getByRole('button', { name:'New task' })).toBeDisabled();
   await expect(page.locator('.command-palette').getByRole('button', { name:'Admin Management' })).toHaveCount(0);
 });
 
@@ -383,11 +383,10 @@ test('polling follows the selected project, not the original project', async ({ 
   const other = { ...project, id:'qa-other-project', name:'Other QA project', role:'editor' };
   state.data.projects.push(other);
   await page.reload();
-  await page.locator('.sidebar').getByRole('button', { name:/QA project/ }).click();
   const response = page.waitForRequest(request => new URL(request.url()).pathname === '/api/bootstrap' && new URL(request.url()).searchParams.get('project') === other.id);
-  await page.getByRole('button', { name:'Other QA project', exact:true }).click();
+  await page.locator('.sidebar .side-project-list').getByRole('button', { name:'Other QA project', exact:true }).click();
   await response;
-  await expect(page.locator('.sidebar').getByRole('button', { name:/Other QA project/ })).toBeVisible();
+  await expect(page.locator('.sidebar .side-project-list').getByRole('button', { name:'Other QA project', exact:true })).toHaveAttribute('aria-current', 'true');
 });
 
 test('metadata dialogs have a surface, shared fields, color state and Escape dismissal', async ({ page }) => {
@@ -481,7 +480,7 @@ test('browser storage denial does not crash navigation or task creation', async 
   });
   const state = await fixture(page);
   await navigate(page, 'My Work');
-  await page.getByRole('button', { name:'Create Task', exact:true }).click();
+  await page.getByRole('button', { name:'New task', exact:true }).click();
   const dialog = page.getByRole('dialog', { name:'Create task' });
   await dialog.getByLabel('Title', { exact:true }).fill('Storage-safe task');
   await dialog.getByRole('button', { name:'Create task', exact:true }).click();
@@ -531,4 +530,72 @@ test('partial AI task failure keeps only failed items and retry never duplicates
   expect(state.data.meetings.filter(item => item.title === 'Retry meeting')).toHaveLength(1);
   for (const title of ['First task','Retry task']) expect(state.data.reviews.filter(item => item.title === title)).toHaveLength(1);
   expect(state.errors).toEqual([]);
+});
+
+test('sidebar lists projects and the compact finder searches, switches and dismisses', async ({ page }) => {
+  const state = await fixture(page);
+  for (let index = 1; index <= 6; index += 1) state.data.projects.push({ ...project, id:`qa-extra-${index}`, name:`Extra project ${index}`, role:'editor' });
+  await page.reload();
+  const sidebar = page.locator('.sidebar');
+  await expect(sidebar.locator('.side-project-list .side-project')).toHaveCount(5);
+  await expect(sidebar.locator('.side-project-list').getByRole('button', { name:'QA project', exact:true })).toHaveAttribute('aria-current', 'true');
+  await sidebar.getByRole('button', { name:/All projects \(7\)/ }).click();
+  const finder = page.getByRole('dialog', { name:'Switch project' });
+  await expect(finder).toBeVisible();
+  const sidebarBox = await sidebar.boundingBox();
+  const finderBox = await finder.boundingBox();
+  expect(finderBox.x + finderBox.width).toBeLessThanOrEqual(sidebarBox.x + sidebarBox.width + 1);
+  await page.keyboard.press('Escape');
+  await expect(finder).toHaveCount(0);
+  await sidebar.getByRole('button', { name:/All projects/ }).click();
+  await finder.getByLabel('Search projects').fill('extra project 6');
+  await expect(finder.locator('.project-list button')).toHaveCount(1);
+  await finder.getByRole('button', { name:'Extra project 6' }).click();
+  await expect(finder).toHaveCount(0);
+  await expect(page.locator('.topbar-breadcrumb')).toContainText('Extra project 6');
+  await expect(sidebar.locator('.side-project-list').getByRole('button', { name:'Extra project 6', exact:true })).toHaveAttribute('aria-current', 'true');
+});
+
+test('account card opens a menu instead of signing out immediately', async ({ page }) => {
+  await fixture(page);
+  await page.locator('.user-card').click();
+  const menu = page.getByRole('menu', { name:'Account' });
+  await expect(menu).toBeVisible();
+  await expect(page.locator('.app-shell')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(menu).toHaveCount(0);
+});
+
+test('meeting templates render as a gallery and protect written notes', async ({ page }) => {
+  await fixture(page);
+  await navigate(page, 'Meetings');
+  await page.getByRole('button', { name:'New meeting' }).click();
+  const cards = page.locator('.template-gallery .template-card');
+  await expect(cards).toHaveCount(8);
+  await page.getByRole('button', { name:/Daily standup/ }).click();
+  const notes = page.getByLabel('Meeting notes', { exact:true });
+  await expect(notes).toHaveValue(/Yesterday:/);
+  await expect(page.getByLabel('Meeting title', { exact:true })).toHaveValue('Daily standup');
+  await expect(cards).toHaveCount(0);
+  await notes.fill('My own decisions');
+  await page.getByRole('button', { name:'Browse templates' }).click();
+  await page.getByRole('button', { name:/Retrospective/ }).click();
+  await expect(page.getByRole('alert')).toContainText('Replace your notes?');
+  await page.getByRole('button', { name:'Keep my notes' }).click();
+  await expect(notes).toHaveValue('My own decisions');
+  await page.getByRole('button', { name:/Retrospective/ }).click();
+  await page.getByRole('button', { name:'Replace', exact:true }).click();
+  await expect(notes).toHaveValue(/What went well:/);
+});
+
+test('global surfaces are styled before any lazy route loads', async ({ page }) => {
+  await fixture(page);
+  await page.keyboard.press('Control+k');
+  const item = page.locator('.command-palette .command-item').first();
+  await expect(item).toBeVisible();
+  expect(await item.evaluate(element => getComputedStyle(element).display)).toBe('flex');
+  await page.keyboard.press('Escape');
+  await navigate(page, 'Board');
+  await expect(page.locator('.kanban-filter-row')).not.toContainText(/^0/);
+  expect(await page.locator('.kanban-filter-row').evaluate(element => [...element.childNodes].some(node => node.nodeType === Node.TEXT_NODE && node.textContent.trim() === '0'))).toBe(false);
 });

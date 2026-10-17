@@ -26,7 +26,7 @@ import { useDialogFocusTracking } from './components/ui/dialog';
 import { REPORT_COLORS, seed, loadData, statusFor, nextTaskKey, downloadReviewsCsv, elapsedLabel, makeHistoryModel, historyDateLabel, deduplicateNotifications, extractNotes } from './lib/helpers';
 import { ErrorPanel } from './components/common/ErrorPanel';
 import { SectionHead, AttentionCard, StatusPill, Empty, Metric, InlineSync, DetailSection, MetricCard, Priority, PageHeading, DatePicker, ActionDialog, SelectField, Modal } from './components/common/ui';
-import { NotificationMenu, Sidebar, ProjectSwitcher } from './components/layout/Shell';
+import { NotificationMenu, Sidebar, ProjectSwitcher, Breadcrumb } from './components/layout/Shell';
 import { AuthLoading, AuthScreen, CollaboratorModal } from './components/auth/Auth';
 
 const Dashboard = lazy(() => import('./components/dashboard/Dashboard').then(module => ({ default: module.Dashboard })));
@@ -95,7 +95,7 @@ function EmptyWorkspaceOnboarding({ user, project, onCreateProject, onFinish, se
       <span className="empty-workspace-icon"><Folder size={22}/></span>
       <p className="empty-workspace-kicker">Workspace setup</p>
       <h1 id="empty-workspace-title">{project ? `Invite your team to ${project.name}` : 'Create your first project'}</h1>
-      <p>{project ? 'Tambahkan collaborator supaya project ini bisa langsung dipakai bareng tim.' : `Hi ${user.name}, workspace kamu masih kosong. Mulai dari project pertama supaya board, meetings, reviews, dan reports punya scope yang benar.`}</p>
+      <p>{project ? 'Add collaborators so your team can start working in this project right away.' : `Hi ${user.name}, your workspace is empty. Start with a first project so your board, meetings, reviews and reports have the right scope.`}</p>
 
       <div className="onboarding-steps" aria-label="Setup progress">
         <span className={project ? 'done' : 'active'}>1 Project</span>
@@ -447,6 +447,7 @@ export function App() {
       setModal(null); setProjectOpen(false); setPage('Overview'); setToast('Project deleted');
     } catch (error) { setToast(error.message); throw error; }
   };
+  const selectProject = selected => { setData(prev => ({ ...prev, project: selected })); setProjectOpen(false); setPage('Overview'); };
   const openNewMeeting = () => { meetingCreation.current = null; setModal(null); setPage('Meeting Editor'); };
   const createMeetingFromEditor = async ({ meeting, items }) => {
     try {
@@ -480,11 +481,12 @@ export function App() {
   const needsOnboarding = cloudReady && (onboardingActive || !(data.projects || []).length);
 
   return <div className={`app-shell${collapsed ? ' collapsed' : ''}`}>
-    <Sidebar page={page} setPage={setPage} menuOpen={menuOpen} setMenuOpen={setMenuOpen} collapsed={collapsed} onMenuClick={toggleSidebar} user={user} onSignOut={signOut} project={currentProject} onProjectClick={() => setProjectOpen(!projectOpen)} />
+    <Sidebar page={page} setPage={setPage} menuOpen={menuOpen} setMenuOpen={setMenuOpen} collapsed={collapsed} onMenuClick={toggleSidebar} user={user} onSignOut={signOut} project={currentProject} projects={data.projects || []} onSelectProject={selectProject} onNewProject={() => { setProjectOpen(false); setMenuOpen(false); setModal('project'); }} onBrowseProjects={() => setProjectOpen(open => !open)} projectMenu={projectOpen && <ProjectSwitcher project={currentProject} projects={data.projects || []} collapsed={collapsed} onSelect={selected => { selectProject(selected); setMenuOpen(false); }} onNew={() => { setProjectOpen(false); setMenuOpen(false); setModal('project'); }} onClose={() => setProjectOpen(false)} />} />
     <main className="workspace">
       <header className="topbar">
         <button className="icon-button mobile-menu" onClick={toggleSidebar} aria-label="Toggle menu"><Menu size={20}/></button>
-        <label className="global-search" onClick={() => setCommandOpen(true)}><Search size={17}/><input value={query} onFocus={() => setCommandOpen(true)} onChange={e=>{setQuery(e.target.value);setCommandOpen(true)}} placeholder="Search…"/><kbd>⌘K</kbd></label>
+        <Breadcrumb project={currentProject} page={page === 'Meeting Editor' ? 'Meetings' : page}/>
+        <label className="global-search" onClick={() => setCommandOpen(true)}><Search size={16}/><input value={query} onFocus={() => setCommandOpen(true)} onChange={e=>{setQuery(e.target.value);setCommandOpen(true)}} placeholder="Search tasks, projects…" aria-label="Search"/><kbd>⌘K</kbd></label>
         <div className="topbar-actions">
           <button disabled={readOnly || !activeProjectId} className="collaborator" onClick={() => setCollabOpen(true)}><Users size={16}/> Collaborator</button>
           <button className="notification" aria-label="Notifications" onClick={()=>{setNotificationsOpen(open=>!open);if(!notifications.length)refreshNotifications()}}><Bell size={17}/>{data.unreadNotifications > 0 && <i/>}</button>
@@ -492,7 +494,6 @@ export function App() {
       </header>
       {commandOpen && <CommandPalette query={query} setQuery={setQuery} reviews={activeReviews} projects={data.projects || []} activeProjectId={activeProjectId} readOnly={readOnly || !activeProjectId} isAdmin={['super_admin', 'admin'].includes(user.role)} onClose={() => setCommandOpen(false)} onNavigate={pageName => { setPage(pageName); setQuery(''); }} onNewMeeting={openNewMeeting} onNewReview={() => setModal('review')} onOpenReview={review => { setSelectedReview(review); setQuery(''); }} onSelectProject={selected => { setData(previous => ({ ...previous, project: selected })); setPage('Overview'); setQuery(''); }}/ >}
       {notificationsOpen && <NotificationMenu notifications={notifications} onClose={()=>setNotificationsOpen(false)} onOpen={openReview} onRead={markNotificationRead} onReadAll={markAllNotificationsRead}/>}
-      {projectOpen && <ProjectSwitcher project={currentProject} projects={data.projects || []} collapsed={collapsed} onSelect={selected => { setData(prev => ({ ...prev, project: selected })); setProjectOpen(false); setPage('Overview'); }} onNew={() => { setProjectOpen(false); setModal('project'); }} onClose={() => setProjectOpen(false)} />}
       {collabOpen && <CollaboratorModal user={user} projectId={activeProjectId} onClose={() => setCollabOpen(false)} onToast={setToast} onMembersChanged={refreshTeam} />}
       {needsOnboarding ? <EmptyWorkspaceOnboarding user={user} project={data.project} onCreateProject={createProject} onFinish={() => { setOnboardingActive(false); setPage('Overview'); }} setToast={setToast} onMembersChanged={refreshTeam} /> : <>
       {readOnly && <p className="workspace-readonly-note" role="status">View-only access · You can browse this project, but an editor must make changes.</p>}

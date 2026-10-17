@@ -25,7 +25,7 @@ export function MyWork({ readOnly = false, reviews = [], user, onOpen, onCreateT
   const estimatedHours = assigned.reduce((total, review) => total + (Number(review.estimateHours) || 0), 0);
 
   return <section className="page my-work-page">
-    <PageHeading title="My Work" description="Tasks assigned to you in this project" action={<button disabled={readOnly} className="primary-button" onClick={onCreateTask}><Plus size={17}/> Create Task</button>} />
+    <PageHeading title="My Work" description="Tasks assigned to you in this project" action={<button disabled={readOnly} className="primary-button" onClick={onCreateTask}><Plus size={16}/> New task</button>} />
     <div className="review-kpis my-work-kpis"><MetricCard label="My tasks" value={assigned.length}/><MetricCard label="Overdue" value={overdue}/><MetricCard label="Due in 7 days" value={dueSoon}/><MetricCard label="Estimated hours" value={formatHours(estimatedHours)}/></div>
     <div className="my-work-list">
       <div className="my-work-list-heading"><h2><Briefcase size={18}/> My Tasks <span>({assigned.length})</span></h2></div>

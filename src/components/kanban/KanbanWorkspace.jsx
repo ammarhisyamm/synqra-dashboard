@@ -1,7 +1,7 @@
 import { localToday } from '../../lib/dates';
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Archive, CalendarBlank, CaretDown, CaretRight, Funnel, Kanban, ListBullets,
+  Archive, CalendarBlank, CaretDown, CaretRight, Flag, Funnel, Kanban, ListBullets,
   MagnifyingGlass, PencilSimple as Pencil, Plus, Rows, SquaresFour, Stack, Tag, Timer, Trash, User, Users, X
 } from '@phosphor-icons/react';
 import { PRIORITIES, STAGES } from '../../constants/workflow';
@@ -9,7 +9,7 @@ import { metadataApi } from '../../api/metadata';
 import { AppSelect } from '../common/AppSelect';
 import { MultiCheckSelect, AssigneeOption, PriorityOption } from '../common/MultiCheckSelect';
 import { TextField } from '../common/Field';
-import { Modal } from '../common/ui';
+import { Modal, PageHeading } from '../common/ui';
 import './kanban-workspace.css';
 import './metadata.css';
 
@@ -191,7 +191,7 @@ export function KanbanWorkspace({ readOnly = false, project, team = [], reviews,
       && (!labelFilter.length || labelFilter.some(label => taskLabels.includes(label)));
   }), [reviews, search, assignees, statuses, priorities, epicFilter, featureFilter, labelFilter]);
 
-  const hasFilters = search || assignees.length || statuses.length || priorities.length || epicFilter.length || featureFilter.length || labelFilter.length;
+  const hasFilters = Boolean(search || assignees.length || statuses.length || priorities.length || epicFilter.length || featureFilter.length || labelFilter.length);
   const activeFilterCount = assignees.length + statuses.length + priorities.length + epicFilter.length + featureFilter.length + labelFilter.length;
   const drop = stage => ({ onDragOver: event => event.preventDefault(), onDrop: event => { event.preventDefault(); if (dragId && !readOnly) updateReview(dragId, { stage }); setDragId(null); } });
   const clear = () => { setSearch(''); setAssignees([]); setStatuses([]); setPriorities([]); setEpicFilter([]); setFeatureFilter([]); setLabelFilter([]); };
@@ -204,13 +204,10 @@ export function KanbanWorkspace({ readOnly = false, project, team = [], reviews,
   const activeSprint = sprints.find(s => s.status === 'active') || sprints[0];
 
   return <section className="page kanban-workspace">
-    {/* Row 1: Project and board actions */}
+    <PageHeading title="Board" description={project?.name ? `Plan and track work in ${project.name}` : 'Plan and track work across stages'} action={<button disabled={readOnly} className="primary-button create-task-cta" onClick={() => setModal('review')}><Plus size={16} /> New task</button>}/>
+    {/* Row 1: Board filters and metadata */}
     <div className="kanban-header-bar">
       <div className="kanban-toolbar-actions">
-        <button type="button" className="secondary-button kanban-project-trigger" onClick={onProjectClick} aria-haspopup="dialog" title="Switch project">
-          <span>{project?.name || 'Board'}</span>
-          <CaretDown size={15} />
-        </button>
         <MultiCheckSelect
           prefix={
             owners.length > 0 ? (
@@ -251,10 +248,6 @@ export function KanbanWorkspace({ readOnly = false, project, team = [], reviews,
         <button type="button" className="secondary-button toolbar-meta-trigger meta-label" onClick={() => openMetadata('label')} aria-haspopup="dialog" title="Manage labels">
           <Tag size={15}/> Labels
         </button>
-        <span className="toolbar-divider" aria-hidden="true" />
-        <button disabled={readOnly} className="primary-button create-task-cta" onClick={() => setModal('review')}>
-          <Plus size={16} /> Create Task
-        </button>
       </div>
     </div>
 
@@ -285,7 +278,7 @@ export function KanbanWorkspace({ readOnly = false, project, team = [], reviews,
       </div>
     </div>
 
-    {view === 'board' && <div className="kanban-board-grid">{STAGES.map(stage => <section className="kanban-stage" key={stage} {...drop(stage)}><header><strong>{stage}</strong><span>{filtered.filter(task => task.stage === stage).length}</span></header>{filtered.filter(task => task.stage === stage).map(task => <article className="kanban-work-card" key={task.id} draggable={!readOnly} onDragStart={() => setDragId(task.id)} onDragEnd={() => setDragId(null)} onClick={() => onOpen(task)}><div><strong>{task.title}</strong><small>{task.key || 'TASK'} · {task.area}</small></div><TaskMeta task={task}/><footer><span className="task-priority-dot"/><small>{task.priority}</small><span className="task-avatar">{task.assignee ? task.assignee.slice(0, 1).toUpperCase() : 'U'}</span></footer></article>)}<button disabled={readOnly} className="kanban-add-card" onClick={() => setModal('review')}><Plus size={15}/> Add task</button></section>)}</div>}
+    {view === 'board' && <div className="kanban-board-grid">{STAGES.map(stage => <section className="kanban-stage" key={stage} {...drop(stage)}><header><strong>{stage}</strong><span>{filtered.filter(task => task.stage === stage).length}</span></header>{filtered.filter(task => task.stage === stage).map(task => <article className="kanban-work-card" key={task.id} draggable={!readOnly} onDragStart={() => setDragId(task.id)} onDragEnd={() => setDragId(null)} onClick={() => onOpen(task)}><div><strong>{task.title}</strong><small>{task.key || 'TASK'} · {task.area}</small></div><TaskMeta task={task}/><footer><span className={`priority-chip priority-${String(task.priority || 'Minor').toLowerCase()}`}><Flag size={11} weight="fill"/>{task.priority || 'Minor'}</span><span className="task-avatar">{task.assignee ? task.assignee.slice(0, 1).toUpperCase() : 'U'}</span></footer></article>)}<button disabled={readOnly} className="kanban-add-card" onClick={() => setModal('review')}><Plus size={15}/> Add task</button></section>)}</div>}
     {view === 'list' && <div className="kanban-list-view">{STAGES.map(stage => <section key={stage}><header><strong>{stage}</strong><span>{filtered.filter(task => task.stage === stage).length}</span></header>{filtered.filter(task => task.stage === stage).map(task => <TaskRow readOnly={readOnly} key={task.id} task={task} onOpen={onOpen}/>)}</section>)}</div>}
     {view === 'planning' && <SprintPlanning readOnly={readOnly} tasks={filtered} sprints={sprints} onOpen={onOpen} onUpdateTask={updateReview} onUpdateSprint={updateSprint} onCreateSprint={createSprint}/>}
     {view === 'timeline' && <Timeline tasks={filtered} onOpen={onOpen}/>}

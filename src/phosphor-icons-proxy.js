@@ -70,3 +70,12 @@ export { Stack } from '../node_modules/@phosphor-icons/react/dist/csr/Stack.es.j
 export { Timer } from '../node_modules/@phosphor-icons/react/dist/csr/Timer.es.js';
 export { PencilSimple } from '../node_modules/@phosphor-icons/react/dist/csr/PencilSimple.es.js';
 export { Briefcase } from '../node_modules/@phosphor-icons/react/dist/csr/Briefcase.es.js';
+export { SidebarSimple } from '../node_modules/@phosphor-icons/react/dist/csr/SidebarSimple.es.js';
+export { SignOut } from '../node_modules/@phosphor-icons/react/dist/csr/SignOut.es.js';
+export { Handshake } from '../node_modules/@phosphor-icons/react/dist/csr/Handshake.es.js';
+export { Rocket } from '../node_modules/@phosphor-icons/react/dist/csr/Rocket.es.js';
+export { ChatsCircle } from '../node_modules/@phosphor-icons/react/dist/csr/ChatsCircle.es.js';
+export { Notebook } from '../node_modules/@phosphor-icons/react/dist/csr/Notebook.es.js';
+export { ArrowsCounterClockwise } from '../node_modules/@phosphor-icons/react/dist/csr/ArrowsCounterClockwise.es.js';
+export { CalendarCheck } from '../node_modules/@phosphor-icons/react/dist/csr/CalendarCheck.es.js';
+export { Strategy } from '../node_modules/@phosphor-icons/react/dist/csr/Strategy.es.js';
