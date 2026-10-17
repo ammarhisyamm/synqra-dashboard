@@ -652,3 +652,73 @@ body { color: var(--ui-text); -webkit-font-smoothing: antialiased; }
   .template-card, .template-sheet, .side-nav button { transition: none !important; }
   .template-card:hover, .template-card:hover .template-sheet { transform: none !important; }
 }
+
+/* ---------- Topbar: no divider between header and page ---------- */
+.app-shell .topbar { border-bottom: 0; }
+
+/* ---------- Icon tiles (stage cards, activity) ---------- */
+.icon-tile {
+  display: inline-grid; place-items: center; flex: none; width: 40px; height: 40px;
+  border: 1px solid var(--ui-border); border-radius: 12px; background: var(--ui-surface);
+  color: var(--ui-text); box-shadow: 0 1px 2px rgb(17 27 48 / .06), inset 0 -1px 0 rgb(17 27 48 / .03);
+}
+.icon-tile-sm { width: 32px; height: 32px; border-radius: 10px; color: var(--ui-text-secondary); }
+.app-shell .stage-card .card-meta { align-items: center; }
+.app-shell .stage-card .card-meta > .icon-tile svg,
+.app-shell .activity-row > .icon-tile svg { color: inherit; margin: 0; }
+.app-shell .stage-card:hover .icon-tile { border-color: var(--ui-border-strong); }
+.app-shell .activity-row { align-items: center; }
+
+/* ---------- Team workload: stacked open / done ---------- */
+.app-shell .workload-chart { display: grid; gap: 2px; padding: 14px 18px 12px; }
+.app-shell .workload-chart .wl-legend { justify-content: flex-end; margin: 0 0 6px; }
+.app-shell .workload-chart .wl-row { grid-template-columns: minmax(120px, .32fr) minmax(0, 1fr) 44px; gap: 16px; padding: 7px 0; }
+.app-shell .workload-chart .wl-name { display: inline-flex; align-items: center; gap: 8px; color: var(--ui-text-secondary); }
+.app-shell .workload-chart .wl-name > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-shell .wl-avatar {
+  display: inline-grid; place-items: center; flex: none; width: 24px; height: 24px; border-radius: 999px;
+  background: var(--ui-primary-soft); color: var(--ui-text-secondary); font-size: 10px; font-weight: 600;
+}
+.app-shell .workload-chart .wl-bar { display: flex; gap: 2px; height: 10px; overflow: visible; background: transparent; border-radius: 0; }
+.app-shell .workload-chart .wl-bar i { flex: none; min-width: 4px; height: 100%; border-radius: 2px; background: none; }
+.app-shell .workload-chart .wl-bar i:last-child { border-radius: 2px 4px 4px 2px; }
+.app-shell .workload-chart .wl-bar i.wl-open,
+.app-shell .wl-key-open { background: var(--ui-primary); }
+.app-shell .workload-chart .wl-bar i.wl-done,
+.app-shell .wl-key-done { background: #8fcfb1; }
+.app-shell .workload-chart .wl-count { display: inline-flex; align-items: baseline; justify-content: flex-end; width: auto; font-variant-numeric: tabular-nums; }
+.app-shell .workload-chart .wl-count strong { color: var(--ui-text); font-size: 13px; font-weight: 500; }
+.app-shell .workload-chart .wl-count small { color: var(--ui-muted); font-size: 12px; }
+.app-shell .workload-chart .wl-row:hover .wl-name > span:last-child { color: var(--ui-text); }
+
+/* ---------- Report charts ---------- */
+.app-shell .chart { padding: 8px 4px 0; border: 0; box-shadow: none; overflow: visible; }
+.app-shell .chart .chart-grid { stroke: #eef1f5; stroke-width: 1; }
+.app-shell .chart text { fill: var(--ui-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.app-shell .chart .chart-end-label { fill: var(--ui-text); font-size: 12px; font-weight: 500; }
+.app-shell .chart .chart-point circle { transition: r .12s ease; }
+.app-shell .chart .chart-point:hover circle { r: 5.5; }
+.app-shell .chart .chart-point:hover rect { fill: rgb(17 27 48 / .03); }
+.app-shell .chart-legend { gap: 18px; color: var(--ui-text-secondary); }
+.app-shell .chart-legend i { width: 10px; height: 10px; border-radius: 3px; }
+.app-shell .donut .donut-total { fill: var(--ui-text); font-size: 24px; font-weight: 500; letter-spacing: -.02em; }
+.app-shell .donut .donut-caption { fill: var(--ui-muted); font-size: 11px; }
+.app-shell .donut circle { transition: opacity .12s ease; }
+.app-shell .donut:hover circle:not(:first-child) { opacity: .55; }
+.app-shell .donut circle:not(:first-child):hover { opacity: 1; }
+.app-shell .donut-legend i { width: 10px; height: 10px; border-radius: 3px; }
+
+/* Velocity: capped column width, rounded data-end, recessive grid */
+.app-shell .velocity-plot { gap: 8px; min-height: 230px; }
+.app-shell .velocity-axis { padding-bottom: 26px; color: var(--ui-muted); font-variant-numeric: tabular-nums; }
+.app-shell .velocity-groups {
+  position: relative; display: flex; flex: 1; gap: 12px; min-width: 0; padding-bottom: 26px;
+  background: repeating-linear-gradient(to bottom, #eef1f5 0 1px, transparent 1px calc((100% - 26px) / var(--grid-rows, 2))) top / 100% calc(100% - 26px) no-repeat;
+}
+.app-shell .velocity-groups > p { margin: auto; color: var(--ui-muted); font-size: 13px; }
+.app-shell .velocity-group { position: relative; justify-content: flex-end; gap: 0; }
+.app-shell .velocity-group > small { position: absolute; top: calc(100% + 8px); left: 50%; max-width: 100%; overflow: hidden; text-overflow: ellipsis; transform: translateX(-50%); color: var(--ui-muted); font-size: 11px; white-space: nowrap; }
+.app-shell .velocity-bars { gap: 4px; min-height: 0; height: 100%; padding: 0; border: 0; border-bottom: 1px solid var(--ui-border-strong); }
+.app-shell .velocity-bars span { width: 100%; max-width: 22px; min-height: 2px; border-radius: 4px 4px 0 0; transition: opacity .12s ease; }
+.app-shell .velocity-bars:hover span { opacity: .6; }
+.app-shell .velocity-bars span:hover { opacity: 1; }

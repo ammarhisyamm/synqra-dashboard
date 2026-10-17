@@ -18,58 +18,78 @@ export function RagPill({ value }) {
   const Icon = meta.Icon;
   return <span className={`rag ${value.toLowerCase().replace(' ', '-')}`}><Icon size={14}/> {value}</span>;
 }
-export function Donut({ segments, size = 150, thickness = 26 }) {
+const niceTicks = max => {
+  const step = Math.max(1, Math.ceil(max / 4));
+  return Array.from({ length: Math.ceil(max / step) + 1 }, (_, index) => index * step);
+};
+export function Donut({ segments, size = 150, thickness = 22, label = 'total' }) {
   const total = segments.reduce((sum, item) => sum + item.value, 0);
   const radius = (size - thickness) / 2;
   const circle = 2 * Math.PI * radius;
+  const visible = segments.filter(item => item.value > 0);
+  // A 2px surface gap separates touching segments; a single segment closes the ring.
+  const gap = visible.length > 1 ? 2 : 0;
   let acc = 0;
-  return <svg className="donut" width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label="Distribution chart">
+  return <svg className="donut" width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label={`${total} ${label}: ${visible.map(item => `${item.label || ''} ${item.value}`.trim()).join(', ')}`}>
     <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#eef1f5" strokeWidth={thickness} />
-    {segments.map((item, index) => {
-      if (!total || !item.value) return null;
+    {visible.map((item, index) => {
       const frac = item.value / total;
-      const el = <circle key={index} cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={item.color} strokeWidth={thickness} strokeDasharray={`${frac * circle} ${circle}`} strokeDashoffset={-acc * circle} strokeLinecap="butt" transform={`rotate(-90 ${size / 2} ${size / 2})`} />;
+      const length = Math.max(0, frac * circle - gap);
+      const el = <circle key={index} cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={item.color} strokeWidth={thickness} strokeDasharray={`${length} ${circle}`} strokeDashoffset={-acc * circle} transform={`rotate(-90 ${size / 2} ${size / 2})`}><title>{`${item.label ? `${item.label}: ` : ''}${item.value} (${Math.round(frac * 100)}%)`}</title></circle>;
       acc += frac;
       return el;
     })}
+    <text className="donut-total" x={size / 2} y={size / 2 + 2} textAnchor="middle">{total}</text>
+    <text className="donut-caption" x={size / 2} y={size / 2 + 18} textAnchor="middle">{label}</text>
   </svg>;
 }
 export function BurndownChart({ days }) {
-  const width = 720; const height = 250; const padL = 36; const padR = 10; const padT = 12; const padB = 26;
+  const width = 720; const height = 250; const padL = 36; const padR = 40; const padT = 14; const padB = 26;
   const maxY = Math.max(1, ...days.map(d => Math.max(d.remaining, d.ideal)));
+  const ticks = niceTicks(maxY);
+  const top = ticks[ticks.length - 1];
   const x = i => padL + (days.length > 1 ? i / (days.length - 1) : 0.5) * (width - padL - padR);
-  const y = v => padT + (1 - v / maxY) * (height - padT - padB);
+  const y = v => padT + (1 - v / top) * (height - padT - padB);
   const line = points => points.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p).toFixed(1)}`).join(' ');
-  const ticks = [0, Math.round(maxY / 2), Math.ceil(maxY)];
-  const labelIdx = days.length > 4 ? [0, Math.floor(days.length / 3), Math.floor(days.length * 2 / 3), days.length - 1] : days.map((_, i) => i);
-  return <svg className="chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Sprint burndown">
-    {ticks.map(t => <g key={t}><line x1={padL} x2={width - padR} y1={y(t)} y2={y(t)} stroke="#eef1f5" /><text x={padL - 8} y={y(t) + 4} textAnchor="end">{t}</text></g>)}
+  const remaining = days.map(d => d.remaining);
+  const wash = `${line(remaining)} L${x(days.length - 1).toFixed(1)},${y(0)} L${x(0).toFixed(1)},${y(0)} Z`;
+  const last = days.length - 1;
+  const labelIdx = days.length > 4 ? [0, Math.floor(days.length / 3), Math.floor(days.length * 2 / 3), last] : days.map((_, i) => i);
+  return <svg className="chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Sprint burndown: ${days[last]?.remaining ?? 0} tasks remaining`}>
+    {ticks.map(t => <g key={t}><line x1={padL} x2={width - padR} y1={y(t)} y2={y(t)} className="chart-grid" /><text x={padL - 8} y={y(t) + 4} textAnchor="end">{t}</text></g>)}
     {labelIdx.map(i => <text key={i} x={x(i)} y={height - 6} textAnchor="middle">{days[i].date.slice(5)}</text>)}
+    <path d={wash} fill={REPORT_COLORS.accent} opacity="0.07" />
     <path d={line(days.map(d => d.ideal))} fill="none" stroke={REPORT_COLORS.muted} strokeWidth="1.5" strokeDasharray="5 4" />
-    <path d={line(days.map(d => d.remaining))} fill="none" stroke={REPORT_COLORS.accent} strokeWidth="2" />
-    {days.map((d, i) => <circle key={i} cx={x(i)} cy={y(d.remaining)} r="3" fill="#fff" stroke={REPORT_COLORS.accent} strokeWidth="2" />)}
+    <path d={line(remaining)} fill="none" stroke={REPORT_COLORS.accent} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+    {days.map((d, i) => <g key={i} className="chart-point"><rect x={x(i) - 12} y={padT} width="24" height={height - padT - padB} fill="transparent" /><circle cx={x(i)} cy={y(d.remaining)} r="4" fill={REPORT_COLORS.accent} stroke="#fff" strokeWidth="2" /><title>{`${d.date}: ${d.remaining} remaining · ideal ${Math.round(d.ideal * 10) / 10}`}</title></g>)}
+    <text className="chart-end-label" x={x(last) + 10} y={y(remaining[last]) + 4}>{remaining[last]}</text>
   </svg>;
 }
 export function CfdChart({ points }) {
-  const width = 720; const height = 240; const padL = 32; const padR = 10; const padT = 12; const padB = 26;
-  const maxY = Math.max(1, ...points.map(p => p.done + p.active + p.todo));
+  const width = 720; const height = 240; const padL = 32; const padR = 10; const padT = 14; const padB = 26;
+  const ticks = niceTicks(Math.max(1, ...points.map(p => p.done + p.active + p.todo)));
+  const top = ticks[ticks.length - 1];
   const x = i => padL + (points.length > 1 ? i / (points.length - 1) : 0.5) * (width - padL - padR);
-  const y = v => padT + (1 - v / maxY) * (height - padT - padB);
+  const y = v => padT + (1 - v / top) * (height - padT - padB);
+  const edge = values => values.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
   const area = (low, high) => {
-    const top = high.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
-    const bottom = low.map((v, i) => `L${x(points.length - 1 - i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
-    return `${top} ${bottom} Z`;
+    const bottom = low.map((v, i) => `L${x(points.length - 1 - i).toFixed(1)},${y(low[points.length - 1 - i]).toFixed(1)}`).join(' ');
+    return `${edge(high)} ${bottom} Z`;
   };
   const done = points.map(p => p.done);
   const active = points.map(p => p.done + p.active);
   const todo = points.map(p => p.done + p.active + p.todo);
   const zeros = points.map(() => 0);
   return <svg className="chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Cumulative flow">
-    {[0, Math.round(maxY / 2), Math.ceil(maxY)].map(t => <g key={t}><line x1={padL} x2={width - padR} y1={y(t)} y2={y(t)} stroke="#eef1f5" /><text x={padL - 8} y={y(t) + 4} textAnchor="end">{t}</text></g>)}
+    {ticks.map(t => <g key={t}><line x1={padL} x2={width - padR} y1={y(t)} y2={y(t)} className="chart-grid" /><text x={padL - 8} y={y(t) + 4} textAnchor="end">{t}</text></g>)}
     {points.map((p, i) => <text key={i} x={x(i)} y={height - 6} textAnchor="middle">{p.label}</text>)}
-    <path d={area(active, todo)} fill={REPORT_COLORS.muted} opacity="0.55" />
-    <path d={area(done, active)} fill={REPORT_COLORS.accentSoft} opacity="0.7" />
-    <path d={area(zeros, done)} fill={REPORT_COLORS.success} opacity="0.6" />
+    <path d={area(active, todo)} fill={REPORT_COLORS.muted} opacity="0.45" />
+    <path d={area(done, active)} fill={REPORT_COLORS.accent} opacity="0.75" />
+    <path d={area(zeros, done)} fill={REPORT_COLORS.success} opacity="0.85" />
+    {/* Surface gaps between bands instead of outlines. */}
+    <path d={edge(done)} fill="none" stroke="#fff" strokeWidth="2" />
+    <path d={edge(active)} fill="none" stroke="#fff" strokeWidth="2" />
+    {points.map((p, i) => <g key={i} className="chart-point"><rect x={x(i) - 16} y={padT} width="32" height={height - padT - padB} fill="transparent" /><title>{`${p.label}: ${p.done} done · ${p.active} in progress · ${p.todo} to do`}</title></g>)}
   </svg>;
 }
 export function Reports({ reviews, projects, sprints, projectName, onRefresh, onOpen, updatedAt }) {
@@ -137,7 +157,7 @@ export function Reports({ reviews, projects, sprints, projectName, onRefresh, on
     {tab === 'portfolio' && <>
       <div className="review-kpis report-kpis"><MetricCard label="Total Projects" value={portfolio.length}/><MetricCard label="On Track" value={ragCounts['On Track']}/><MetricCard label="At Risk" value={ragCounts['At Risk']}/><MetricCard label="Delayed" value={ragCounts.Delayed}/></div>
       <div className="report-grid-2">
-        <div className="rail-card"><h2>Projects by Status</h2><div className="donut-wrap"><Donut segments={[{ value: ragCounts['At Risk'], color: REPORT_COLORS.warning }, { value: ragCounts['On Track'], color: REPORT_COLORS.success }, { value: ragCounts.Delayed, color: REPORT_COLORS.danger }]} /><div className="donut-legend"><span><i style={{ background: REPORT_COLORS.warning }}/>At Risk</span><span><i style={{ background: REPORT_COLORS.success }}/>On Track</span>{ragCounts.Delayed > 0 && <span><i style={{ background: REPORT_COLORS.danger }}/>Delayed</span>}</div></div></div>
+        <div className="rail-card"><h2>Projects by Status</h2><div className="donut-wrap"><Donut label="projects" segments={[{ label: 'At Risk', value: ragCounts['At Risk'], color: REPORT_COLORS.warning }, { label: 'On Track', value: ragCounts['On Track'], color: REPORT_COLORS.success }, { label: 'Delayed', value: ragCounts.Delayed, color: REPORT_COLORS.danger }]} /><div className="donut-legend"><span><i style={{ background: REPORT_COLORS.warning }}/>At Risk</span><span><i style={{ background: REPORT_COLORS.success }}/>On Track</span>{ragCounts.Delayed > 0 && <span><i style={{ background: REPORT_COLORS.danger }}/>Delayed</span>}</div></div></div>
         <div className="rail-card task-overview-card"><h2>Task Overview</h2><div className="report-progress-head"><span>Overall Progress</span><span>{Math.round(overview.progress * 1000) / 10}%</span></div><div className="progress report-progress"><span style={{ width: `${overview.progress * 100}%` }}/></div><div className="report-stats"><div><ListChecks size={22}/><strong>{overview.total}</strong><span>Total Tasks</span></div><div><CheckCircle2 size={22}/><strong>{overview.done}</strong><span>Completed</span></div><div><TrendUp size={22}/><strong>{overview.inProgress}</strong><span>In Progress</span></div><div><Clock size={22}/><strong>{overview.overdue}</strong><span>Overdue</span></div></div></div>
       </div>
       <div className="rail-card report-table-card"><h2><Lightning size={17}/> Project Health Report</h2><div className="table-wrap"><table><thead><tr><th>Project</th><th>Status</th><th>Tasks</th><th>Done</th><th>Overdue</th><th>Progress</th><th>Active Sprint</th><th>Reason</th></tr></thead><tbody>{portfolio.map(p => {
@@ -171,7 +191,7 @@ export function Reports({ reviews, projects, sprints, projectName, onRefresh, on
     {tab === 'tasks' && <>
       <div className="review-kpis report-kpis"><MetricCard label="Total Tasks" value={teamReviews.length}/><MetricCard label="Overdue" value={teamReviews.filter(r => r.due && r.due < today && !isResolved(r)).length}/><MetricCard label="Est. Hours" value={formatHours(hours.est)}/><MetricCard label="Resolved" value={teamReviews.filter(isResolved).length}/></div>
       <div className="report-grid-2">
-        <div className="rail-card"><h2><ChartPieSlice size={17}/> Task Status Report</h2><p>Distribution of tasks by status</p><div className="donut-split"><Donut size={130} segments={statusData.map((s, i) => ({ value: s.count, color: [REPORT_COLORS.accent, REPORT_COLORS.info, REPORT_COLORS.warning, REPORT_COLORS.muted, REPORT_COLORS.success, REPORT_COLORS.danger][i % 6] }))} /><div className="donut-legend counts">{statusData.map((s, i) => <span key={s.stage}><i style={{ background: [REPORT_COLORS.accent, REPORT_COLORS.info, REPORT_COLORS.warning, REPORT_COLORS.muted, REPORT_COLORS.success, REPORT_COLORS.danger][i % 6] }}/>{s.stage}<b>{s.count}</b></span>)}</div></div></div>
+        <div className="rail-card"><h2><ChartPieSlice size={17}/> Task Status Report</h2><p>Distribution of tasks by status</p><div className="donut-split"><Donut size={140} label="tasks" segments={statusData.map((s, i) => ({ label: s.stage, value: s.count, color: [REPORT_COLORS.accent, REPORT_COLORS.info, REPORT_COLORS.warning, REPORT_COLORS.muted, REPORT_COLORS.success, REPORT_COLORS.danger][i % 6] }))} /><div className="donut-legend counts">{statusData.map((s, i) => <span key={s.stage}><i style={{ background: [REPORT_COLORS.accent, REPORT_COLORS.info, REPORT_COLORS.warning, REPORT_COLORS.muted, REPORT_COLORS.success, REPORT_COLORS.danger][i % 6] }}/>{s.stage}<b>{s.count}</b></span>)}</div></div></div>
         <div className="rail-card"><h2><TriangleAlert size={17}/> Priority Distribution</h2><p>Tasks per priority level</p><div className="priority-bars">{priorityData.map(p => { const max = Math.max(1, ...priorityData.map(x => x.count)); const color = p.priority === 'Blocker' ? REPORT_COLORS.danger : p.priority === 'Major' ? REPORT_COLORS.warning : REPORT_COLORS.muted; return <div className="wl-row" key={p.priority}><span className="wl-name">{p.priority}</span><div className="wl-bar"><i style={{ width: `${p.count / max * 100}%`, background: color }}/></div><span className="wl-count">{p.count}</span></div>; })}</div></div>
       </div>
       <div className="rail-card"><h2><Users size={16}/> Team Workload</h2><p>Task count + estimated hours per person</p><div className="team-rows">{workloadRows.map(w => <div className="team-row-full" key={w.name}><span className="avatar">{w.name.slice(0, 2).toUpperCase()}</span><div><strong>{w.name}</strong><small>Est: {formatHours(w.est)}</small></div><span>{w.tasks} tasks</span></div>)}</div></div>
@@ -180,7 +200,7 @@ export function Reports({ reviews, projects, sprints, projectName, onRefresh, on
   </section>;
 }
 export function VelocityBars({ stats }) {
-  const max = Math.max(1, ...stats.flatMap(s => [s.est, s.doneEst]));
-  const ticks = [max, max / 2, 0];
-  return <div className="velocity"><div className="velocity-plot"><div className="velocity-axis">{ticks.map(t => <span key={t}>{Math.round(t)}h</span>)}</div>{stats.length ? stats.map(s => <div className="velocity-group" key={s.sprint.id}><div className="velocity-bars"><span style={{ height: `${s.est / max * 100}%`, background: REPORT_COLORS.accent }} title={`Estimated ${formatHours(s.est)}`}/><span style={{ height: `${s.doneEst / max * 100}%`, background: REPORT_COLORS.success }} title={`Completed ${formatHours(s.doneEst)}`}/></div><small>{s.sprint.name}</small></div>) : <p>No sprint data.</p>}</div><div className="chart-legend"><span><i style={{ background: REPORT_COLORS.accent }}/>Estimated</span><span><i style={{ background: REPORT_COLORS.success }}/>Completed</span></div></div>;
+  const ticks = niceTicks(Math.max(1, ...stats.flatMap(s => [s.est, s.doneEst])));
+  const max = ticks[ticks.length - 1];
+  return <div className="velocity"><div className="velocity-plot"><div className="velocity-axis">{[...ticks].reverse().map(t => <span key={t}>{t}h</span>)}</div><div className="velocity-groups" style={{ '--grid-rows': ticks.length - 1 }}>{stats.length ? stats.map(s => <div className="velocity-group" key={s.sprint.id}><div className="velocity-bars"><span style={{ height: `${s.est / max * 100}%`, background: REPORT_COLORS.accent }} title={`${s.sprint.name} · estimated ${formatHours(s.est)}`}/><span style={{ height: `${s.doneEst / max * 100}%`, background: REPORT_COLORS.success }} title={`${s.sprint.name} · completed ${formatHours(s.doneEst)}`}/></div><small>{s.sprint.name}</small></div>) : <p>No sprint data.</p>}</div></div><div className="chart-legend"><span><i style={{ background: REPORT_COLORS.accent }}/>Estimated</span><span><i style={{ background: REPORT_COLORS.success }}/>Completed</span></div></div>;
 }
