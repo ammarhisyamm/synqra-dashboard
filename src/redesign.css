@@ -710,7 +710,8 @@ body { color: var(--ui-text); -webkit-font-smoothing: antialiased; }
 
 /* Velocity: capped column width, rounded data-end, recessive grid */
 .app-shell .velocity-plot { gap: 8px; min-height: 230px; }
-.app-shell .velocity-axis { padding-bottom: 26px; color: var(--ui-muted); font-variant-numeric: tabular-nums; }
+.app-shell .velocity-axis { padding: 0 2px 26px 0; color: var(--ui-muted); font-variant-numeric: tabular-nums; }
+.app-shell .velocity-axis span { line-height: 0; }
 .app-shell .velocity-groups {
   position: relative; display: flex; flex: 1; gap: 12px; min-width: 0; padding-bottom: 26px;
   background: repeating-linear-gradient(to bottom, #eef1f5 0 1px, transparent 1px calc((100% - 26px) / var(--grid-rows, 2))) top / 100% calc(100% - 26px) no-repeat;

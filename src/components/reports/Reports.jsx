@@ -44,7 +44,7 @@ export function Donut({ segments, size = 150, thickness = 22, label = 'total' })
   </svg>;
 }
 export function BurndownChart({ days }) {
-  const width = 720; const height = 250; const padL = 36; const padR = 40; const padT = 14; const padB = 26;
+  const width = 1080; const height = 280; const padL = 36; const padR = 40; const padT = 14; const padB = 26;
   const maxY = Math.max(1, ...days.map(d => Math.max(d.remaining, d.ideal)));
   const ticks = niceTicks(maxY);
   const top = ticks[ticks.length - 1];
@@ -58,7 +58,7 @@ export function BurndownChart({ days }) {
   return <svg className="chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Sprint burndown: ${days[last]?.remaining ?? 0} tasks remaining`}>
     {ticks.map(t => <g key={t}><line x1={padL} x2={width - padR} y1={y(t)} y2={y(t)} className="chart-grid" /><text x={padL - 8} y={y(t) + 4} textAnchor="end">{t}</text></g>)}
     {labelIdx.map(i => <text key={i} x={x(i)} y={height - 6} textAnchor="middle">{days[i].date.slice(5)}</text>)}
-    <path d={wash} fill={REPORT_COLORS.accent} opacity="0.07" />
+    <path d={wash} fill={REPORT_COLORS.accent} opacity="0.05" />
     <path d={line(days.map(d => d.ideal))} fill="none" stroke={REPORT_COLORS.muted} strokeWidth="1.5" strokeDasharray="5 4" />
     <path d={line(remaining)} fill="none" stroke={REPORT_COLORS.accent} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
     {days.map((d, i) => <g key={i} className="chart-point"><rect x={x(i) - 12} y={padT} width="24" height={height - padT - padB} fill="transparent" /><circle cx={x(i)} cy={y(d.remaining)} r="4" fill={REPORT_COLORS.accent} stroke="#fff" strokeWidth="2" /><title>{`${d.date}: ${d.remaining} remaining · ideal ${Math.round(d.ideal * 10) / 10}`}</title></g>)}
@@ -84,7 +84,7 @@ export function CfdChart({ points }) {
     {ticks.map(t => <g key={t}><line x1={padL} x2={width - padR} y1={y(t)} y2={y(t)} className="chart-grid" /><text x={padL - 8} y={y(t) + 4} textAnchor="end">{t}</text></g>)}
     {points.map((p, i) => <text key={i} x={x(i)} y={height - 6} textAnchor="middle">{p.label}</text>)}
     <path d={area(active, todo)} fill={REPORT_COLORS.muted} opacity="0.45" />
-    <path d={area(done, active)} fill={REPORT_COLORS.accent} opacity="0.75" />
+    <path d={area(done, active)} fill={REPORT_COLORS.info} opacity="0.75" />
     <path d={area(zeros, done)} fill={REPORT_COLORS.success} opacity="0.85" />
     {/* Surface gaps between bands instead of outlines. */}
     <path d={edge(done)} fill="none" stroke="#fff" strokeWidth="2" />
@@ -173,7 +173,7 @@ export function Reports({ reviews, projects, sprints, projectName, onRefresh, on
       </div>
       <div className="report-grid-2">
         <div className="rail-card"><h2><TrendUp size={17}/> Velocity Report</h2><p>Estimated vs completed hours per sprint</p><VelocityBars stats={velocity} /></div>
-        <div className="rail-card"><h2><TrendUp size={17}/> Cumulative Flow Diagram</h2><p>Task distribution per sprint (current snapshot)</p>{cfd.length ? <><CfdChart points={cfd} /><div className="chart-legend"><span><i style={{ background: REPORT_COLORS.success }}/>Done</span><span><i style={{ background: REPORT_COLORS.accent }}/>In Progress</span><span><i style={{ background: REPORT_COLORS.muted }}/>To Do</span></div></> : <Empty text="No sprints yet." />}</div>
+        <div className="rail-card"><h2><TrendUp size={17}/> Cumulative Flow Diagram</h2><p>Task distribution per sprint (current snapshot)</p>{cfd.length ? <><CfdChart points={cfd} /><div className="chart-legend"><span><i style={{ background: REPORT_COLORS.success }}/>Done</span><span><i style={{ background: REPORT_COLORS.info }}/>In Progress</span><span><i style={{ background: REPORT_COLORS.muted }}/>To Do</span></div></> : <Empty text="No sprints yet." />}</div>
       </div>
       <div className="report-filters">
         <label>Burndown for: <AppSelect value={burnSprintId} options={reportBurnOptions} onChange={setBurnId} ariaLabel="Burndown Sprint"/></label>
