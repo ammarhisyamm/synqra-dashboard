@@ -73,7 +73,7 @@ test('detail before Board: aligned people menu, keyboard Escape, saved estimate 
   const state = await fixture(page);
   await openDetail(page);
   const drawer = page.getByRole('dialog', { name: 'Task details' });
-  expect((await drawer.boundingBox()).width).toBe(400);
+  expect((await drawer.boundingBox()).width).toBe(480);
   const assignees = drawer.getByRole('button', { name: 'Assignees', exact: true });
   const triggerBox = await assignees.boundingBox();
   await assignees.click();
@@ -313,7 +313,7 @@ for (const width of [1440, 768, 375]) {
     await noOverflow(page);
     await openDetail(page);
     const drawer = page.getByRole('dialog', { name: 'Task details' });
-    expect((await drawer.boundingBox()).width).toBeLessThanOrEqual(Math.min(width, 400));
+    expect((await drawer.boundingBox()).width).toBeLessThanOrEqual(Math.min(width, 480));
     await drawer.getByLabel('Estimate (hours)', { exact: true }).scrollIntoViewIfNeeded();
     await page.screenshot({ path: `test-results/ui-audit/${width}-detail.png` });
     const controls = await drawer.locator('.field-input,.app-select-trigger').evaluateAll(elements => elements.map(el => ({ w: el.getBoundingClientRect().width, right: el.getBoundingClientRect().right, left: el.getBoundingClientRect().left, size: getComputedStyle(el).fontSize })));

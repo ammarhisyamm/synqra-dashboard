@@ -228,6 +228,21 @@ Default height is 36px. Use 13px UI text at weight 500. Include a 7–8px icon g
 - The gallery opens by default on an empty meeting and collapses to a one-line bar once a template is chosen; "Browse templates" reopens it.
 - Inserting a template must never silently discard text the user wrote: ask with the inline "Replace your notes?" confirmation.
 
+### Task drawer
+- 480px wide. Title is borderless until hover or focus.
+- Properties are a property sheet, not stacked fields: label column (icon + name, 116px) and a borderless control that shows a surface on hover. Rows are grouped as Status, People, Schedule and Scope, with a divider between groups.
+- Comments, History and Activity share one segmented tab bar with counts, so the drawer does not grow with every log entry.
+
+### Board and timeline
+- Columns are at least 272px and scroll horizontally; each stage has a tinted dot (Planning slate, Review violet, In Progress sky, Final amber, Completed emerald).
+- Cards: key and team on top, title clamped to three lines, footer with priority chip, due date (red when overdue) and assignee.
+- Empty stages show a dashed "No tasks" placeholder. Timeline task column is 340px; keys never wrap.
+
+### Reports
+- KPI tiles carry a tinted icon (emerald on track, amber at risk, rose delayed or overdue, sky hours).
+- Card headers use an outlined 30px icon tile; donuts show their total in the centre and a legend with counts; priority and workload use labelled horizontal bars with share in percent.
+- Filters sit inline above the charts; the burndown sprint picker lives in its card header.
+
 ### Copy
 
 - Product UI copy is English. Do not mix languages inside labels, section titles, or placeholders.
