@@ -50,7 +50,7 @@ export function Sidebar({ page, setPage, menuOpen, setMenuOpen, collapsed, onMen
   const hiddenCount = Math.max(0, projects.length - visibleProjects.length);
   return <aside className={`sidebar${menuOpen ? ' open' : ''}${collapsed ? ' collapsed' : ''}`}>
     <div className="sidebar-head">
-      <div className="sidebar-brand"><img className="synqra-logo" src="/logo-synqra.png" alt="Synqra — Powered by MULIA"/></div>
+      <div className="sidebar-brand"><img className="synqra-logo" src="/logo-synqra-wordmark.png" alt="Synqra"/></div>
       <button className="sidebar-menu-btn" onClick={onMenuClick} aria-label="Toggle sidebar" title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}><SidebarSimple size={18}/></button>
     </div>
     <div className="sidebar-scroll">
