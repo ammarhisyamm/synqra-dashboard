@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { Plus } from '@phosphor-icons/react';
 import { TextField } from '../common/Field';
 import { Button } from '../ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
@@ -15,5 +14,5 @@ export function NewProjectModal({ onClose, onCreate }) {
     setError('');
     try { await onCreate(name.trim()); } catch (failure) { setError(failure.message); } finally { setPending(false); }
   };
-  return <Dialog open onOpenChange={open => { if (!open && !pending) onClose(); }}><DialogContent closeDisabled={pending} onEscapeKeyDown={event => { if (pending) event.preventDefault(); }} onPointerDownOutside={event => { if (pending) event.preventDefault(); }} className="project-modal"><div className="project-modal-icon"><Plus size={28}/></div><DialogHeader><DialogTitle>New project</DialogTitle><DialogDescription>Create a new project to organize your feedback.</DialogDescription></DialogHeader><form onSubmit={submit}><TextField label="Project name" autoFocus value={name} onChange={event => setName(event.target.value)} placeholder="e.g. Marketplace Redesign" required/>{error && <p className="form-error" role="alert">{error}</p>}<DialogFooter><Button disabled={pending} type="button" variant="ghost" onClick={onClose}>Cancel</Button><Button disabled={!name.trim() || pending}>{pending ? 'Creating…' : 'Create project'}</Button></DialogFooter></form></DialogContent></Dialog>;
+  return <Dialog open onOpenChange={open => { if (!open && !pending) onClose(); }}><DialogContent closeDisabled={pending} onEscapeKeyDown={event => { if (pending) event.preventDefault(); }} onPointerDownOutside={event => { if (pending) event.preventDefault(); }} className="project-modal"><DialogHeader><DialogTitle>New project</DialogTitle><DialogDescription>Projects keep tasks, meetings and reports for one piece of work together.</DialogDescription></DialogHeader><form onSubmit={submit}><TextField label="Project name" autoFocus value={name} onChange={event => setName(event.target.value)} placeholder="e.g. Marketplace Redesign" required/>{error && <p className="form-error" role="alert">{error}</p>}<DialogFooter><Button disabled={pending} type="button" variant="ghost" onClick={onClose}>Cancel</Button><Button disabled={!name.trim() || pending}>{pending ? 'Creating…' : 'Create project'}</Button></DialogFooter></form></DialogContent></Dialog>;
 }

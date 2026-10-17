@@ -136,8 +136,8 @@ export function ReviewDetailEnhanced({ review, meetings = [], metadata = [], spr
         {loadError && <div className="detail-message" role="alert"><p>{loadError}</p><Button variant="outline" onClick={() => refresh.current()}>Retry loading details</Button></div>}
         {!detail && !loadError && <p className="detail-message" role="status">Loading task details…</p>}
       <fieldset className="detail-fields" disabled={readOnly}>
-        <DetailSection title="Description" icon={List}><TextAreaField label="Description" value={draft.description || ''} onChange={event => edit('description', event.target.value)} onBlur={event => { if (event.target.value !== (detail?.review?.description || '')) save({ description: event.target.value }); }} placeholder="Add context or acceptance criteria…"/></DetailSection>
-        <DetailSection title="Related meeting"><Field label="Related meeting"><AppSelect value={draft.meetingId || ''} options={meetingOptions} onChange={meetingId => save({ meetingId })} ariaLabel="Related meeting"/></Field></DetailSection>
+        <DetailSection title="Description" icon={List}><TextAreaField className="field-label-hidden" label="Description" value={draft.description || ''} onChange={event => edit('description', event.target.value)} onBlur={event => { if (event.target.value !== (detail?.review?.description || '')) save({ description: event.target.value }); }} placeholder="Add context or acceptance criteria…"/></DetailSection>
+        <DetailSection title="Related meeting"><Field className="field-label-hidden" label="Related meeting"><AppSelect value={draft.meetingId || ''} options={meetingOptions} onChange={meetingId => save({ meetingId })} ariaLabel="Related meeting"/></Field></DetailSection>
         <DetailSection title="Properties"><div className="detail-grid">
           <SelectField label="Phase" value={draft.stage} values={STAGES} onChange={stage => save({ stage })}/>
           <SelectField label="Team" value={draft.area} values={AREAS} onChange={area => save({ area })}/>

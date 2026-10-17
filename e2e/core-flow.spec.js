@@ -43,7 +43,7 @@ test('auth and primary navigation flow', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
   await signIn(page);
   await page.getByRole('button', { name: 'Board', description: 'Board' }).click();
-  await expect(page.getByRole('button', { name: /Create Task/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'New task' })).toBeVisible();
 });
 
 test('reviews list opens task detail', async ({ page }) => {

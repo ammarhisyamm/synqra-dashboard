@@ -1,6 +1,6 @@
 # Synqra Design System
 
-This is the source of truth for every new screen, feature, and component in Synqra. Preserve the existing calm, editorial workspace style: white surfaces, dark navy primary actions, blue-grey supporting UI, fine borders, and restrained semantic colour. Do not introduce a visual framework, a new font family, gradients, or a new accent palette without updating this document first.
+This is the source of truth for every new screen, feature, and component in Synqra. Preserve the calm, editorial workspace style: a soft grey canvas, a framed white workspace, dark navy primary actions, blue-grey supporting UI, fine borders, and restrained semantic colour. Do not introduce a visual framework, a new font family, gradients, or a new accent palette without updating this document first.
 
 ## 1. Foundations
 
@@ -18,10 +18,10 @@ Use CSS custom properties for new work. Existing literal values should be migrat
   --color-text-muted: #718199;
   --color-text-subtle: #98a6b9;
   --color-surface: #ffffff;
-  --color-surface-subtle: #f3f6f9;
-  --color-canvas: #f7f9fc;
-  --color-border: #dfe7f0;
-  --color-border-strong: #c9d5e3;
+  --color-surface-subtle: #f6f7f9;
+  --color-canvas: #f4f5f7;
+  --color-border: #e5e8ed;
+  --color-border-strong: #d3d9e1;
   --color-focus: #526784;
   --color-focus-ring: #e1e8f0;
   --color-success: #248764;
@@ -35,6 +35,21 @@ Use CSS custom properties for new work. Existing literal values should be migrat
 - Neutral surfaces and borders carry most of the interface. Do not use primary as a large background fill.
 - Semantic colours communicate state; never use them as a second brand palette.
 - Text must use the text tokens above. Placeholder and disabled copy use `--color-text-subtle`.
+
+### Categorical tints
+
+Tints identify things, they never communicate state. They are only used for project marks (the lettered square next to a project name) and meeting-template illustrations. Apply them with the `.tint-*` classes, which expose `--tint-bg` / `--tint-fg`.
+
+| Tint | Background | Foreground |
+| --- | --- | --- |
+| `violet` | `#f1edfe` | `#6d4fd8` |
+| `rose` | `#fdecf2` | `#c2416f` |
+| `emerald` | `#e8f7ef` | `#22895a` |
+| `amber` | `#fdf3e1` | `#b06f12` |
+| `sky` | `#e8f2fd` | `#2f6fbf` |
+| `slate` | `#eef1f5` | `#526075` |
+
+A project's tint is derived from its id (`projectTint` in `layout/Shell.jsx`), so the same project keeps its colour in the sidebar, the finder and the breadcrumb.
 
 ### Typography
 
@@ -81,15 +96,16 @@ Desktop page padding is `32px clamp(20px, 3vw, 44px) 72px`; mobile page padding 
 
 | Token | Value | Use |
 | --- | --- | --- |
-| `radius-sm` | 7px | Input, compact button |
-| `radius-md` | 9–10px | Card, regular button, select |
-| `radius-lg` | 12px | Feature card, panel |
-| `radius-xl` | 14–16px | Modal / prominent panel |
+| `radius-sm` | 8px | Compact control, menu item |
+| `radius-md` | 10px | Button, input, select, nav item |
+| `radius-lg` | 14px | Card, panel, kanban column |
+| `radius-xl` | 16px | Modal, workspace frame |
 | `border` | 1px solid `--color-border` | Standard component outline |
-| `shadow-card` | `0 1px 2px #17223808` | Draggable/task card only |
-| `shadow-overlay` | `0 20px 60px #111b3040` | Modal, menu, date picker |
+| `shadow-xs` | `0 1px 2px rgb(17 27 48 / .05)` | Cards, active nav item, secondary button |
+| `shadow-pop` | `0 12px 32px rgb(17 27 48 / .12)` | Menus, popovers, project finder |
+| `shadow-overlay` | `0 24px 64px rgb(17 27 48 / .18)` | Modal, drawer |
 
-Keep standard cards flat. Elevation is for floating controls and draggable cards, not every container.
+Keep standard cards nearly flat (`shadow-xs` at most). Stronger elevation is for floating surfaces only.
 
 ### Icons and avatars
 
@@ -99,6 +115,15 @@ Keep standard cards flat. Elevation is for floating controls and draggable cards
 - Use one avatar treatment: circular, dark primary background, white 2-character initials. Sizes: 24px in dense rows, 32px default, 40px account profile.
 
 ## 2. Layout and responsive rules
+
+### App frame, sidebar, and top bar
+
+- The page canvas is `--color-canvas`. The sidebar sits directly on the canvas with no border; the workspace is a white panel with a 1px border, `radius-xl`, and an 8px gap from the viewport edge. At ≤ 650px the frame drops its gap and radius and the sidebar becomes an overlay.
+- Sidebar order: brand and collapse toggle, **Main menu** (workspace pages), **Projects**, then Settings / Admin and the account card at the bottom. Section labels are sentence case, 12px, weight 500, muted; never uppercase or tracked.
+- Nav items and project rows are 34–36px high, `radius-md`. The active item is a white pill with a border and `shadow-xs`; never a filled navy or tinted block.
+- Projects are listed directly in the sidebar (up to five, the active one always included) with a project mark. More projects open the compact project finder, which is anchored to the sidebar, the sidebar's width, and never wider than 240px when the rail is collapsed. Do not reintroduce a full-height or content-overlapping project picker.
+- The account card opens an account menu; it must never sign the user out on a single click.
+- The top bar is 60px: breadcrumb (project › page) on the left, then search (300px, ⌘K), Collaborator and notifications. Page context lives in the breadcrumb, so pages do not repeat the project picker.
 
 ### CSS maintenance and wrapping baseline
 
@@ -177,9 +202,12 @@ Default height is 36px. Use 13px UI text at weight 500. Include a 7–8px icon g
 
 ### Modal and confirmation dialog
 
-- One backdrop: `position: fixed`, `z-index: 70`, navy at approximately 47% opacity.
-- Standard modal: width 520px max, 28px padding, `radius-xl`, overlay shadow.
+- One backdrop: navy at approximately 36% opacity, no blur.
+- Standard modal: width 520px max, 24px padding, `radius-xl`, overlay shadow.
+- Anatomy: header (18px title, 13.5px muted description, 6px apart, no icon), body (fields 14px apart), footer bar (subtle background, top border, actions aligned end: ghost Cancel, then the primary action).
+- Form dialogs never lead with a large icon. Only confirmation and success dialogs (`ActionDialog`) use a centered icon.
 - Confirmation dialog: width 400px max and may use centered copy.
+- The command palette is the exception: no visible header, a 52px search row, grouped results, and Esc to close.
 - Every modal requires `role="dialog"`, `aria-modal="true"`, a labelled title, visible close button, Escape handling, and backdrop click where it is safe.
 - Footer actions align to the end on desktop and remain reachable on mobile. Do not make field labels inline with inputs.
 
@@ -189,6 +217,22 @@ Default height is 36px. Use 13px UI text at weight 500. Include a 7–8px icon g
 - Loading: one shared spinner/skeleton pattern; do not invent page-specific loading wording.
 - Error: explain what failed and give a recovery action if available. Never claim success after a rejected request.
 - Toast has `success`, `error`, `warning`, and `info` variants; icon must match variant. Stack multiple toasts rather than overwriting a critical error.
+
+### Tabs
+
+- View switchers (Reports sections, Board views) use the segmented pill control: a subtle container with a 3px inset and a white, bordered active segment. Do not use underline tabs for new views.
+
+### Meeting templates
+
+- Templates are shown as a gallery of cards, four per row on desktop, three at ≤ 1100px and two at ≤ 820px. Each card has a tinted illustration (a miniature sheet showing the sections the template inserts), an icon, a title, and a one-line description.
+- The gallery opens by default on an empty meeting and collapses to a one-line bar once a template is chosen; "Browse templates" reopens it.
+- Inserting a template must never silently discard text the user wrote: ask with the inline "Replace your notes?" confirmation.
+
+### Copy
+
+- Product UI copy is English. Do not mix languages inside labels, section titles, or placeholders.
+- The create action for work items is **New task** everywhere (page headings, Board, command palette); the dialog title is "Create task".
+- Dates use the `en-US` locale in pickers and labels.
 
 ## 4. Interaction, motion, and accessibility
 
@@ -224,7 +268,7 @@ The shared primitives and token layer are the default for every new or touched c
 | Settings, archive, and admin | Shared fields, dialogs, pills, and common layout contract | `styles.css`, `design-system.css` |
 | Kanban list, board, sprint planning, timeline, metadata dialogs | Specialized board layout retained; shared toolbar/select/dialog contract | `kanban-convergence.css`, `metadata.css`, `kanban-workspace.css`, `fixes.css` |
 
-Legacy styles may remain for structural compatibility, but `src/design-system.css` is loaded last and owns the final visual contract. A feature is incomplete if it bypasses shared primitives for a newly touched control or introduces a competing palette, type scale, radius, or field anatomy.
+Legacy styles may remain for structural compatibility, but `src/redesign.css` is loaded last and owns the final visual contract (frame, sidebar, top bar, buttons, fields, cards, popovers, dialogs, tabs, kanban, meeting editor). Feature CSS that global surfaces depend on (`workflow.css`, `detail.css`, the kanban and multi-select files) is imported up front in `main.jsx` so the cascade order no longer depends on which lazy route was opened first. A feature is incomplete if it bypasses shared primitives for a newly touched control or introduces a competing palette, type scale, radius, or field anatomy.
 
 ## 7. Source of truth for implementation
 
