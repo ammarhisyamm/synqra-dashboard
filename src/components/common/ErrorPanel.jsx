@@ -35,7 +35,7 @@ export class ErrorPanel extends Component {
       <div className="auth-shell">
         <section className="auth-card" style={{ maxWidth: 520, textAlign: 'left' }}>
           <div className="auth-brand" style={{ justifyContent: 'flex-start' }}>
-            <img className="synqra-logo auth-logo" src="/logo-synqra.png" alt="Synqra" />
+            <img className="synqra-logo auth-logo" src="/logo-synqra-wordmark.png" alt="Synqra" />
           </div>
           <h1 style={{ fontSize: 22, marginTop: 16 }}>Something went wrong</h1>
           <p style={{ color: '#687a92', fontSize: 13, lineHeight: 1.5 }}>
