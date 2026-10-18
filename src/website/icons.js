@@ -16,3 +16,6 @@ export { ShieldCheck } from '../../node_modules/@phosphor-icons/react/dist/csr/S
 export { Sparkle } from '../../node_modules/@phosphor-icons/react/dist/csr/Sparkle.es.js';
 export { Users } from '../../node_modules/@phosphor-icons/react/dist/csr/Users.es.js';
 export { X } from '../../node_modules/@phosphor-icons/react/dist/csr/X.es.js';
+export { EnvelopeSimple } from '../../node_modules/@phosphor-icons/react/dist/csr/EnvelopeSimple.es.js';
+export { Plus } from '../../node_modules/@phosphor-icons/react/dist/csr/Plus.es.js';
+export { Quotes } from '../../node_modules/@phosphor-icons/react/dist/csr/Quotes.es.js';
