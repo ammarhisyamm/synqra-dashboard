@@ -288,7 +288,7 @@ function FlowIllustration() {
               onClick={() => { setAuto(i); }}
               aria-pressed={i === active}
             >
-              <span className={`sq-flow-node is-${stage.tone}`}><stage.icon size={14} weight={i === FLOW_STAGES.length - 1 ? 'fill' : 'bold'} /></span>
+              <span className="sq-flow-node"><span className="sq-flow-node-core"><stage.icon size={15} /></span></span>
               <span className="sq-flow-stage-text">
                 <b>{stage.name}</b>
                 <span className="sq-flow-task">{stage.task}<em>{stage.meta}</em></span>
