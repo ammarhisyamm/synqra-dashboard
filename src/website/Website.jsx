@@ -126,7 +126,7 @@ function useCycle(length, interval, enabled = true) {
 }
 
 function Logo({ className = '' }) {
-  return <img className={`sq-logo ${className}`} src="/logo-synqra.png" alt="Synqra — Powered by MULIA" width="113" height="40" />;
+  return <img className={`sq-logo ${className}`} src="/site/synqra-logo.png" alt="Synqra" width="395" height="96" />;
 }
 
 function Nav() {
@@ -268,7 +268,7 @@ function FlowIllustration() {
       <div className="sq-flow-core">
         <span className="sq-flow-ring" />
         <span className="sq-flow-ring r2" />
-        <Sparkle size={26} weight="fill" />
+        <img src="/site/synqra-mark.png" alt="" width="96" height="96" className="sq-flow-mark" />
       </div>
       <span className="sq-flow-core-label">Synqra</span>
 
@@ -311,9 +311,181 @@ function StageFlow() {
   );
 }
 
+const NOTE_ITEMS = [
+  { line: 'w70', task: 'Refine notification menu', owner: 'E', due: 'Oct 25' },
+  { line: 'w60', task: 'Improve report filters', owner: 'N', due: 'Oct 26' },
+  { line: 'w75', task: 'Settings empty state', owner: 'R', due: 'Oct 28' },
+];
+
+const BOARD_COLUMNS = ['Planning', 'Review', 'In progress'];
+const BOARD_TASKS = [
+  { id: 'SYN-101', title: 'Polish login flow on mobile', col: 0, pri: 'Blocker', tone: 'danger', who: 'H', start: 0, len: 3 },
+  { id: 'SYN-106', title: 'Refine notification menu', col: 0, pri: 'Blocker', tone: 'danger', who: 'E', start: 1, len: 2 },
+  { id: 'SYN-102', title: 'Fix kanban card overflow', col: 1, pri: 'Major', tone: 'warning', who: 'E', start: 2, len: 3 },
+  { id: 'SYN-107', title: 'Settings page empty state', col: 1, pri: 'Major', tone: 'warning', who: 'N', start: 3, len: 2 },
+  { id: 'SYN-103', title: 'Write onboarding docs', col: 2, pri: 'Minor', tone: 'info', who: 'N', start: 1, len: 4 },
+  { id: 'SYN-108', title: 'Improve report filters', col: 2, pri: 'Minor', tone: 'info', who: 'R', start: 4, len: 2 },
+];
+const BOARD_VIEWS = [
+  { key: 'board', label: 'Board', icon: Kanban },
+  { key: 'list', label: 'List', icon: ListChecks },
+  { key: 'timeline', label: 'Timeline', icon: CalendarBlank },
+];
+
+const CHART_POINTS = [[0, 70, 'Sprint 9', 8], [16, 62, 'Sprint 10', 11], [32, 66, 'Sprint 11', 10], [48, 44, 'Sprint 12', 15], [64, 50, 'Sprint 13', 14], [80, 26, 'Sprint 14', 19], [97, 18, 'Sprint 15', 21]];
+
+// Hover state shared by the bento illustrations: pointer on an inner component
+// wins, otherwise the illustration cycles on its own.
+function useArtFocus(length, interval) {
+  const [hover, setHover] = useState(null);
+  const [auto, setAuto] = useCycle(length, interval, hover === null);
+  const bind = (i) => ({ onPointerEnter: () => setHover(i), onPointerLeave: () => setHover(null), onClick: () => setAuto(i) });
+  return [hover ?? auto, bind];
+}
+
+function ArtBackdrop() {
+  return <><span className="sq-art-light" /><span className="sq-dust" /></>;
+}
+
+function MeetingArt() {
+  const [active, bind] = useArtFocus(NOTE_ITEMS.length, 2400);
+  return (
+    <div className="sq-art sq-art-meeting" aria-hidden="true">
+      <ArtBackdrop />
+      <div className="sq-glass sq-mt-doc">
+        <div className="sq-glass-bar"><span className="sq-live" />Design critique<em>Oct 16 · 10:00</em></div>
+        <div className="sq-mt-lines">
+          <span className="sq-line w90" />
+          {NOTE_ITEMS.map((item, i) => (
+            <Fragment key={item.task}>
+              <span className={`sq-line ${item.line} sq-mt-note${i === active ? ' is-on' : ''}`} />
+              {i < NOTE_ITEMS.length - 1 && <span className="sq-line w80" />}
+            </Fragment>
+          ))}
+        </div>
+      </div>
+      <span className="sq-mt-beam" style={{ '--a': active }}><i /></span>
+      <div className="sq-glass sq-mt-actions">
+        <div className="sq-cmd-head"><Sparkle size={13} weight="fill" /> Action items <span className="sq-badge">3</span></div>
+        <p className="sq-cmd-label">Ready to assign</p>
+        {NOTE_ITEMS.map((item, i) => (
+          <div key={item.task} className={`sq-cmd-row${i === active ? ' is-active' : ''}`} {...bind(i)}>
+            <Plus size={12} weight="bold" /><span className="sq-cmd-task">{item.task}</span>
+            <span className="sq-ava">{item.owner}</span><em>{item.due}</em>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ReviewArt() {
+  const fields = [
+    { label: 'Status', value: 'Blocked', tone: 'danger' },
+    { label: 'Priority', value: 'Blocker', tone: 'warning' },
+    { label: 'Owner', value: 'Nadia', avatar: 'N' },
+    { label: 'Due', value: 'Oct 20' },
+  ];
+  return (
+    <div className="sq-art sq-art-review" aria-hidden="true">
+      <ArtBackdrop />
+      <div className="sq-glass sq-rv-toast">
+        <span className="sq-rv-bell"><Bell size={16} weight="fill" /><span className="sq-badge">3</span></span>
+        <div><b>Blocker on SYN-101</b><p>Flagged in review · now</p></div>
+      </div>
+      <div className="sq-glass sq-rv-card">
+        <div className="sq-rv-id">SYN-101 <span className="sq-tag">Engineering</span></div>
+        <b className="sq-rv-title">Polish login flow on mobile</b>
+        <div className="sq-rv-fields">
+          {fields.map((field) => (
+            <span key={field.label} className="sq-field">
+              <i>{field.label}</i>
+              <b className={field.tone ? `is-${field.tone}` : ''}>{field.avatar && <span className="sq-ava">{field.avatar}</span>}{field.value}</b>
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ReportArt() {
+  const [active, bind] = useArtFocus(CHART_POINTS.length, 1800);
+  const line = CHART_POINTS.map(([x, y], i) => `${i ? 'L' : 'M'}${x * 3} ${y * 1.6}`).join(' ');
+  return (
+    <div className="sq-art sq-art-report" aria-hidden="true">
+      <ArtBackdrop />
+      <div className="sq-glass sq-rp-panel">
+        <div className="sq-glass-bar">Sprint velocity<em>last 7 sprints</em></div>
+        <div className="sq-chart-chips"><span>On track <b>6</b></span><span className="is-warn">At risk <b>1</b></span></div>
+        <div className="sq-rp-plot">
+          <svg viewBox="0 0 300 130" className="sq-chart" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="sq-chart-fill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor="#7ea7e6" stopOpacity="0.32" /><stop offset="1" stopColor="#7ea7e6" stopOpacity="0" /></linearGradient>
+            </defs>
+            {[30, 65, 100].map((y) => <line key={y} x1="0" x2="300" y1={y} y2={y} className="sq-chart-grid" />)}
+            <path d={`${line} L291 130 L0 130 Z`} fill="url(#sq-chart-fill)" className="sq-chart-area" />
+            <path d={line} className="sq-chart-line" pathLength="1" />
+          </svg>
+          {CHART_POINTS.map(([x, y, label, done], i) => (
+            <span key={label} className={`sq-rp-point${i === active ? ' is-active' : ''}`} style={{ left: `${x}%`, top: `${(y * 1.6 / 130) * 100}%` }} {...bind(i)}>
+              <span className="sq-rp-tip"><b>{done} done</b>{label}</span>
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BoardArt() {
+  const [active, bind] = useArtFocus(BOARD_VIEWS.length, 3200);
+  const view = BOARD_VIEWS[active].key;
+  return (
+    <div className="sq-board-art" aria-hidden="true">
+      <span className="sq-art-light" />
+      <div className="sq-board-tabs">
+        {BOARD_VIEWS.map(({ key, label, icon: Icon }, i) => (
+          <span key={key} className={`sq-board-tab${i === active ? ' is-active' : ''}`} {...bind(i)}><Icon size={13} />{label}</span>
+        ))}
+        <span className="sq-board-filter"><MagnifyingGlass size={12} /> Blockers visible</span>
+      </div>
+      <div className={`sq-board-view is-${view}`} key={view}>
+        {view === 'board' && BOARD_COLUMNS.map((column, c) => (
+          <div key={column} className="sq-board-col">
+            <div className="sq-board-col-head"><span className={`sq-dot is-${['danger', 'warning', 'info'][c]}`} />{column}<em>{BOARD_TASKS.filter((t) => t.col === c).length}</em></div>
+            {BOARD_TASKS.filter((t) => t.col === c).map((task, k) => (
+              <div key={task.id} className="sq-task" style={{ '--k': c * 2 + k }}>
+                <span className="sq-task-id">{task.id}</span>
+                <b>{task.title}</b>
+                <span className="sq-task-meta"><span className={`sq-pri is-${task.tone}`}>{task.pri}</span><span className="sq-ava">{task.who}</span></span>
+              </div>
+            ))}
+          </div>
+        ))}
+        {view === 'list' && BOARD_TASKS.map((task, k) => (
+          <div key={task.id} className="sq-task sq-task-row" style={{ '--k': k }}>
+            <span className="sq-task-id">{task.id}</span><b>{task.title}</b>
+            <span className="sq-task-col">{BOARD_COLUMNS[task.col]}</span>
+            <span className={`sq-pri is-${task.tone}`}>{task.pri}</span><span className="sq-ava">{task.who}</span>
+          </div>
+        ))}
+        {view === 'timeline' && (
+          <div className="sq-tl">
+            <div className="sq-tl-head">{['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d) => <span key={d}>{d}</span>)}</div>
+            {BOARD_TASKS.map((task, k) => (
+              <div key={task.id} className="sq-tl-row">
+                <span className={`sq-tl-bar is-${task.tone}`} style={{ '--s': task.start, '--l': task.len, '--k': k }}>{task.title}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function Bento() {
-  const points = [[0, 70], [16, 62], [32, 66], [48, 44], [64, 50], [80, 26], [100, 18]];
-  const line = points.map(([x, y], i) => `${i ? 'L' : 'M'}${x * 3} ${y * 1.6}`).join(' ');
   return (
     <section className="sq-section" id="product" aria-labelledby="product-title">
       <div className="sq-container">
@@ -325,21 +497,7 @@ function Bento() {
 
         <div className="sq-bento">
           <article className="sq-card sq-spot sq-span-2 sq-art-card" data-reveal="card" style={{ '--i': 0 }}>
-            <div className="sq-art sq-art-notes" aria-hidden="true">
-              <span className="sq-dust" />
-              <div className="sq-art-doc">
-                <div className="sq-window-dots"><i /><i /><i /></div>
-                <span className="sq-art-doc-title">Design critique · Oct 16</span>
-                <span className="sq-line w90" /><span className="sq-line w70 is-mark" /><span className="sq-line w80" /><span className="sq-line w60 is-mark" /><span className="sq-line w75" />
-              </div>
-              <span className="sq-art-streak" />
-              <div className="sq-art-chips">
-                <div className="sq-art-chip is-hero"><Sparkle size={14} weight="fill" /> Action items <span className="sq-badge">3</span><span className="sq-bar" /></div>
-                {['Refine notification menu', 'Improve report filters', 'Settings empty state'].map((task, index) => (
-                  <div key={task} className="sq-art-chip" style={{ '--i': index }}><CheckCircle size={13} weight="fill" /> {task}</div>
-                ))}
-              </div>
-            </div>
+            <MeetingArt />
             <div className="sq-card-copy">
               <h3>Meetings that write the follow-up</h3>
               <p>Pick a template, take notes, and Synqra pulls out the action items so you can turn them into assigned tasks in one review.</p>
@@ -347,14 +505,7 @@ function Bento() {
           </article>
 
           <article className="sq-card sq-spot sq-art-card" data-reveal="card" style={{ '--i': 1 }}>
-            <div className="sq-art sq-art-bell" aria-hidden="true">
-              <span className="sq-dust" />
-              <div className="sq-bell-orb"><span className="sq-bell-ring" /><Bell size={30} weight="fill" /><span className="sq-badge">3</span></div>
-              <div className="sq-bell-panel">
-                <div className="sq-bell-row"><span className="sq-dot is-danger" />Blocker on SYN-101<em>now</em></div>
-                <div className="sq-bell-row is-dim"><span className="sq-dot is-warning" />Review assigned to you<em>2m</em></div>
-              </div>
-            </div>
+            <ReviewArt />
             <div className="sq-card-copy">
               <h3>Reviews with clear owners</h3>
               <p>Status, priority and assignees on every item, and a ping the moment something is blocked.</p>
@@ -362,18 +513,7 @@ function Bento() {
           </article>
 
           <article className="sq-card sq-spot sq-art-card" data-reveal="card" style={{ '--i': 2 }}>
-            <div className="sq-art sq-art-chart" aria-hidden="true">
-              <span className="sq-dust" />
-              <div className="sq-chart-chips"><span>On track <b>6</b></span><span className="is-warn">At risk <b>1</b></span></div>
-              <svg viewBox="0 0 300 130" className="sq-chart" preserveAspectRatio="none">
-                <defs>
-                  <linearGradient id="sq-chart-fill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor="#7ea7e6" stopOpacity="0.35" /><stop offset="1" stopColor="#7ea7e6" stopOpacity="0" /></linearGradient>
-                </defs>
-                <path d={`${line} L300 130 L0 130 Z`} fill="url(#sq-chart-fill)" className="sq-chart-area" />
-                <path d={line} className="sq-chart-line" pathLength="1" />
-                <circle cx="294" cy={18 * 1.6} r="5" className="sq-chart-dot" />
-              </svg>
-            </div>
+            <ReportArt />
             <div className="sq-card-copy">
               <h3>Reports that answer themselves</h3>
               <p>Portfolio health, sprint velocity and team load, always current.</p>
@@ -386,10 +526,7 @@ function Bento() {
               <h3>Board, list, sprint and timeline</h3>
               <p>Plan the same work four ways. Switch views without losing filters, and keep blockers visible wherever you look.</p>
             </div>
-            <div className="sq-shot-crop" aria-hidden="true">
-              <span className="sq-shot-ray" />
-              <img src="/site/board.webp" alt="" loading="lazy" width="1440" height="900" data-parallax="0.04" />
-            </div>
+            <BoardArt />
           </article>
         </div>
       </div>
