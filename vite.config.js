@@ -12,4 +12,14 @@ export default defineConfig({
       { find: /^@phosphor-icons\/react$/, replacement: fileURLToPath(new URL('./src/phosphor-icons-proxy.js', import.meta.url)) },
     ],
   },
+  build: {
+    rollupOptions: {
+      // The marketing site at /website is a separate page so it shares no CSS
+      // or JS with the dashboard.
+      input: {
+        main: fileURLToPath(new URL('./index.html', import.meta.url)),
+        website: fileURLToPath(new URL('./website/index.html', import.meta.url)),
+      },
+    },
+  },
 });
