@@ -19,3 +19,6 @@ export { X } from '../../node_modules/@phosphor-icons/react/dist/csr/X.es.js';
 export { EnvelopeSimple } from '../../node_modules/@phosphor-icons/react/dist/csr/EnvelopeSimple.es.js';
 export { Plus } from '../../node_modules/@phosphor-icons/react/dist/csr/Plus.es.js';
 export { Quotes } from '../../node_modules/@phosphor-icons/react/dist/csr/Quotes.es.js';
+export { Eye } from '../../node_modules/@phosphor-icons/react/dist/csr/Eye.es.js';
+export { Flag } from '../../node_modules/@phosphor-icons/react/dist/csr/Flag.es.js';
+export { HourglassMedium } from '../../node_modules/@phosphor-icons/react/dist/csr/HourglassMedium.es.js';

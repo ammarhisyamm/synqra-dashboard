@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import {
-  ArrowRight, ArrowUpRight, Bell, CalendarBlank, ChartBar, CheckCircle, EnvelopeSimple, Kanban, Lightning, List,
-  ListChecks, MagnifyingGlass, NotePencil, Plus, Quotes, ShieldCheck, Sparkle, Users, X,
+  ArrowRight, ArrowUpRight, Bell, CalendarBlank, ChartBar, CheckCircle, EnvelopeSimple, Eye, Flag, HourglassMedium, Kanban,
+  Lightning, List, ListChecks, MagnifyingGlass, NotePencil, Plus, Quotes, ShieldCheck, Sparkle, Users, X,
 } from './icons';
 import { prefersReducedMotion, useReveal, useScrollMotion, useSpotlight } from './motion';
 
@@ -22,11 +22,11 @@ const HERO_TOASTS = [
 ];
 
 const FLOW_STAGES = [
-  { name: 'Planning', task: 'Polish login flow on mobile', meta: 'Blocker · Due Oct 20', tone: 'danger' },
-  { name: 'Review', task: 'Fix kanban card overflow', meta: 'Major · Erlangga', tone: 'warning' },
-  { name: 'In progress', task: 'Write onboarding docs', meta: 'Minor · Nadia Putri', tone: 'info' },
-  { name: 'Final', task: 'Audit color contrast', meta: 'Major · Raka', tone: 'warning' },
-  { name: 'Completed', task: 'Add meeting export to PDF', meta: 'Done · Oct 14', tone: 'success' },
+  { name: 'Planning', task: 'Polish login flow on mobile', meta: 'Blocker · Due Oct 20', tone: 'danger', icon: ListChecks },
+  { name: 'Review', task: 'Fix kanban card overflow', meta: 'Major · Erlangga', tone: 'warning', icon: Eye },
+  { name: 'In progress', task: 'Write onboarding docs', meta: 'Minor · Nadia Putri', tone: 'info', icon: HourglassMedium },
+  { name: 'Final', task: 'Audit color contrast', meta: 'Major · Raka', tone: 'warning', icon: Flag },
+  { name: 'Completed', task: 'Add meeting export to PDF', meta: 'Done · Oct 14', tone: 'success', icon: CheckCircle },
 ];
 // Geometry for the flow illustration, in the SVG's 1000 × 440 viewBox.
 const FLOW_Y = [52, 136, 220, 304, 388];
@@ -36,6 +36,7 @@ const flowOut = (y) => `M556 220 C 640 220, 616 ${y}, 700 ${y}`;
 const STEPS = [
   {
     key: 'capture',
+    icon: NotePencil,
     title: 'Capture every decision',
     body: 'Log reviews straight from a meeting or the board. Templates keep notes consistent, and action items become tasks in one pass.',
     image: '/site/reviews.webp',
@@ -43,6 +44,7 @@ const STEPS = [
   },
   {
     key: 'assign',
+    icon: Users,
     title: 'Assign with full context',
     body: 'Open any task to set its phase, priority, team and people. Everyone works from the same source of truth.',
     image: '/site/task-detail.webp',
@@ -50,6 +52,7 @@ const STEPS = [
   },
   {
     key: 'track',
+    icon: ChartBar,
     title: 'Track it to done',
     body: 'Reports roll up progress, risk and overdue work across every project, and update as the team moves.',
     image: '/site/reports.webp',
@@ -61,7 +64,7 @@ const VIEWS = [
   { key: 'board', label: 'Board', icon: Kanban, image: '/site/board.webp', caption: 'Drag work across stages, with blockers and owners visible at a glance.' },
   { key: 'timeline', label: 'Timeline', icon: CalendarBlank, image: '/site/timeline.webp', caption: 'See every task on a Gantt timeline before dates start to slip.' },
   { key: 'overview', label: 'Overview', icon: ListChecks, image: '/site/overview.webp', caption: 'Start the day with what needs attention, upcoming meetings and stage health.' },
-  { key: 'sprint', label: 'Scrum reports', icon: ChartBar, image: '/site/reports-scrum.webp', caption: 'Sprint velocity and burndown without exporting a single spreadsheet.' },
+  { key: 'reports', label: 'Team reports', icon: ChartBar, image: '/site/reports-team.webp', caption: 'Task status, priority and team workload in one report, always current.' },
 ];
 
 const BENEFITS = [
@@ -285,7 +288,7 @@ function FlowIllustration() {
               onClick={() => { setAuto(i); }}
               aria-pressed={i === active}
             >
-              <span className={`sq-flow-node is-${stage.tone}`}>{i === FLOW_STAGES.length - 1 ? <CheckCircle size={13} weight="fill" /> : i + 1}</span>
+              <span className={`sq-flow-node is-${stage.tone}`}><stage.icon size={14} weight={i === FLOW_STAGES.length - 1 ? 'fill' : 'bold'} /></span>
               <span className="sq-flow-stage-text">
                 <b>{stage.name}</b>
                 <span className="sq-flow-task">{stage.task}<em>{stage.meta}</em></span>
@@ -563,7 +566,7 @@ function Workflow() {
                 data-step={index}
                 className={`sq-step${active === index ? ' is-active' : ''}`}
               >
-                <span className="sq-step-num">{String(index + 1).padStart(2, '0')}</span>
+                <span className="sq-step-num"><step.icon size={17} /></span>
                 <div>
                   <h3>{step.title}</h3>
                   <p>{step.body}</p>
@@ -664,6 +667,15 @@ function Views() {
   );
 }
 
+function RingIcon({ icon: Icon }) {
+  return (
+    <span className="sq-ring-icon" aria-hidden="true">
+      <i className="sq-ring-lines" />
+      <span className="sq-ring-core"><Icon size={19} /></span>
+    </span>
+  );
+}
+
 function Benefits() {
   return (
     <section className="sq-section" id="why" aria-labelledby="why-title">
@@ -675,7 +687,7 @@ function Benefits() {
         <div className="sq-benefits">
           {BENEFITS.map(({ icon: Icon, title, body }, index) => (
             <article key={title} className="sq-benefit sq-spot" data-reveal="card" style={{ '--i': index }}>
-              <span className="sq-card-icon"><Icon size={18} /></span>
+              <RingIcon icon={Icon} />
               <h3>{title}</h3>
               <p>{body}</p>
             </article>

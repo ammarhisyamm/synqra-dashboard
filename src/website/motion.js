@@ -5,7 +5,7 @@ const prefersReducedMotion = () =>
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
-// Adds `is-in` to every [data-reveal] element the first time it scrolls into
+// Marks every [data-reveal] element with `data-in` the first time it scrolls into
 // view. Stagger comes from the `--i` custom property set on each element.
 export function useReveal(rootRef) {
   useEffect(() => {
@@ -13,13 +13,13 @@ export function useReveal(rootRef) {
     if (!root) return undefined;
     const targets = [...root.querySelectorAll('[data-reveal]')];
     if (prefersReducedMotion() || !('IntersectionObserver' in window)) {
-      targets.forEach((el) => el.classList.add('is-in'));
+      targets.forEach((el) => el.setAttribute('data-in', ''));
       return undefined;
     }
     const observer = new IntersectionObserver((entries) => {
       entries.forEach((entry) => {
         if (!entry.isIntersecting) return;
-        entry.target.classList.add('is-in');
+        entry.target.setAttribute('data-in', '');
         observer.unobserve(entry.target);
       });
     }, { threshold: 0.14, rootMargin: '0px 0px -6% 0px' });
